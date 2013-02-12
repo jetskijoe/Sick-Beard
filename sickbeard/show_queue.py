@@ -448,6 +448,7 @@ class QueueItemUpdate(ShowQueueItem):
 
         sickbeard.showQueueScheduler.action.refreshShow(self.show, True) #@UndefinedVariable
 
+
 class QueueItemForceUpdate(QueueItemUpdate):
     def __init__(self, show=None):
         ShowQueueItem.__init__(self, ShowQueueActions.FORCEUPDATE, show)
