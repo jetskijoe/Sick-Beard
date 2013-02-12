@@ -30,7 +30,7 @@ from threading import Lock
 
 # apparently py2exe won't build these unless they're imported somewhere
 from sickbeard import providers, metadata
-from providers import ezrss, tvtorrents, btn, nzbsrus, newznab, womble
+from providers import ezrss, tvtorrents, torrentleech, btn, nzbsrus, newznab, womble
 from sickbeard.config import CheckSection, check_setting_int, check_setting_str, ConfigMigrator
 
 from sickbeard import searchCurrent, searchBacklog, showUpdater, versionChecker, properFinder, autoPostProcesser
@@ -40,7 +40,7 @@ from sickbeard import naming
 
 from common import SD, SKIPPED, NAMING_REPEAT
 
-from sickbeard.databases import mainDB, cache_db, failed
+from sickbeard.databases import mainDB, cache_db, failed_db
 
 from lib.configobj import ConfigObj
 
