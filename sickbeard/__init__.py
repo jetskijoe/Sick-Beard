@@ -40,7 +40,7 @@ from sickbeard import naming
 
 from common import SD, SKIPPED, NAMING_REPEAT
 
-from sickbeard.databases import mainDB, cache_db, failed_db
+from sickbeard.databases import mainDB, cache_db, failed
 
 from lib.configobj import ConfigObj
 
