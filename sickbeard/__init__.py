@@ -180,6 +180,8 @@ NZBS_UID = None
 NZBS_HASH = None
 
 WOMBLE = False
+NZBX = False
+NZBX_COMPLETION = 100
 
 NZBSRUS = False
 NZBSRUS_UID = None
@@ -270,6 +272,10 @@ NMJ_MOUNT = None
 
 USE_SYNOINDEX = False
 
+USE_NMJv2 = False
+NMJv2_HOST = None
+NMJv2_DATABASE = None
+NMJv2_DBLOC = None
 USE_TRAKT = False
 TRAKT_USERNAME = None
 TRAKT_PASSWORD = None
@@ -334,12 +340,12 @@ def initialize(consoleLogging=True):
                 showQueueScheduler, searchQueueScheduler, ROOT_DIRS, CACHE_DIR, ACTUAL_CACHE_DIR, TVDB_API_PARMS, \
                 NAMING_PATTERN, NAMING_MULTI_EP, NAMING_FORCE_FOLDERS, NAMING_ABD_PATTERN, NAMING_CUSTOM_ABD, \
                 RENAME_EPISODES, properFinderScheduler, PROVIDER_ORDER, autoPostProcesserScheduler, \
-                NZBSRUS, NZBSRUS_UID, NZBSRUS_HASH, WOMBLE, providerList, newznabProviderList, \
+                NZBSRUS, NZBSRUS_UID, NZBSRUS_HASH, WOMBLE, NZBX, NZBX_COMPLETION, providerList, newznabProviderList, \
                 EXTRA_SCRIPTS, USE_TWITTER, TWITTER_USERNAME, TWITTER_PASSWORD, TWITTER_PREFIX, \
                 USE_NOTIFO, NOTIFO_USERNAME, NOTIFO_APISECRET, NOTIFO_NOTIFY_ONDOWNLOAD, NOTIFO_NOTIFY_ONSNATCH, \
                 USE_BOXCAR, BOXCAR_USERNAME, BOXCAR_PASSWORD, BOXCAR_NOTIFY_ONDOWNLOAD, BOXCAR_NOTIFY_ONSNATCH, \
                 USE_PUSHOVER, PUSHOVER_USERKEY, PUSHOVER_NOTIFY_ONDOWNLOAD, PUSHOVER_NOTIFY_ONSNATCH, \
-                USE_LIBNOTIFY, LIBNOTIFY_NOTIFY_ONSNATCH, LIBNOTIFY_NOTIFY_ONDOWNLOAD, USE_NMJ, NMJ_HOST, NMJ_DATABASE, NMJ_MOUNT, USE_SYNOINDEX, \
+                USE_LIBNOTIFY, LIBNOTIFY_NOTIFY_ONSNATCH, LIBNOTIFY_NOTIFY_ONDOWNLOAD, USE_NMJ, NMJ_HOST, NMJ_DATABASE, NMJ_MOUNT, USE_NMJv2, NMJv2_HOST, NMJv2_DATABASE, NMJv2_DBLOC, USE_SYNOINDEX, \
                 USE_BANNER, USE_LISTVIEW, METADATA_XBMC, METADATA_MEDIABROWSER, METADATA_PS3, METADATA_SYNOLOGY, metadata_provider_dict, \
                 NEWZBIN, NEWZBIN_USERNAME, NEWZBIN_PASSWORD, GIT_PATH, MOVE_ASSOCIATED_FILES, \
                 COMING_EPS_LAYOUT, COMING_EPS_SORT, COMING_EPS_DISPLAY_PAUSED, METADATA_WDTV, METADATA_TIVO, IGNORE_WORDS, CREATE_MISSING_SHOW_DIRS, \
@@ -567,6 +573,9 @@ def initialize(consoleLogging=True):
         CheckSection(CFG, 'Womble')
         WOMBLE = bool(check_setting_int(CFG, 'Womble', 'womble', 1))
 
+        CheckSection(CFG, 'nzbX')
+        NZBX = bool(check_setting_int(CFG, 'nzbX', 'nzbx', 0))
+        NZBX_COMPLETION = check_setting_int(CFG, 'nzbX', 'nzbx_completion', 100)
         CheckSection(CFG, 'SABnzbd')
         SAB_USERNAME = check_setting_str(CFG, 'SABnzbd', 'sab_username', '')
         SAB_PASSWORD = check_setting_str(CFG, 'SABnzbd', 'sab_password', '')
@@ -651,6 +660,11 @@ def initialize(consoleLogging=True):
         NMJ_DATABASE = check_setting_str(CFG, 'NMJ', 'nmj_database', '')
         NMJ_MOUNT = check_setting_str(CFG, 'NMJ', 'nmj_mount', '')
 
+        CheckSection(CFG, 'NMJv2')
+        USE_NMJv2 = bool(check_setting_int(CFG, 'NMJv2', 'use_nmjv2', 0))
+        NMJv2_HOST = check_setting_str(CFG, 'NMJv2', 'nmjv2_host', '')
+        NMJv2_DATABASE = check_setting_str(CFG, 'NMJv2', 'nmjv2_database', '')
+        NMJ_DBLOC = check_setting_str(CFG, 'NMJv2', 'nmjv2_dbloc', '')
         CheckSection(CFG, 'Synology')
         USE_SYNOINDEX = bool(check_setting_int(CFG, 'Synology', 'use_synoindex', 0))
 
@@ -1047,6 +1061,9 @@ def save_config():
 
     new_config['Womble'] = {}
     new_config['Womble']['womble'] = int(WOMBLE)
+    new_config['nzbX'] = {}
+    new_config['nzbX']['nzbx'] = int(NZBX)
+    new_config['nzbX']['nzbx_completion'] = int(NZBX_COMPLETION)
 
     new_config['SABnzbd'] = {}
     new_config['SABnzbd']['sab_username'] = SAB_USERNAME
@@ -1135,6 +1152,11 @@ def save_config():
     new_config['Synology'] = {}
     new_config['Synology']['use_synoindex'] = int(USE_SYNOINDEX)
 
+    new_config['NMJv2'] = {}
+    new_config['NMJv2']['use_nmjv2'] = int(USE_NMJv2)
+    new_config['NMJv2']['nmjv2_host'] = NMJv2_HOST
+    new_config['NMJv2']['nmjv2_database'] = NMJv2_DATABASE
+    new_config['NMJv2']['nmjv2_dbloc'] = NMJv2_DBLOC
     new_config['Trakt'] = {}
     new_config['Trakt']['use_trakt'] = int(USE_TRAKT)
     new_config['Trakt']['trakt_username'] = TRAKT_USERNAME
