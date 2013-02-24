@@ -78,7 +78,7 @@ class PageTemplate (Template):
 
         if sickbeard.NZBS and sickbeard.NZBS_UID and sickbeard.NZBS_HASH:
             logger.log(u"NZBs.org has been replaced, please check the config to configure the new provider!", logger.ERROR)
-            ui.notifications.error("NZBs.org Config Update", "NZBs.org has a new site. Please <a href=\""+sickbeard.WEB_ROOT+"/config/providers\">update your config</a> with the api key from <a href=\"http://beta.nzbs.org/login\">http://beta.nzbs.org</a> and then disable the old NZBs.org provider.")
+            ui.notifications.error("NZBs.org Config Update", "NZBs.org has a new site. Please <a href=\""+sickbeard.WEB_ROOT+"/config/providers\">update your config</a> with the api key from <a href=\"http://nzbs.org/login\">http://nzbs.org</a> and then disable the old NZBs.org provider.")
 
         if "X-Forwarded-Host" in cherrypy.request.headers:
             self.sbHost = cherrypy.request.headers['X-Forwarded-Host']
@@ -339,6 +339,7 @@ class Manage:
             epCounts[Overview.QUAL] = 0
             epCounts[Overview.GOOD] = 0
             epCounts[Overview.UNAIRED] = 0
+            epCounts[Overview.SNATCHED] = 0
 
             sqlResults = myDB.select("SELECT * FROM tv_episodes WHERE showid = ? ORDER BY season DESC, episode DESC", [curShow.tvdbid])
 
@@ -1063,6 +1064,7 @@ class ConfigProviders:
     @cherrypy.expose
     def saveProviders(self, nzbmatrix_username=None, nzbmatrix_apikey=None,
                       nzbs_r_us_uid=None, nzbs_r_us_hash=None, newznab_string='',
+                      omgwtfnzbs_uid=None, omgwtfnzbs_key=None,
                       tvtorrents_digest=None, tvtorrents_hash=None,
                       torrentleech_key=None,
  					  btn_api_key=None,
@@ -1126,6 +1128,8 @@ class ConfigProviders:
                 sickbeard.WOMBLE = curEnabled
             elif curProvider == 'nzbx':
                 sickbeard.NZBX = curEnabled
+            elif curProvider == 'omgwtfnzbs':
+                sickbeard.OMGWTFNZBS = curEnabled
             elif curProvider == 'ezrss':
                 sickbeard.EZRSS = curEnabled
             elif curProvider == 'tvtorrents':
@@ -1149,6 +1153,8 @@ class ConfigProviders:
         sickbeard.NZBSRUS_UID = nzbs_r_us_uid.strip()
         sickbeard.NZBSRUS_HASH = nzbs_r_us_hash.strip()
 
+        sickbeard.OMGWTFNZBS_UID = omgwtfnzbs_uid.strip()
+        sickbeard.OMGWTFNZBS_KEY = omgwtfnzbs_key.strip()
         sickbeard.PROVIDER_ORDER = provider_list
 
         sickbeard.save_config()
