@@ -571,7 +571,21 @@ class Add1080pAndRawHDQualities(RenameSeasonFolders):
         with the highest bits so we dont overwrite data we need later on
         """
 
+        result = old_quality
+        return result
 
+    def _update_composite_qualities(self, status):
+        """Unpack, Update, Return new quality values
+        Unpack the composite archive/initial values.
+        Update either qualities if needed.
+        Then return the new compsite quality value.
+        """
+        best = (status & (0xffff << 16)) >> 16
+        initial = status & (0xffff)
+        best = self._update_quality(best)
+        initial = self._update_quality(initial)
+        result = ((best << 16) | initial)
+        return result
 
     def execute(self):
         backupDatabase(self.checkDBVersion())
