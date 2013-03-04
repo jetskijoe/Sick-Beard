@@ -697,18 +697,7 @@ class PostProcessor(object):
         
         return False
 
-    def _get_release_name(self):
-        cur_release_name = None
-        if self.good_results[self.NZB_NAME]:
-            cur_release_name = self.nzb_name
-            if cur_release_name.lower().endswith('.nzb'):
-                cur_release_name = cur_release_name.rpartition('.')[0]
-        elif self.good_results[self.FOLDER_NAME]:
-            cur_release_name = self.folder_name
-        elif self.good_results[self.FILE_NAME]:
-            cur_release_name = self.file_name
             # take the extension off the filename, it's not needed
-        return cur_release_name
 
     def process(self):
         """
@@ -807,6 +796,7 @@ class PostProcessor(object):
             try:
                 ek.ek(os.mkdir, ep_obj.show._location)
                 
+                notifiers.synoindex_notifier.addFolder(ep_obj.show._location)
             except (OSError, IOError):
                 raise exceptions.PostProcessingFailed("Unable to create the show directory: " + ep_obj.show._location)
 
@@ -816,7 +806,17 @@ class PostProcessor(object):
         # update the ep info before we rename so the quality & release name go into the name properly
         for cur_ep in [ep_obj] + ep_obj.relatedEps:
             with cur_ep.lock:
-                cur_release_name = self._get_release_name()
+                cur_release_name = None
+                if self.good_results[self.NZB_NAME]:
+                    cur_release_name = self.nzb_name
+                    if cur_release_name.lower().endswith('.nzb'):
+                        cur_release_name = cur_release_name.rpartition('.')[0]
+                elif self.good_results[self.FOLDER_NAME]:
+                    cur_release_name = self.folder_name
+                elif self.good_results[self.FILE_NAME]:
+                    cur_release_name = self.file_name
+                    if '.' in self.file_name:
+                        cur_release_name = self.file_name.rpartition('.')[0]
 
                 if cur_release_name:
                     self._log("Found release name " + cur_release_name, logger.DEBUG)

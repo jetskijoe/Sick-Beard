@@ -52,6 +52,7 @@ from sickbeard import db
 from sickbeard.tv import TVShow
 from sickbeard import logger
 from sickbeard.version import SICKBEARD_VERSION
+from sickbeard.databases.mainDB import MAX_DB_VERSION
 
 from sickbeard.webserveInit import initWebServer
 
@@ -155,6 +156,10 @@ def main():
         print 'or find another way to force Python to use ' + sickbeard.SYS_ENCODING + ' for string encoding.'
         sys.exit(1)
 
+    if db.DBConnection().checkDBVersion() > MAX_DB_VERSION:
+        print 'Your database version has been incremented past what this version of Sick Beard supports.'
+        print 'Have you used other forks of Sick Beard with this same database file?'
+        sys.exit(1)
     # Need console logging for SickBeard.py and SickBeard-console.exe
     consoleLogging = (not hasattr(sys, "frozen")) or (sickbeard.MY_NAME.lower().find('-console') > 0)
 

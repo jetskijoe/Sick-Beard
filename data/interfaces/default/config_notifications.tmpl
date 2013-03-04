@@ -67,6 +67,13 @@
                                 </label>
                             </div>
                             <div class="field-pair">
+                                <input type="checkbox" name="xbmc_update_onlyfirst" id="xbmc_update_onlyfirst" #if $sickbeard.XBMC_UPDATE_ONLYFIRST then "checked=\"checked\"" else ""# />
+                                <label class="clearfix" for="xbmc_update_onlyfirst">
+                                    <span class="component-title">Only Update First Host</span>
+                                    <span class="component-desc">Only send library update to the first host?</span>
+                                </label>
+                            </div>
+                            <div class="field-pair">
                                 <label class="nocheck clearfix">
                                     <span class="component-title">XBMC IP:Port</span>
                                     <input type="text" name="xbmc_host" id="xbmc_host" value="$sickbeard.XBMC_HOST" size="35" />
@@ -77,7 +84,7 @@
                                 </label>
                                 <label class="nocheck clearfix">
                                     <span class="component-title">&nbsp;</span>
-                                    <span class="component-desc">(multiple host strings must be separated by commas, <br/> the library updates will only be sent to the first host listed)</span>
+                                    <span class="component-desc">(multiple host strings must be separated by commas)</span>
                                 </label>
                             </div>
                             <div class="field-pair">
@@ -267,7 +274,7 @@
                     <div class="component-group-desc">
 						<img class="notifier-icon" src="$sbRoot/images/notifiers/nmj.png" alt="" title="Networked Media Jukebox V2" />
                         <h3><a href="http://www.popcornhour.com/" onclick="window.open(this.href, '_blank'); return false;">NMJv2</a></h3>
-                        <p>The Networked Media Jukebox, or NMJv2, is the official media jukebox interface made available for the Popcorn Hour 300 & 400-series.</p>
+                        <p>The Networked Media Jukebox, or NMJv2, is the official media jukebox interface made available for the Popcorn Hour 300 &amp; 400-series.</p>
                     </div>
                     <fieldset class="component-group-list">
                         <div class="field-pair">
@@ -299,9 +306,8 @@
 								    <label class="nocheck clearfix">
                                     <span class="component-title">&nbsp;</span>
                                     <span class="component-desc">
-										<INPUT TYPE="radio" NAME="nmjv2_dbloc" VALUE="network" class="radio" id="NMJV2_DBLOC_B" #if $sickbeard.NMJv2_DBLOC=="network" then "checked=\"checked\"" else ""#/>PCH Network Media
+                                        <input type="radio" name="nmjv2_dbloc" value="network" class="radio" id="nmjv2_dbloc_b" #if $sickbeard.NMJv2_DBLOC=="network" then "checked=\"checked\"" else ""# />PCH Network Media<br />
 									</span>
-                                </label>
 								</label>
 								<label class="nocheck clearfix">
                                     <span class="component-title">Database Instance</span>
@@ -325,7 +331,7 @@
                             <div class="field-pair">
                                 <label class="nocheck clearfix">
                                     <span class="component-title">Find Database</span>
-									<input type="button" value="Find Database" id="settingsNMJv2" />
+                                    <input type="button" class="btn" value="Find Database" id="settingsNMJv2" />
                                 </label>
                                 <label class="nocheck clearfix">
                                     <span class="component-title">&nbsp;</span>
@@ -342,8 +348,8 @@
                                 </label>
                             </div>
 						<div class="testNotification" id="testNMJv2-result">Click below to test.</div>
-						<input type="button" value="Test NMJv2" id="testNMJv2" />
-						<input type="submit" class="config_submitter" value="Save Changes" />
+                        <input type="button" class="btn" value="Test NMJv2" id="testNMJv2" />
+                        <input type="submit" class="btn config_submitter" value="Save Changes" />
                         </div><!-- /content_use_nmjv2 //-->
 
                     </fieldset>
