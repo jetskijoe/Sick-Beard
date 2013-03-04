@@ -587,8 +587,6 @@ class Add1080pAndRawHDQualities(RenameSeasonFolders):
         best = self._update_quality(best)
         initial = self._update_quality(initial)
 
-        result = ((best << 16) | initial)
-        return result
 
     def execute(self):
         backupDatabase(self.checkDBVersion())
