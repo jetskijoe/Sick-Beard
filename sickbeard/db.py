@@ -54,12 +54,6 @@ class DBConnection:
         else:
             self.connection.row_factory = sqlite3.Row
 
-    def checkDBVersion(self):
-        result = self.select("SELECT db_version FROM db_version")
-        if result:
-            return int(result[0]["db_version"])
-        else:
-            return 0
     def action(self, query, args=None):
 
         with db_lock:
@@ -189,7 +183,11 @@ class SchemaUpgrade (object):
         self.connection.action("UPDATE %s SET %s = ?" % (table, column), (default,))
 
     def checkDBVersion(self):
-        return self.connection.checkDBVersion()
+        result = self.connection.select("SELECT db_version FROM db_version")
+        if result:
+            return int(result[0]["db_version"])
+        else:
+            return 0
 
     def incDBVersion(self):
         curVersion = self.checkDBVersion()
