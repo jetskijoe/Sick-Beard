@@ -38,7 +38,7 @@ class OmgwtfnzbsProvider(generic.NZBProvider):
     def __init__(self):
         generic.NZBProvider.__init__(self, "omgwtfnzbs")
         self.cache = OmgwtfnzbsCache(self)
-        self.url = 'https://api.omgwtfnzbs.org/'
+        self.url = 'http://omgwtfnzbs.org/'
         self.supportsBacklog = True
 
     def isEnabled(self):
@@ -68,7 +68,7 @@ class OmgwtfnzbsProvider(generic.NZBProvider):
         if retention or not params['retention']:
             params['retention'] = retention
             
-        url = self.url + 'json?' + urllib.urlencode(params)
+        url = 'https://api.omgwtfnzbs.org/json?' + urllib.urlencode(params)
         logger.log(u"omgwtfnzbs search url: " + url, logger.DEBUG)
         data = self.getURL(url)
         try:

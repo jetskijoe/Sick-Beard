@@ -70,7 +70,7 @@ def processDir (dirName, nzbName=None, recurse=False, failed=False):
     if failed:
         returnStr += logHelper(u"Failed download detected: (" + str(nzbName) + ", " + dirName + ")")
         try:
-            processor = postProcessor.PostProcessor(dirName, nzbName, failed=failed)
+            processor = postProcessor.PostProcessor(dirName, nzbName, failed=failed, folder=True)
             process_result = processor.process()
             process_fail_message = ""
         except exceptions.PostProcessingFailed, e:
@@ -92,7 +92,7 @@ def processDir (dirName, nzbName=None, recurse=False, failed=False):
             returnStr += logHelper(u"Processing failed: (" + str(nzbName)  + ", " + dirName + "): "+process_fail_message, logger.WARNING)
         return returnStr
 
-    elif ek.ek(os.path.basename, dirName).startswith('_UNDERSIZED_'):
+    if ek.ek(os.path.basename, dirName).startswith('_UNDERSIZED_'):
         returnStr += logHelper(u"The directory name indicates that it was previously rejected for being undersized, cancelling", logger.DEBUG)
         return returnStr
     elif ek.ek(os.path.basename, dirName).startswith('_UNPACK_'):

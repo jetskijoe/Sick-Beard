@@ -54,6 +54,16 @@ class DBConnection:
         else:
             self.connection.row_factory = sqlite3.Row
 
+    def checkDBVersion(self):
+        try:
+            result = self.select("SELECT db_version FROM db_version")
+        except sqlite3.OperationalError, e:
+            if "no such table: db_version" in e.message:
+                return 0
+        if result:
+            return int(result[0]["db_version"])
+        else:
+            return 0
     def action(self, query, args=None):
 
         with db_lock:

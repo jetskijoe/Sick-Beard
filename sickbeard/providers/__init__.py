@@ -22,7 +22,8 @@ __all__ = ['ezrss',
            'nzbsrus',
            'womble',
            'btn',
-           'nzbx',           'omgwtfnzbs',
+           'nzbx',
+           'omgwtfnzbs',
            ]
 
 import sickbeard
@@ -107,9 +108,9 @@ def getProviderModule(name):
     else:
         raise Exception("Can't find "+prefix+name+" in "+repr(sys.modules))
 
-def getProviderClass(id):
+def getProviderClass(providerID):
 
-    providerMatch = [x for x in sickbeard.providerList+sickbeard.newznabProviderList if x.getID() == id]
+    providerMatch = [x for x in sickbeard.providerList + sickbeard.newznabProviderList if x.getID() == providerID]
 
     if len(providerMatch) != 1:
         return None
