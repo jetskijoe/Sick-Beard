@@ -29,17 +29,23 @@ import datetime
 
 from name_parser.parser import NameParser, InvalidNameException
 
-resultFilters = ["sub(pack|s|bed)", "nlsub(bed|s)?", "swesub(bed)?",
-                 "(dir|sample|nfo)fix", "sample", "(dvd)?extras", 
-                 "dub(bed)?"]
+resultFilters = ["sub(pack|s|bed|\.)", "nlsub(bed|s)?", "swesub(bed)?",
+                 "(dir|sample|nfo)fix", "sample", "(dvd)?extras", "fastsub(bed|s)?"]
 
-def filterBadReleases(name):
+mandatory = []
+
+langCodes = {
+    'de': 'german',
+    'fr': 'french',
+    'es': 'spanish'
+}
+def filterBadReleases(name, show):
     """
     Filters out non-english and just all-around stupid releases by comparing them
     to the resultFilters contents.
-    
+
     name: the release name to check
-    
+
     Returns: True if the release name is OK, False if it's bad.
     """
 
@@ -49,6 +55,17 @@ def filterBadReleases(name):
     except InvalidNameException:
         logger.log(u"Unable to parse the filename "+name+" into a valid episode", logger.WARNING)
         return False
+    if show.lang != "en":
+        mandatory = [(langCodes[show.lang])]
+        if langCodes[show.lang] in resultFilters:
+            resultFilters.remove(langCodes[show.lang])
+        logger.log(u"Language for \""+show.name+"\" is "+show.lang+" so im looking for \""+langCodes[show.lang]+"\" in release names", logger.DEBUG)
+    elif show.lang == "en":
+        for language in langCodes.values():
+            if not language in resultFilters:
+                resultFilters.append(language)
+        mandatory = []
+        logger.log(u"Language for \""+show.name+"\" is "+show.lang, logger.DEBUG)
 
     # use the extra info and the scene group to filter against
     check_string = ''
@@ -69,15 +86,20 @@ def filterBadReleases(name):
         if re.search('(^|[\W_])'+x+'($|[\W_])', check_string, re.I):
             logger.log(u"Invalid scene release: "+name+" contains "+x+", ignoring it", logger.DEBUG)
             return False
+    if mandatory:
+        for x in mandatory:
+            if not re.search('(^|[\W_])'+x+'($|[\W_])', check_string, re.I):
+                logger.log(u"Mandatory string not found: "+name+" doesnt contains "+x+", ignoring it", logger.DEBUG)
+                return False
 
     return True
 
 def sceneToNormalShowNames(name):
     """
     Takes a show name from a scene dirname and converts it to a more "human-readable" format.
-    
+
     name: The show name to convert
-    
+
     Returns: a list of all the possible "normal" names
     """
 
@@ -147,7 +169,10 @@ def makeSceneSeasonSearchString (show, segment, extraSearchType=None):
             # for providers that don't allow multiple searches in one request we only search for Sxx style stuff
             else:
                 for cur_season in seasonStrings:
-                    toReturn.append(curShow + "." + cur_season)
+                    if show.lang == "en":
+                        toReturn.append(curShow + "." + cur_season)
+                    else:
+                        toReturn.append(curShow + "." + cur_season + " " + langCodes[show.lang]);
         
         # nzbmatrix is special, we build a search string just for them
         elif extraSearchType == "nzbmatrix":
@@ -194,8 +219,12 @@ def makeSceneSearchString (episode):
 
     for curShow in showNames:
         for curEpString in epStrings:
-            toReturn.append(curShow + '.' + curEpString)
+            #toReturn.append(curShow + '.' + curEpString)
 
+            if episode.show.lang == "en":
+                toReturn.append(curShow + "." + curEpString)
+            else:
+                toReturn.append(curShow + "." + curEpString + " " + langCodes[episode.show.lang]);
     return toReturn
 
 def isGoodResult(name, show, log=True):
@@ -210,6 +239,13 @@ def isGoodResult(name, show, log=True):
         escaped_name = re.sub('\\\\[\\s.-]', '\W+', re.escape(curName))
         if show.startyear:
             escaped_name += "(?:\W+"+str(show.startyear)+")?"
+        releasetrim = ['^<?.* \d{9,} ?-? ','^\.zZz\. "?','^(.*) >','^\[\d{5,}.*\[ ','^\.: ','^\s?-?\s?\[.+ presents\s?','^\s+?\[\d{2}\/\d{2}]\s?-?\s?"?','^>.*<<\s','^\[.*\[\d{2}/\d{2}\]\s?-\s?"']
+        realname = name
+        for regex in releasetrim:
+            name = re.sub(regex, "", name)
+        if realname != name:
+            logger.log(u"REGEX - Releasename: "+realname, logger.DEBUG)
+            logger.log(u"REGEX - Cleaned Releasename: "+name, logger.DEBUG)
         curRegex = '^' + escaped_name + '\W+(?:(?:S\d[\dE._ -])|(?:\d\d?x)|(?:\d{4}\W\d\d\W\d\d)|(?:(?:part|pt)[\._ -]?(\d|[ivx]))|Season\W+\d+\W+|E\d+\W+)'
         if log:
             logger.log(u"Checking if show "+name+" matches " + curRegex, logger.DEBUG)
@@ -228,9 +264,9 @@ def allPossibleShowNames(show):
     """
     Figures out every possible variation of the name for a particular show. Includes TVDB name, TVRage name,
     country codes on the end, eg. "Show Name (AU)", and any scene exception names.
-    
+
     show: a TVShow object that we should get the names of
-    
+
     Returns: a list of all the possible show names
     """
 

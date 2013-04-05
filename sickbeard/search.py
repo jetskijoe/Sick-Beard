@@ -108,6 +108,7 @@ def snatchEpisode(result, endStatus=SNATCHED):
     if result.resultType in ("nzb", "nzbdata"):
         if sickbeard.NZB_METHOD == "blackhole":
             dlResult = _downloadResult(result)
+            logger.log(u"nzb parameters: {0}".format(result.__dict__), logger.ERROR)
         elif sickbeard.NZB_METHOD == "sabnzbd":
             dlResult = sab.sendNZB(result)
         elif sickbeard.NZB_METHOD == "nzbget":
@@ -293,7 +294,7 @@ def findEpisode(episode, manualSearch=False):
         didSearch = True
 
         # skip non-tv crap
-        curFoundResults = filter(lambda x: show_name_helpers.filterBadReleases(x.name) and show_name_helpers.isGoodResult(x.name, episode.show), curFoundResults)
+        curFoundResults = filter(lambda x: show_name_helpers.filterBadReleases(x.name, episode.show) and show_name_helpers.isGoodResult(x.name, episode.show), curFoundResults)
 
         # loop all results and see if any of them are good enough that we can stop searching
         done_searching = False
@@ -336,7 +337,7 @@ def findSeason(show, season):
             for curEp in curResults:
 
                 # skip non-tv crap
-                curResults[curEp] = filter(lambda x:  show_name_helpers.filterBadReleases(x.name) and show_name_helpers.isGoodResult(x.name, show), curResults[curEp])
+                curResults[curEp] = filter(lambda x:  show_name_helpers.filterBadReleases(x.name, show) and show_name_helpers.isGoodResult(x.name, show), curResults[curEp])
 
                 if curEp in foundResults:
                     foundResults[curEp] += curResults[curEp]
@@ -412,7 +413,7 @@ def findSeason(show, season):
                 # if not, break it apart and add them as the lowest priority results
                 individualResults = nzbSplitter.splitResult(bestSeasonNZB)
 
-                individualResults = filter(lambda x:  show_name_helpers.filterBadReleases(x.name) and show_name_helpers.isGoodResult(x.name, show), individualResults)
+                individualResults = filter(lambda x:  show_name_helpers.filterBadReleases(x.name, show) and show_name_helpers.isGoodResult(x.name, show), individualResults)
 
                 for curResult in individualResults:
                     if len(curResult.episodes) == 1:
@@ -466,7 +467,7 @@ def findSeason(show, season):
 
             logger.log(u"Single-ep check result is neededEps: "+str(neededEps)+", notNeededEps: "+str(notNeededEps), logger.DEBUG)
 
-            if not neededEps:
+            if not multiNeededEps:
                 logger.log(u"All of these episodes were covered by single nzbs, ignoring this multi-ep result", logger.DEBUG)
                 continue
 

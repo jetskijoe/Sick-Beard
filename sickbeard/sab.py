@@ -76,6 +76,9 @@ def sendNZB(nzb):
         params['mode'] = 'addfile'
         multiPartParams = {"nzbfile": (nzb.name + ".nzb", nzb.extraInfo[0])}
 
+    if nzb.resultType == "nzb" and nzb.provider.getID() in ['nzbindex','nzbclub']:
+        logger.log(u"Pretty name for SAB queue: " + nzb.name)
+        params['nzbname'] = nzb.name
     url = sickbeard.SAB_HOST + "api?" + urllib.urlencode(params)
 
     logger.log(u"Sending NZB to SABnzbd")

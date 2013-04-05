@@ -18,7 +18,9 @@
 # along with Sick Beard.  If not, see <http://www.gnu.org/licenses/>.
 
 # Check needed software dependencies to nudge users to fix their setup
-import sys
+import sys, os.path
+base_path = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.join(base_path, 'lib'))
 if sys.version_info < (2, 5):
     print "Sorry, requires Python 2.5, 2.6 or 2.7."
     sys.exit(1)
@@ -140,7 +142,7 @@ def main():
         pass
 
     # For OSes that are poorly configured I'll just randomly force UTF-8
-    if not sickbeard.SYS_ENCODING or sickbeard.SYS_ENCODING in ('ANSI_X3.4-1968', 'US-ASCII', 'ASCII'):
+    if not sickbeard.SYS_ENCODING or sickbeard.SYS_ENCODING in ('ANSI_X3.4-1968', 'US-ASCII', 'ASCII', 'cp1252'):
         sickbeard.SYS_ENCODING = 'UTF-8'
 
     if not hasattr(sys, "setdefaultencoding"):
@@ -154,6 +156,7 @@ def main():
         print 'Sorry, you MUST add the Sick Beard folder to the PYTHONPATH environment variable'
         print 'or find another way to force Python to use ' + sickbeard.SYS_ENCODING + ' for string encoding.'
         sys.exit(1)
+    logger.log(u"sys.getdefaultencoding: '{0}'  sickbeard.SYS_ENCODING: '{1}'".format(sys.getdefaultencoding(), sickbeard.SYS_ENCODING), logger.ERROR)
 
     # Need console logging for SickBeard.py and SickBeard-console.exe
     consoleLogging = (not hasattr(sys, "frozen")) or (sickbeard.MY_NAME.lower().find('-console') > 0)

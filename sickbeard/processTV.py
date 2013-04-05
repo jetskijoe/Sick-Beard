@@ -20,10 +20,12 @@ from __future__ import with_statement
 
 import os
 import shutil
+import re
 
+from glob import glob
 import sickbeard 
 from sickbeard import postProcessor
-from sickbeard import db, helpers, exceptions
+from sickbeard import db, helpers, exceptions, show_name_helpers
 
 from sickbeard import encodingKludge as ek
 from sickbeard.exceptions import ex
@@ -69,6 +71,29 @@ def processDir (dirName, nzbName=None, recurse=False, failed=False):
 
     if failed:
         returnStr += logHelper(u"Failed download detected: (" + str(nzbName) + ", " + dirName + ")")
+        releaseName = None
+        if nzbName is not None:
+            returnStr += logHelper(u"Using nzbName for release name.")
+            releaseName = nzbName.rpartition('.')[0]
+        else:
+            returnStr += logHelper(u"No nzbName given. Trying to guess release name.")
+            fileTypes = ["*.nzb", "*.nfo"]
+            for search in fileTypes:
+                results = glob(dirName + "/" + search)
+                if len(results) == 1:
+                    foundFile = ek.ek(os.path.basename, results[0]).rpartition('.')[0]
+                    if show_name_helpers.filterBadReleases(foundFile):
+                        releaseName = foundFile
+                        returnStr += logHelper(u"Release name (" + releaseName + ") found from file (" + results[0] + ")")
+                        break
+        if releaseName is None:
+            folder = ek.ek(os.path.basename, dirName)
+            if show_name_helpers.filterBadReleases(folder):
+                releaseName = folder
+                returnStr += logHelper(u"Folder name (" + folder + ") appears to be a valid release name. Using it.")
+        if releaseName is None:
+            returnStr += logHelper(u"Unable to find a valid release name. Aborting.", logger.WARNING)
+            return returnStr
         try:
             processor = postProcessor.PostProcessor(dirName, nzbName, failed=failed, folder=True)
             process_result = processor.process()
@@ -78,6 +103,9 @@ def processDir (dirName, nzbName=None, recurse=False, failed=False):
             process_fail_message = ex(e)
 
         returnStr += processor.log 
+        returnStr += logHelper(u"Marking release as bad: " + releaseName)
+        myDB = db.DBConnection('failed.db')
+        myDB.select("INSERT INTO failed (release) VALUES (?)", [re.sub("[\.\-\ ]", "_", releaseName)])
 
         if sickbeard.DELETE_FAILED and process_result:
             returnStr += logHelper(u"Deleting folder of failed download " + dirName, logger.DEBUG)

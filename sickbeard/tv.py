@@ -1345,7 +1345,7 @@ class TVEpisode(object):
     def saveToDB(self, forceSave=False):
         """
         Saves this episode to the database if any of its data has been changed since the last save.
-        
+
         forceSave: If True it will save to the database even if no data has been changed since the
                     last save (aka if the record is not dirty).
         """
@@ -1386,8 +1386,8 @@ class TVEpisode(object):
         """
         Returns the name of this episode in a "pretty" human-readable format. Used for logging
         and notifications and such.
-        
-        Returns: A string representing the episode's name and season/ep numbers 
+
+        Returns: A string representing the episode's name and season/ep numbers
         """
 
         return self._format_pattern('%SN - %Sx%0E - %EN')
@@ -1437,7 +1437,7 @@ class TVEpisode(object):
         """
         Generates a replacement map for this episode which maps all possible custom naming patterns to the correct
         value for this episode.
-        
+
         Returns: A dict with patterns as the keys and their replacement values as the values.
         """
         
@@ -1636,7 +1636,7 @@ class TVEpisode(object):
         return result_name
 
     def proper_path(self):
-        """    
+        """
         Figures out the path where this episode SHOULD live according to the renaming rules, relative from the show dir
         """
         

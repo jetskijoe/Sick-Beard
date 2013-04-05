@@ -20,7 +20,13 @@ from __future__ import with_statement
 
 import cherrypy
 import webbrowser
-import sqlite3
+try:
+    import sqlite3
+except:
+    try:
+        import pysqlite2.dbapi2 as sqlite3
+    except:
+        pass
 import datetime
 import socket
 import os, sys, subprocess, re
@@ -30,7 +36,7 @@ from threading import Lock
 
 # apparently py2exe won't build these unless they're imported somewhere
 from sickbeard import providers, metadata
-from providers import ezrss, tvtorrents, torrentleech, btn, nzbsrus, newznab, womble, nzbx, omgwtfnzbs
+from providers import ezrss, tvtorrents, torrentleech, btn, nzbsrus, newznab, womble, nzbx, omgwtfnzbs, nzbindex, kere_ws, nzbclub
 from sickbeard.config import CheckSection, check_setting_int, check_setting_str, ConfigMigrator
 
 from sickbeard import searchCurrent, searchBacklog, showUpdater, versionChecker, properFinder, autoPostProcesser
@@ -190,13 +196,13 @@ NZBSRUS = False
 NZBSRUS_UID = None
 NZBSRUS_HASH = None
 
-NZBMATRIX = False
-NZBMATRIX_USERNAME = None
-NZBMATRIX_APIKEY = None
+NZBINDEX = False
 
-NEWZBIN = False
-NEWZBIN_USERNAME = None
-NEWZBIN_PASSWORD = None
+NZBCLUB = False
+KEREWS = False
+KEREWS_URL = 'http://kere.ws/'
+KEREWS_APIKEY = None
+KEREWS_CATIDS = None
 
 SAB_USERNAME = None
 SAB_PASSWORD = None
@@ -336,10 +342,10 @@ def initialize(consoleLogging=True):
                 SEARCH_FREQUENCY, DEFAULT_SEARCH_FREQUENCY, BACKLOG_SEARCH_FREQUENCY, \
                 QUALITY_DEFAULT, FLATTEN_FOLDERS_DEFAULT, STATUS_DEFAULT, \
                 GROWL_NOTIFY_ONSNATCH, GROWL_NOTIFY_ONDOWNLOAD, TWITTER_NOTIFY_ONSNATCH, TWITTER_NOTIFY_ONDOWNLOAD, \
-                USE_GROWL, GROWL_HOST, GROWL_PASSWORD, USE_PROWL, PROWL_NOTIFY_ONSNATCH, PROWL_NOTIFY_ONDOWNLOAD, PROWL_API, PROWL_PRIORITY, PROG_DIR, NZBMATRIX, NZBMATRIX_USERNAME, \
+                USE_GROWL, GROWL_HOST, GROWL_PASSWORD, USE_PROWL, PROWL_NOTIFY_ONSNATCH, PROWL_NOTIFY_ONDOWNLOAD, PROWL_API, PROWL_PRIORITY, PROG_DIR, \
                 USE_PYTIVO, PYTIVO_NOTIFY_ONSNATCH, PYTIVO_NOTIFY_ONDOWNLOAD, PYTIVO_UPDATE_LIBRARY, PYTIVO_HOST, PYTIVO_SHARE_NAME, PYTIVO_TIVO_NAME, \
                 USE_NMA, NMA_NOTIFY_ONSNATCH, NMA_NOTIFY_ONDOWNLOAD, NMA_API, NMA_PRIORITY, \
-                NZBMATRIX_APIKEY, versionCheckScheduler, VERSION_NOTIFY, PROCESS_AUTOMATICALLY, DELETE_FAILED, \
+                NZBINDEX, versionCheckScheduler, VERSION_NOTIFY, PROCESS_AUTOMATICALLY, DELETE_FAILED, \
                 KEEP_PROCESSED_DIR, TV_DOWNLOAD_DIR, TVDB_BASE_URL, MIN_SEARCH_FREQUENCY, \
                 showQueueScheduler, searchQueueScheduler, ROOT_DIRS, CACHE_DIR, ACTUAL_CACHE_DIR, TVDB_API_PARMS, \
                 NAMING_PATTERN, NAMING_MULTI_EP, NAMING_FORCE_FOLDERS, NAMING_ABD_PATTERN, NAMING_CUSTOM_ABD, \
@@ -351,7 +357,7 @@ def initialize(consoleLogging=True):
                 USE_PUSHOVER, PUSHOVER_USERKEY, PUSHOVER_NOTIFY_ONDOWNLOAD, PUSHOVER_NOTIFY_ONSNATCH, \
                 USE_LIBNOTIFY, LIBNOTIFY_NOTIFY_ONSNATCH, LIBNOTIFY_NOTIFY_ONDOWNLOAD, USE_NMJ, NMJ_HOST, NMJ_DATABASE, NMJ_MOUNT, USE_NMJv2, NMJv2_HOST, NMJv2_DATABASE, NMJv2_DBLOC, USE_SYNOINDEX, \
                 USE_BANNER, USE_LISTVIEW, METADATA_XBMC, METADATA_MEDIABROWSER, METADATA_PS3, METADATA_SYNOLOGY, metadata_provider_dict, \
-                NEWZBIN, NEWZBIN_USERNAME, NEWZBIN_PASSWORD, GIT_PATH, MOVE_ASSOCIATED_FILES, \
+                NEWZBIN, NEWZBIN_USERNAME, NEWZBIN_PASSWORD, KEREWS, KEREWS_URL, KEREWS_APIKEY, KEREWS_CATIDS, NZBCLUB, GIT_PATH, MOVE_ASSOCIATED_FILES, \
                 COMING_EPS_LAYOUT, COMING_EPS_SORT, COMING_EPS_DISPLAY_PAUSED, METADATA_WDTV, METADATA_TIVO, IGNORE_WORDS, CREATE_MISSING_SHOW_DIRS, \
                 ADD_SHOWS_WO_DIR
 
@@ -361,6 +367,20 @@ def initialize(consoleLogging=True):
         socket.setdefaulttimeout(SOCKET_TIMEOUT)
 
         CheckSection(CFG, 'General')
+        CheckSection(CFG, 'Blackhole')
+        CheckSection(CFG, 'Newzbin')
+        CheckSection(CFG, 'KereWS')
+        CheckSection(CFG, 'SABnzbd')
+        CheckSection(CFG, 'NZBget')
+        CheckSection(CFG, 'XBMC')
+        CheckSection(CFG, 'PLEX')
+        CheckSection(CFG, 'Growl')
+        CheckSection(CFG, 'Prowl')
+        CheckSection(CFG, 'Twitter')
+        CheckSection(CFG, 'NMJ')
+        CheckSection(CFG, 'Synology')
+        CheckSection(CFG, 'pyTivo')
+        CheckSection(CFG, 'NMA')
         LOG_DIR = check_setting_str(CFG, 'General', 'log_dir', 'Logs')
         if not helpers.makeDir(LOG_DIR):
             logger.log(u"!!! No log folder, logging to screen only!", logger.ERROR)
@@ -574,8 +594,13 @@ def initialize(consoleLogging=True):
         NEWZBIN_USERNAME = check_setting_str(CFG, 'Newzbin', 'newzbin_username', '')
         NEWZBIN_PASSWORD = check_setting_str(CFG, 'Newzbin', 'newzbin_password', '')
 
-        CheckSection(CFG, 'Womble')
-        WOMBLE = bool(check_setting_int(CFG, 'Womble', 'womble', 1))
+        NZBINDEX = bool(check_setting_int(CFG, 'NZBIndex', 'nzbindex', 1))
+        NZBCLUB = bool(check_setting_int(CFG, 'NZBClub', 'nzbclub', 0))
+        KEREWS = bool(check_setting_int(CFG, 'KereWS', 'kerews', 0))
+        KEREWS_URL = check_setting_str(CFG, 'KereWS', 'kerews_url', 'http://kere.ws/')
+        KEREWS_APIKEY = check_setting_str(CFG, 'KereWS', 'kerews_apikey', '')
+        KEREWS_CATIDS = check_setting_str(CFG, 'KereWS', 'kerews_catIDs', '2000,8000')
+        WOMBLE = bool(check_setting_int(CFG, 'Womble', 'womble', 0))
 
         CheckSection(CFG, 'nzbX')
         NZBX = bool(check_setting_int(CFG, 'nzbX', 'nzbx', 0))
@@ -1058,15 +1083,17 @@ def save_config():
     new_config['NZBsRUS']['nzbsrus_uid'] = NZBSRUS_UID
     new_config['NZBsRUS']['nzbsrus_hash'] = NZBSRUS_HASH
 
-    new_config['NZBMatrix'] = {}
-    new_config['NZBMatrix']['nzbmatrix'] = int(NZBMATRIX)
-    new_config['NZBMatrix']['nzbmatrix_username'] = NZBMATRIX_USERNAME
-    new_config['NZBMatrix']['nzbmatrix_apikey'] = NZBMATRIX_APIKEY
+    new_config['NZBIndex'] = {}
+    new_config['NZBIndex']['nzbindex'] = int(NZBINDEX)
+    new_config['NZBClub'] = {}
+    new_config['NZBClub']['nzbclub'] = int(NZBCLUB)
 
-    new_config['Newzbin'] = {}
-    new_config['Newzbin']['newzbin'] = int(NEWZBIN)
-    new_config['Newzbin']['newzbin_username'] = NEWZBIN_USERNAME
-    new_config['Newzbin']['newzbin_password'] = NEWZBIN_PASSWORD
+
+    new_config['KereWS'] = {}
+    new_config['KereWS']['kerews'] = int(KEREWS)
+    new_config['KereWS']['kerews_url'] = KEREWS_URL
+    new_config['KereWS']['kerews_apikey'] = KEREWS_APIKEY
+    new_config['KereWS']['kerews_catIDs'] = KEREWS_CATIDS
 
     new_config['Womble'] = {}
     new_config['Womble']['womble'] = int(WOMBLE)
