@@ -148,7 +148,7 @@ class Quality:
                 return x
 
         checkName = lambda list, func: func([re.search(x, name, re.I) for x in list])
-		if checkName(["TrollHD"], all):
+        if checkName(["TrollHD"], all):
 		    return Quality.FULLHDBLURAY
         elif checkName(["(pdtv|hdtv|dsr|hdtvrip|webrip|webhdrip|tvrip)(.repack)?.(xvi-?d)"], all) and not checkName(["(720|1080)[pi]"], all):
             return Quality.SDTV
