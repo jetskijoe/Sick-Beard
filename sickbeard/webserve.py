@@ -1083,27 +1083,27 @@ class ConfigProviders:
         # add all the newznab info we got into our list
         if newznab_string:
             for curNewznabProviderStr in newznab_string.split('!!!'):
-
+    
                 if not curNewznabProviderStr:
                     continue
-
+    
                 curName, curURL, curKey = curNewznabProviderStr.split('|')
-
+    
                 newProvider = newznab.NewznabProvider(curName, curURL, curKey)
-
+    
                 curID = newProvider.getID()
-
-            # if it already exists then update it
+    
+                # if it already exists then update it
                 if curID in newznabProviderDict:
                     newznabProviderDict[curID].name = curName
                     newznabProviderDict[curID].url = curURL
                     newznabProviderDict[curID].key = curKey
                 else:
                     sickbeard.newznabProviderList.append(newProvider)
-
+    
                 finishedNames.append(curID)
-
-        # delete anything that is missing
+    
+            # delete anything that is missing
             for curProvider in sickbeard.newznabProviderList:
                 if curProvider.getID() not in finishedNames:
                     sickbeard.newznabProviderList.remove(curProvider)
@@ -1142,7 +1142,7 @@ class ConfigProviders:
             elif curProvider in newznabProviderDict:
                 newznabProviderDict[curProvider].enabled = bool(curEnabled)
             else:
-                logger.log(u"don't know what "+curProvider+" is, skipping")
+                logger.log(u"don't know what " + curProvider + " is, skipping")
 
         sickbeard.TVTORRENTS_DIGEST = tvtorrents_digest.strip()
         sickbeard.TVTORRENTS_HASH = tvtorrents_hash.strip()
@@ -1156,6 +1156,7 @@ class ConfigProviders:
 
         sickbeard.OMGWTFNZBS_UID = omgwtfnzbs_uid.strip()
         sickbeard.OMGWTFNZBS_KEY = omgwtfnzbs_key.strip()
+
         sickbeard.PROVIDER_ORDER = provider_list
 
         sickbeard.save_config()
@@ -1169,6 +1170,7 @@ class ConfigProviders:
             ui.notifications.message('Configuration Saved', ek.ek(os.path.join, sickbeard.CONFIG_FILE) )
 
         redirect("/config/providers/")
+
 
 class ConfigNotifications:
 
@@ -1218,6 +1220,7 @@ class ConfigNotifications:
             xbmc_update_full = 1
         else:
             xbmc_update_full = 0
+
         if xbmc_update_onlyfirst == "on":
             xbmc_update_onlyfirst = 1
         else:
@@ -1347,6 +1350,7 @@ class ConfigNotifications:
             use_nmjv2 = 1
         else:
             use_nmjv2 = 0
+
         if use_trakt == "on":
             use_trakt = 1
         else:
@@ -1448,6 +1452,7 @@ class ConfigNotifications:
         sickbeard.NMJ_MOUNT = nmj_mount
 
         sickbeard.USE_SYNOINDEX = use_synoindex
+
         sickbeard.USE_NMJv2 = use_nmjv2
         sickbeard.NMJv2_HOST = nmjv2_host
         sickbeard.NMJv2_DATABASE = nmjv2_database
@@ -1460,7 +1465,7 @@ class ConfigNotifications:
 
         sickbeard.USE_PYTIVO = use_pytivo
         sickbeard.PYTIVO_NOTIFY_ONSNATCH = pytivo_notify_onsnatch == "off"
-        sickbeard.PYTIVO_NOTIFY_ONDOWNLOAD = pytivo_notify_ondownload ==  "off"
+        sickbeard.PYTIVO_NOTIFY_ONDOWNLOAD = pytivo_notify_ondownload == "off"
         sickbeard.PYTIVO_UPDATE_LIBRARY = pytivo_update_library
         sickbeard.PYTIVO_HOST = pytivo_host
         sickbeard.PYTIVO_SHARE_NAME = pytivo_share_name
@@ -2176,11 +2181,13 @@ class Home:
     @cherrypy.expose
     def testNMJv2(self, host=None):
         cherrypy.response.headers['Cache-Control'] = "max-age=0,no-cache,no-store"
+
         result = notifiers.nmjv2_notifier.test_notify(urllib.unquote_plus(host))
         if result:
             return "Test notice sent successfully to " + urllib.unquote_plus(host)
         else:
             return "Test notice failed to " + urllib.unquote_plus(host)
+
     @cherrypy.expose
     def settingsNMJv2(self, host=None, dbloc=None, instance=None):
         cherrypy.response.headers['Cache-Control'] = "max-age=0,no-cache,no-store"
@@ -2189,6 +2196,7 @@ class Home:
             return '{"message": "NMJ Database found at: %(host)s", "database": "%(database)s"}' % {"host": host, "database": sickbeard.NMJv2_DATABASE}
         else:
             return '{"message": "Unable to find NMJ Database at location: %(dbloc)s. Is the right location selected and PCH running?", "database": ""}' % {"dbloc": dbloc}
+
     @cherrypy.expose
     def testTrakt(self, api=None, username=None, password=None):
         cherrypy.response.headers['Cache-Control'] = "max-age=0,no-cache,no-store"
@@ -2530,15 +2538,16 @@ class Home:
         # just give it some time
         time.sleep(3)
 
-        redirect("/home/displayShow?show="+str(showObj.tvdbid))
+        redirect("/home/displayShow?show=" + str(showObj.tvdbid))
 
     @cherrypy.expose
     def updateXBMC(self, showName=None):
         if sickbeard.XBMC_UPDATE_ONLYFIRST:
-        # only send update to first host in the list -- workaround for xbmc sql backend users
+            # only send update to first host in the list -- workaround for xbmc sql backend users
             host = sickbeard.XBMC_HOST.split(",")[0].strip()
         else:
             host = sickbeard.XBMC_HOST
+
         if notifiers.xbmc_notifier.update_library(showName=showName):
             ui.notifications.message("Library update command sent to XBMC host(s): " + host)
         else:

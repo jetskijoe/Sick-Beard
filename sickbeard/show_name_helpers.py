@@ -184,7 +184,8 @@ def makeSceneSearchString (episode):
         epStrings = ["S%02iE%02i" % (int(episode.season), int(episode.episode)),
                     "%ix%02i" % (int(episode.season), int(episode.episode))]
 
-    # for single-season shows just search for the show name
+    # for single-season shows just search for the show name -- if total ep count (exclude s0) is less than 11
+    # due to the amount of qualities and releases, it is easy to go over the 50 result limit on rss feeds otherwise
     if numseasons == 1 and numepisodes < 11:
         epStrings = ['']
 

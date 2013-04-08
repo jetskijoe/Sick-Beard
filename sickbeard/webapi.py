@@ -2169,8 +2169,6 @@ class CMD_ShowSetQuality(ApiCall):
         if not showObj:
             return _responds(RESULT_FAILURE, msg="Show not found")
 
-
-
         quality_map = {'sdtv': Quality.SDTV,
                        'sddvd': Quality.SDDVD,
                        'hdtv': Quality.HDTV,

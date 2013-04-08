@@ -23,6 +23,7 @@ import shutil
 import re
 
 from glob import glob
+
 import sickbeard 
 from sickbeard import postProcessor
 from sickbeard import db, helpers, exceptions, show_name_helpers
@@ -76,6 +77,7 @@ def processDir (dirName, nzbName=None, recurse=False, failed=False):
             returnStr += logHelper(u"Using nzbName for release name.")
             releaseName = nzbName.rpartition('.')[0]
         else:
+            # If not given nzbName, we first try to get the release name from nzb/nfo
             returnStr += logHelper(u"No nzbName given. Trying to guess release name.")
             fileTypes = ["*.nzb", "*.nfo"]
             for search in fileTypes:
@@ -86,14 +88,19 @@ def processDir (dirName, nzbName=None, recurse=False, failed=False):
                         releaseName = foundFile
                         returnStr += logHelper(u"Release name (" + releaseName + ") found from file (" + results[0] + ")")
                         break
+        # If that fails, we try the folder
         if releaseName is None:
             folder = ek.ek(os.path.basename, dirName)
             if show_name_helpers.filterBadReleases(folder):
+                # NOTE: Multiple failed downloads will change the folder name. (e.g., appending #s)
+                # Should we handle that?
                 releaseName = folder
                 returnStr += logHelper(u"Folder name (" + folder + ") appears to be a valid release name. Using it.")
+        # Otherwise, we abort.
         if releaseName is None:
             returnStr += logHelper(u"Unable to find a valid release name. Aborting.", logger.WARNING)
             return returnStr
+
         try:
             processor = postProcessor.PostProcessor(dirName, nzbName, failed=failed, folder=True)
             process_result = processor.process()
@@ -103,6 +110,7 @@ def processDir (dirName, nzbName=None, recurse=False, failed=False):
             process_fail_message = ex(e)
 
         returnStr += processor.log 
+
         returnStr += logHelper(u"Marking release as bad: " + releaseName)
         myDB = db.DBConnection('failed.db')
         myDB.select("INSERT INTO failed (release) VALUES (?)", [re.sub("[\.\-\ ]", "_", releaseName)])
@@ -148,8 +156,10 @@ def processDir (dirName, nzbName=None, recurse=False, failed=False):
 
     remainingFolders = filter(lambda x: ek.ek(os.path.isdir, ek.ek(os.path.join, dirName, x)), fileList)
 
+    # If nzbName is set and there's more than one videofile in the folder, files will be lost (overwritten).
     if nzbName != None and len(videoFiles) >= 2:
         nzbName = None
+
     # process any files in the dir
     for cur_video_file_path in videoFiles:
 
