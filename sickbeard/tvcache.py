@@ -368,7 +368,7 @@ class TVCache():
             if not showObj.wantEpisode(curSeason, curEp, curQuality, manualSearch):
                 logger.log(u"Skipping "+curResult["name"]+" because we don't want an episode that's "+Quality.qualityStrings[curQuality], logger.DEBUG)
 
-	            else:
+            else:
 
                 if episode:
                     epObj = episode
