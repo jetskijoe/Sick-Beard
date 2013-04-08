@@ -20,13 +20,7 @@ from __future__ import with_statement
 
 import cherrypy
 import webbrowser
-try:
-    import sqlite3
-except:
-    try:
-        import pysqlite2.dbapi2 as sqlite3
-    except:
-        pass
+import sqlite3
 import datetime
 import socket
 import os, sys, subprocess, re
@@ -36,7 +30,7 @@ from threading import Lock
 
 # apparently py2exe won't build these unless they're imported somewhere
 from sickbeard import providers, metadata
-from providers import ezrss, tvtorrents, torrentleech, btn, nzbsrus, newznab, womble, nzbx, omgwtfnzbs, nzbindex, kere_ws, nzbclub
+from providers import ezrss, tvtorrents, torrentleech, btn, nzbsrus, newznab, womble, nzbx, omgwtfnzbs
 from sickbeard.config import CheckSection, check_setting_int, check_setting_str, ConfigMigrator
 
 from sickbeard import searchCurrent, searchBacklog, showUpdater, versionChecker, properFinder, autoPostProcesser
@@ -186,8 +180,10 @@ NZBS_UID = None
 NZBS_HASH = None
 
 WOMBLE = False
+
 NZBX = False
 NZBX_COMPLETION = 100
+
 OMGWTFNZBS = False
 OMGWTFNZBS_UID = None
 OMGWTFNZBS_KEY = None
@@ -196,13 +192,13 @@ NZBSRUS = False
 NZBSRUS_UID = None
 NZBSRUS_HASH = None
 
-NZBINDEX = False
+NZBMATRIX = False
+NZBMATRIX_USERNAME = None
+NZBMATRIX_APIKEY = None
 
-NZBCLUB = False
-KEREWS = False
-KEREWS_URL = 'http://kere.ws/'
-KEREWS_APIKEY = None
-KEREWS_CATIDS = None
+NEWZBIN = False
+NEWZBIN_USERNAME = None
+NEWZBIN_PASSWORD = None
 
 SAB_USERNAME = None
 SAB_PASSWORD = None
@@ -286,6 +282,7 @@ USE_NMJv2 = False
 NMJv2_HOST = None
 NMJv2_DATABASE = None
 NMJv2_DBLOC = None
+
 USE_TRAKT = False
 TRAKT_USERNAME = None
 TRAKT_PASSWORD = None
@@ -342,10 +339,10 @@ def initialize(consoleLogging=True):
                 SEARCH_FREQUENCY, DEFAULT_SEARCH_FREQUENCY, BACKLOG_SEARCH_FREQUENCY, \
                 QUALITY_DEFAULT, FLATTEN_FOLDERS_DEFAULT, STATUS_DEFAULT, \
                 GROWL_NOTIFY_ONSNATCH, GROWL_NOTIFY_ONDOWNLOAD, TWITTER_NOTIFY_ONSNATCH, TWITTER_NOTIFY_ONDOWNLOAD, \
-                USE_GROWL, GROWL_HOST, GROWL_PASSWORD, USE_PROWL, PROWL_NOTIFY_ONSNATCH, PROWL_NOTIFY_ONDOWNLOAD, PROWL_API, PROWL_PRIORITY, PROG_DIR, \
+                USE_GROWL, GROWL_HOST, GROWL_PASSWORD, USE_PROWL, PROWL_NOTIFY_ONSNATCH, PROWL_NOTIFY_ONDOWNLOAD, PROWL_API, PROWL_PRIORITY, PROG_DIR, NZBMATRIX, NZBMATRIX_USERNAME, \
                 USE_PYTIVO, PYTIVO_NOTIFY_ONSNATCH, PYTIVO_NOTIFY_ONDOWNLOAD, PYTIVO_UPDATE_LIBRARY, PYTIVO_HOST, PYTIVO_SHARE_NAME, PYTIVO_TIVO_NAME, \
                 USE_NMA, NMA_NOTIFY_ONSNATCH, NMA_NOTIFY_ONDOWNLOAD, NMA_API, NMA_PRIORITY, \
-                NZBINDEX, versionCheckScheduler, VERSION_NOTIFY, PROCESS_AUTOMATICALLY, DELETE_FAILED, \
+                NZBMATRIX_APIKEY, versionCheckScheduler, VERSION_NOTIFY, PROCESS_AUTOMATICALLY, DELETE_FAILED, \
                 KEEP_PROCESSED_DIR, TV_DOWNLOAD_DIR, TVDB_BASE_URL, MIN_SEARCH_FREQUENCY, \
                 showQueueScheduler, searchQueueScheduler, ROOT_DIRS, CACHE_DIR, ACTUAL_CACHE_DIR, TVDB_API_PARMS, \
                 NAMING_PATTERN, NAMING_MULTI_EP, NAMING_FORCE_FOLDERS, NAMING_ABD_PATTERN, NAMING_CUSTOM_ABD, \
@@ -357,7 +354,7 @@ def initialize(consoleLogging=True):
                 USE_PUSHOVER, PUSHOVER_USERKEY, PUSHOVER_NOTIFY_ONDOWNLOAD, PUSHOVER_NOTIFY_ONSNATCH, \
                 USE_LIBNOTIFY, LIBNOTIFY_NOTIFY_ONSNATCH, LIBNOTIFY_NOTIFY_ONDOWNLOAD, USE_NMJ, NMJ_HOST, NMJ_DATABASE, NMJ_MOUNT, USE_NMJv2, NMJv2_HOST, NMJv2_DATABASE, NMJv2_DBLOC, USE_SYNOINDEX, \
                 USE_BANNER, USE_LISTVIEW, METADATA_XBMC, METADATA_MEDIABROWSER, METADATA_PS3, METADATA_SYNOLOGY, metadata_provider_dict, \
-                NEWZBIN, NEWZBIN_USERNAME, NEWZBIN_PASSWORD, KEREWS, KEREWS_URL, KEREWS_APIKEY, KEREWS_CATIDS, NZBCLUB, GIT_PATH, MOVE_ASSOCIATED_FILES, \
+                NEWZBIN, NEWZBIN_USERNAME, NEWZBIN_PASSWORD, GIT_PATH, MOVE_ASSOCIATED_FILES, \
                 COMING_EPS_LAYOUT, COMING_EPS_SORT, COMING_EPS_DISPLAY_PAUSED, METADATA_WDTV, METADATA_TIVO, IGNORE_WORDS, CREATE_MISSING_SHOW_DIRS, \
                 ADD_SHOWS_WO_DIR
 
@@ -367,20 +364,6 @@ def initialize(consoleLogging=True):
         socket.setdefaulttimeout(SOCKET_TIMEOUT)
 
         CheckSection(CFG, 'General')
-        CheckSection(CFG, 'Blackhole')
-        CheckSection(CFG, 'Newzbin')
-        CheckSection(CFG, 'KereWS')
-        CheckSection(CFG, 'SABnzbd')
-        CheckSection(CFG, 'NZBget')
-        CheckSection(CFG, 'XBMC')
-        CheckSection(CFG, 'PLEX')
-        CheckSection(CFG, 'Growl')
-        CheckSection(CFG, 'Prowl')
-        CheckSection(CFG, 'Twitter')
-        CheckSection(CFG, 'NMJ')
-        CheckSection(CFG, 'Synology')
-        CheckSection(CFG, 'pyTivo')
-        CheckSection(CFG, 'NMA')
         LOG_DIR = check_setting_str(CFG, 'General', 'log_dir', 'Logs')
         if not helpers.makeDir(LOG_DIR):
             logger.log(u"!!! No log folder, logging to screen only!", logger.ERROR)
@@ -594,21 +577,18 @@ def initialize(consoleLogging=True):
         NEWZBIN_USERNAME = check_setting_str(CFG, 'Newzbin', 'newzbin_username', '')
         NEWZBIN_PASSWORD = check_setting_str(CFG, 'Newzbin', 'newzbin_password', '')
 
-        NZBINDEX = bool(check_setting_int(CFG, 'NZBIndex', 'nzbindex', 1))
-        NZBCLUB = bool(check_setting_int(CFG, 'NZBClub', 'nzbclub', 0))
-        KEREWS = bool(check_setting_int(CFG, 'KereWS', 'kerews', 0))
-        KEREWS_URL = check_setting_str(CFG, 'KereWS', 'kerews_url', 'http://kere.ws/')
-        KEREWS_APIKEY = check_setting_str(CFG, 'KereWS', 'kerews_apikey', '')
-        KEREWS_CATIDS = check_setting_str(CFG, 'KereWS', 'kerews_catIDs', '2000,8000')
-        WOMBLE = bool(check_setting_int(CFG, 'Womble', 'womble', 0))
+        CheckSection(CFG, 'Womble')
+        WOMBLE = bool(check_setting_int(CFG, 'Womble', 'womble', 1))
 
         CheckSection(CFG, 'nzbX')
         NZBX = bool(check_setting_int(CFG, 'nzbX', 'nzbx', 0))
         NZBX_COMPLETION = check_setting_int(CFG, 'nzbX', 'nzbx_completion', 100)
+
         CheckSection(CFG, 'omgwtfnzbs')
         OMGWTFNZBS = bool(check_setting_int(CFG, 'omgwtfnzbs', 'omgwtfnzbs', 0))
         OMGWTFNZBS_UID = check_setting_str(CFG, 'omgwtfnzbs', 'omgwtfnzbs_uid', '')
         OMGWTFNZBS_KEY = check_setting_str(CFG, 'omgwtfnzbs', 'omgwtfnzbs_key', '')
+
         CheckSection(CFG, 'SABnzbd')
         SAB_USERNAME = check_setting_str(CFG, 'SABnzbd', 'sab_username', '')
         SAB_PASSWORD = check_setting_str(CFG, 'SABnzbd', 'sab_password', '')
@@ -699,6 +679,7 @@ def initialize(consoleLogging=True):
         NMJv2_HOST = check_setting_str(CFG, 'NMJv2', 'nmjv2_host', '')
         NMJv2_DATABASE = check_setting_str(CFG, 'NMJv2', 'nmjv2_database', '')
         NMJ_DBLOC = check_setting_str(CFG, 'NMJv2', 'nmjv2_dbloc', '')
+
         CheckSection(CFG, 'Synology')
         USE_SYNOINDEX = bool(check_setting_int(CFG, 'Synology', 'use_synoindex', 0))
 
@@ -1083,20 +1064,19 @@ def save_config():
     new_config['NZBsRUS']['nzbsrus_uid'] = NZBSRUS_UID
     new_config['NZBsRUS']['nzbsrus_hash'] = NZBSRUS_HASH
 
-    new_config['NZBIndex'] = {}
-    new_config['NZBIndex']['nzbindex'] = int(NZBINDEX)
-    new_config['NZBClub'] = {}
-    new_config['NZBClub']['nzbclub'] = int(NZBCLUB)
+    new_config['NZBMatrix'] = {}
+    new_config['NZBMatrix']['nzbmatrix'] = int(NZBMATRIX)
+    new_config['NZBMatrix']['nzbmatrix_username'] = NZBMATRIX_USERNAME
+    new_config['NZBMatrix']['nzbmatrix_apikey'] = NZBMATRIX_APIKEY
 
-
-    new_config['KereWS'] = {}
-    new_config['KereWS']['kerews'] = int(KEREWS)
-    new_config['KereWS']['kerews_url'] = KEREWS_URL
-    new_config['KereWS']['kerews_apikey'] = KEREWS_APIKEY
-    new_config['KereWS']['kerews_catIDs'] = KEREWS_CATIDS
+    new_config['Newzbin'] = {}
+    new_config['Newzbin']['newzbin'] = int(NEWZBIN)
+    new_config['Newzbin']['newzbin_username'] = NEWZBIN_USERNAME
+    new_config['Newzbin']['newzbin_password'] = NEWZBIN_PASSWORD
 
     new_config['Womble'] = {}
     new_config['Womble']['womble'] = int(WOMBLE)
+
     new_config['nzbX'] = {}
     new_config['nzbX']['nzbx'] = int(NZBX)
     new_config['nzbX']['nzbx_completion'] = int(NZBX_COMPLETION)
@@ -1105,6 +1085,7 @@ def save_config():
     new_config['omgwtfnzbs']['omgwtfnzbs'] = int(OMGWTFNZBS)
     new_config['omgwtfnzbs']['omgwtfnzbs_uid'] = OMGWTFNZBS_UID
     new_config['omgwtfnzbs']['omgwtfnzbs_key'] = OMGWTFNZBS_KEY
+
     new_config['SABnzbd'] = {}
     new_config['SABnzbd']['sab_username'] = SAB_USERNAME
     new_config['SABnzbd']['sab_password'] = SAB_PASSWORD
@@ -1198,6 +1179,7 @@ def save_config():
     new_config['NMJv2']['nmjv2_host'] = NMJv2_HOST
     new_config['NMJv2']['nmjv2_database'] = NMJv2_DATABASE
     new_config['NMJv2']['nmjv2_dbloc'] = NMJv2_DBLOC
+
     new_config['Trakt'] = {}
     new_config['Trakt']['use_trakt'] = int(USE_TRAKT)
     new_config['Trakt']['trakt_username'] = TRAKT_USERNAME

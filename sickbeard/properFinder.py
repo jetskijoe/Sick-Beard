@@ -132,7 +132,7 @@ class ProperFinder():
 
                         # set the tvdbid in the db to the show's tvdbid
                         curProper.tvdbid = curShow.tvdbid
-                        curProper.show = curShow
+
                         # since we found it, break out
                         break
 
@@ -143,7 +143,7 @@ class ProperFinder():
             if curProper.tvdbid == -1:
                 continue
             
-            if not show_name_helpers.filterBadReleases(curProper.name, curProper.show):
+            if not show_name_helpers.filterBadReleases(curProper.name):
                 logger.log(u"Proper "+curProper.name+" isn't a valid scene release that we want, igoring it", logger.DEBUG)
                 continue
 

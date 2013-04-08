@@ -1062,12 +1062,13 @@ class ConfigProviders:
 
 
     @cherrypy.expose
-    def saveProviders(self, nzbs_r_us_uid=None, nzbs_r_us_hash=None, newznab_string='',
+    def saveProviders(self, nzbmatrix_username=None, nzbmatrix_apikey=None,
+                      nzbs_r_us_uid=None, nzbs_r_us_hash=None, newznab_string='',
                       omgwtfnzbs_uid=None, omgwtfnzbs_key=None,
                       tvtorrents_digest=None, tvtorrents_hash=None,
                       torrentleech_key=None,
                       btn_api_key=None,
-                      kerews_url=None, kerews_apikey=None, kerews_catIDs=None,
+                      newzbin_username=None, newzbin_password=None,
                       provider_order=None):
 
         results = []
@@ -1086,7 +1087,7 @@ class ConfigProviders:
                 if not curNewznabProviderStr:
                     continue
 
-                curName, curURL, curKey, curCatIDs = curNewznabProviderStr.split('|')
+                curName, curURL, curKey = curNewznabProviderStr.split('|')
 
                 newProvider = newznab.NewznabProvider(curName, curURL, curKey)
 
@@ -1097,9 +1098,7 @@ class ConfigProviders:
                     newznabProviderDict[curID].name = curName
                     newznabProviderDict[curID].url = curURL
                     newznabProviderDict[curID].key = curKey
-                    newznabProviderDict[curID].catIDs = curCatIDs
                 else:
-                    newProvider.catIDs = curCatIDs
                     sickbeard.newznabProviderList.append(newProvider)
 
                 finishedNames.append(curID)
@@ -1118,12 +1117,12 @@ class ConfigProviders:
 
             if curProvider == 'nzbs_r_us':
                 sickbeard.NZBSRUS = curEnabled
-            elif curProvider == 'nzbindex':
-                sickbeard.NZBINDEX = curEnabled
-            elif curProvider == 'nzbclub':
-                sickbeard.NZBCLUB = curEnabled
-            elif curProvider == 'kerews':
-                sickbeard.KEREWS = curEnabled
+            elif curProvider == 'nzbs_org_old':
+                sickbeard.NZBS = curEnabled
+            elif curProvider == 'nzbmatrix':
+                sickbeard.NZBMATRIX = curEnabled
+            elif curProvider == 'newzbin':
+                sickbeard.NEWZBIN = curEnabled
             elif curProvider == 'bin_req':
                 sickbeard.BINREQ = curEnabled
             elif curProvider == 'womble_s_index':
@@ -1141,7 +1140,7 @@ class ConfigProviders:
             elif curProvider == 'btn':
                 sickbeard.BTN = curEnabled
             elif curProvider in newznabProviderDict:
-                newznabProviderDict[curProvider].enabled = int(curEnabled)
+                newznabProviderDict[curProvider].enabled = bool(curEnabled)
             else:
                 logger.log(u"don't know what "+curProvider+" is, skipping")
 
@@ -1155,9 +1154,6 @@ class ConfigProviders:
         sickbeard.NZBSRUS_UID = nzbs_r_us_uid.strip()
         sickbeard.NZBSRUS_HASH = nzbs_r_us_hash.strip()
 
-        sickbeard.KEREWS_URL = kerews_url
-        sickbeard.KEREWS_APIKEY = kerews_apikey
-        sickbeard.KEREWS_CATIDS = kerews_catIDs
         sickbeard.OMGWTFNZBS_UID = omgwtfnzbs_uid.strip()
         sickbeard.OMGWTFNZBS_KEY = omgwtfnzbs_key.strip()
         sickbeard.PROVIDER_ORDER = provider_list
@@ -1810,8 +1806,6 @@ class NewHomeAddShows:
                 redirect("/home")
             else:
                 helpers.chmodAsParent(show_dir)
-                notifiers.synoindex_notifier.addFolder(show_dir)
-                logger.log("Added " +show_dir+" to the synoindexer", logger.DEBUG)
 
         # prepare the inputs for passing along
         if flatten_folders == "on":
@@ -2002,7 +1996,7 @@ class Home:
         if 'callback' in kwargs and '_' in kwargs:
             callback, _ = kwargs['callback'], kwargs['_']
         else:
-            return "Error: Unsupported Request. Send jsonp request with 'callback' variable in the query string."
+            return "Error: Unsupported Request. Send jsonp request with 'callback' variable in the query stiring."
         cherrypy.response.headers['Cache-Control'] = "max-age=0,no-cache,no-store"
         cherrypy.response.headers['Content-Type'] = 'text/javascript'
         cherrypy.response.headers['Access-Control-Allow-Origin'] = '*'

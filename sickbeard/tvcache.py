@@ -18,13 +18,7 @@
 
 import time
 import datetime
-try:
-    import sqlite3
-except:
-    try:
-        import pysqlite2.dbapi2 as sqlite3
-    except:
-        pass
+import sqlite3
 
 import sickbeard
 
@@ -348,21 +342,12 @@ class TVCache():
         else:
             sqlResults = myDB.select("SELECT * FROM "+self.providerID+" WHERE tvdbid = ? AND season = ? AND episodes LIKE ?", [episode.show.tvdbid, episode.season, "%|"+str(episode.episode)+"|%"])
 
-        sbDB = db.DBConnection()
         # for each cache entry
         for curResult in sqlResults:
 
-            curID = str(curResult["tvdbid"])
-            if str(curResult["tvdbid"]) != "0":
-                sqlResults2 = sbDB.select("SELECT * FROM tv_shows WHERE tvdb_id = "+ curID + "")
-                for show in sqlResults2:
-                    class myShow( object ):
-                        pass
-                    setattr(myShow, "lang", show["lang"])
-                    setattr(myShow, "name", show["show_name"])
             # skip non-tv crap (but allow them for Newzbin cause we assume it's filtered well)
-                    if self.providerID != 'newzbin':
-                        continue
+            if self.providerID != 'newzbin' and not show_name_helpers.filterBadReleases(curResult["name"]):
+                continue
 
             # get the show object, or if it's not one of our shows then ignore it
             showObj = helpers.findCertainShow(sickbeard.showList, int(curResult["tvdbid"]))
@@ -383,9 +368,7 @@ class TVCache():
             if not showObj.wantEpisode(curSeason, curEp, curQuality, manualSearch):
                 logger.log(u"Skipping "+curResult["name"]+" because we don't want an episode that's "+Quality.qualityStrings[curQuality], logger.DEBUG)
 
-            elif not show_name_helpers.filterBadReleases(curResult["name"], myShow):
-                continue
-            else:
+	            else:
 
                 if episode:
                     epObj = episode

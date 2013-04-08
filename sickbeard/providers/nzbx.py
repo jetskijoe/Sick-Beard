@@ -57,8 +57,7 @@ class NzbXProvider(generic.NZBProvider):
     def _doSearch(self, search, show=None, age=0):
         params = {'age': sickbeard.USENET_RETENTION,
                   'completion': sickbeard.NZBX_COMPLETION,
-                  #'cat': 'tv-hd|tv-sd',
-                  'cat': 'tv',
+                  'cat': 'tv-hd|tv-sd',
                   'limit': 250,
                   'q': search}
 
@@ -123,4 +122,3 @@ class NzbXCache(tvcache.TVCache):
             self._parseItem(item)
 
 provider = NzbXProvider()
-

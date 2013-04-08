@@ -21,18 +21,15 @@ __all__ = ['ezrss',
            'torrentleech',
            'nzbsrus',
            'womble',
-           'nzbindex',
-           'kere_ws',
            'btn',
-           'nzbclub',
            'nzbx',
            'omgwtfnzbs',
            ]
 
 import sickbeard
-from sickbeard import logger
 
 from os import sys
+
 
 def sortedProviderList():
 
@@ -53,9 +50,11 @@ def sortedProviderList():
 
     return newList
 
+
 def makeProviderList():
 
     return [x.provider for x in [getProviderModule(y) for y in __all__] if x]
+
 
 def getNewznabProviderList(data):
 
@@ -81,43 +80,38 @@ def getNewznabProviderList(data):
             providerDict[curDefault.name].name = curDefault.name
             providerDict[curDefault.name].url = curDefault.url
             providerDict[curDefault.name].needs_auth = curDefault.needs_auth
-            providerDict[curDefault.name].catIDs = curDefault.catIDs
 
     return filter(lambda x: x, providerList)
 
 
 def makeNewznabProvider(configString):
-    logger.log(configString)
+
     if not configString:
         return None
 
-    try:
-        name, url, key, catIDs, enabled = configString.split('|')
-    except:
-        name, url, key, enabled = configString.split('|')
-        logger.log(u"newznab provider list does not contain catIDs. Using fallback catID: 5000 for provider [" + name + "]", logger.WARNING)
-        catIDs = 5000
+    name, url, key, enabled = configString.split('|')
 
     newznab = sys.modules['sickbeard.providers.newznab']
 
     newProvider = newznab.NewznabProvider(name, url)
     newProvider.key = key
-    newProvider.catIDs = catIDs
     newProvider.enabled = enabled == '1'
 
     return newProvider
 
+
 def getDefaultNewznabProviders():
-    return 'Sick Beard Index|http://lolo.sickbeard.com/|0|5000|0!!!NZBs.org|http://nzbs.org/|0|5000|0'
+    return 'Sick Beard Index|http://lolo.sickbeard.com/|0|0!!!NZBs.org|http://nzbs.org/||0!!!NZBGeek|https://index.nzbgeek.info/||0!!!NZBFinder|http://www.nzbfinder.ws/||0!!!Usenet-Crawler|http://www.usenet-crawler.com/||0'
 
 
 def getProviderModule(name):
     name = name.lower()
     prefix = "sickbeard.providers."
-    if name in __all__ and prefix+name in sys.modules:
-        return sys.modules[prefix+name]
+    if name in __all__ and prefix + name in sys.modules:
+        return sys.modules[prefix + name]
     else:
-        raise Exception("Can't find "+prefix+name+" in "+repr(sys.modules))
+        raise Exception("Can't find " + prefix + name + " in " + repr(sys.modules))
+
 
 def getProviderClass(providerID):
 

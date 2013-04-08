@@ -37,7 +37,7 @@ from lib.hachoir_parser import createParser
 
 from sickbeard.name_parser.parser import NameParser, InvalidNameException
 
-class GenericProvider(object):
+class GenericProvider:
 
     NZB = "nzb"
     TORRENT = "torrent"
@@ -105,7 +105,6 @@ class GenericProvider(object):
 
         if not headers:
             headers = []
-
 
         result = helpers.getURL(url, headers)
 
