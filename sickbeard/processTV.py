@@ -68,7 +68,7 @@ def processDir (dirName, nzbName=None, recurse=False, failed=False):
     # if we didn't find a real dir then quit
     if not ek.ek(os.path.isdir, dirName):
         returnStr += logHelper(u"Unable to figure out what folder to process. If your downloader and Sick Beard aren't on the same PC make sure you fill out your TV download dir in the config.", logger.DEBUG)
-        return returnStr
+        failed=True
 
     if failed:
         returnStr += logHelper(u"Failed download detected: (" + str(nzbName) + ", " + dirName + ")")

@@ -36,6 +36,7 @@ from sickbeard import logger
 from sickbeard import notifiers
 from sickbeard import show_name_helpers
 from sickbeard import scene_exceptions
+from sickbeard import search_queue
 
 from sickbeard import encodingKludge as ek
 from sickbeard.exceptions import ex
@@ -518,8 +519,7 @@ class PostProcessor(object):
             
             # for air-by-date shows we need to look up the season/episode from tvdb
             if season == -1 and tvdb_id and episodes:
-                self._log(
-                    u"Looks like this is an air-by-date show, attempting to convert the date to season/episode", logger.DEBUG)
+                self._log(u"Looks like this is an air-by-date show, attempting to convert the date to season/episode", logger.DEBUG)
                 
                 # try to get language set for this show
                 tvdb_lang = None
@@ -544,8 +544,7 @@ class PostProcessor(object):
                     episodes = [int(epObj["episodenumber"])]
                     self._log(u"Got season " + str(season) + " episodes " + str(episodes), logger.DEBUG)
                 except tvdb_exceptions.tvdb_episodenotfound, e:
-                    self._log(u"Unable to find episode with date " + str(episodes[
-                              0]) + u" for show " + str(tvdb_id) + u", skipping", logger.DEBUG)
+                    self._log(u"Unable to find episode with date " + str(episodes[0]) + u" for show " + str(tvdb_id) + u", skipping", logger.DEBUG)
                     # we don't want to leave dates in the episode list if we couldn't convert them to real episode numbers
                     episodes = []
                     continue
@@ -769,6 +768,11 @@ class PostProcessor(object):
                 with curEp.lock:
                     curEp.status = int(common.WANTED)
                     curEp.saveToDB()
+            self._log(u"Triggering search for episode(s)", logger.DEBUG)
+            for curEp in [ep_obj] + ep_obj.relatedEps:
+                self._log(u"Searching for: " + curEp.name)
+                queue_item = search_queue.ManualSearchQueueItem(curEp)
+                sickbeard.searchQueueScheduler.action.add_item(queue_item)
            
             # we 'succeeded' in the sense that no errors were encountered
             return True

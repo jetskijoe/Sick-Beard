@@ -5,7 +5,7 @@ This module offers extensions to the standard python 2.3+
 datetime module.
 """
 __author__ = "Gustavo Niemeyer <gustavo@niemeyer.net>"
-__license__ = "PSF License"
+__license__ = "Simplified BSD"
 
 import datetime
 
@@ -52,7 +52,7 @@ def easter(year, method=EASTER_WESTERN):
     """
 
     if not (1 <= method <= 3):
-        raise ValueError, "invalid method"
+        raise ValueError("invalid method")
 
     # g - Golden year - 1
     # c - Century
