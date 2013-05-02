@@ -2784,6 +2784,11 @@ class UI:
 class WebInterface:
 
     @cherrypy.expose
+    def robots_txt(self):
+        """ Keep web crawlers out """
+        cherrypy.response.headers['Content-Type'] = 'text/plain'
+        return 'User-agent: *\nDisallow: /\n'
+    @cherrypy.expose
     def index(self):
 
         redirect("/home")
