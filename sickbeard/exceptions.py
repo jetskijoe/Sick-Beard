@@ -98,3 +98,5 @@ class CantUpdateException(SickBeardException):
 
 class PostProcessingFailed(SickBeardException):
 	"Post-processing the episode failed"
+class FailedProcessingFailed(SickBeardException):
+    "Post-processing the failed release failed"

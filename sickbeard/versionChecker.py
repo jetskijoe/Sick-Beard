@@ -39,7 +39,8 @@ class CheckVersion():
         self.install_type = self.find_install_type()
 
         if self.install_type == 'win':
-            self.updater = WindowsUpdateManager()
+            # self.updater = WindowsUpdateManager()
+            self.updater = None
         elif self.install_type == 'git':
             self.updater = GitUpdateManager()
         elif self.install_type == 'source':
@@ -56,7 +57,7 @@ class CheckVersion():
     def find_install_type(self):
         """
         Determines how this copy of SB was installed.
-        
+
         returns: type of installation. Possible values are:
             'win': any compiled windows build
             'git': running from source using git
@@ -76,9 +77,9 @@ class CheckVersion():
     def check_for_new_version(self, force=False):
         """
         Checks the internet for a newer version.
-        
+
         returns: bool, True for new version or False for no new version.
-        
+
         force: if true the VERSION_NOTIFY setting will be ignored and a check will be forced
         """
 
@@ -212,15 +213,13 @@ class GitUpdateManager(UpdateManager):
         self._newest_commit_hash = None
         self._num_commits_behind = 0
 
-        self.git_url = 'http://code.google.com/p/sickbeard/downloads/list'
 
         self.branch = self._find_git_branch()
 
     def _git_error(self):
-        error_message = 'Unable to find your git executable - either delete your .git folder and run from source OR <a href="http://code.google.com/p/sickbeard/wiki/AdvancedSettings" onclick="window.open(this.href); return false;">set git_path in your config.ini</a> to enable updates.'
+        error_message = 'There was a problem running git - either delete your .git folder and run from source OR <a href="http://code.google.com/p/sickbeard/wiki/AdvancedSettings" onclick="window.open(this.href); return false;">set git_path in your config.ini</a> to enable updates.'
         sickbeard.NEWEST_VERSION_STRING = error_message
         
-        return None
 
     def _run_git(self, args):
         
@@ -240,20 +239,17 @@ class GitUpdateManager(UpdateManager):
             cmd = cur_git+' '+args
         
             try:
-                logger.log(u"Executing "+cmd+" with your shell in "+sickbeard.PROG_DIR, logger.DEBUG)
-                p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True, cwd=sickbeard.PROG_DIR)
+                logger.log(u"Executing '" + cmd + "' with your shell in " + sickbeard.PROG_DIR, logger.DEBUG)
+                p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=sickbeard.PROG_DIR, shell=True)
                 output, err = p.communicate()
                 logger.log(u"git output: "+output, logger.DEBUG)
+                logger.log(u"git error: " + err, logger.DEBUG)
             except OSError:
                 logger.log(u"Command "+cmd+" didn't work, couldn't find git.")
                 continue
             
-            if p.returncode != 0 or 'not found' in output or "not recognized as an internal or external command" in output:
-                logger.log(u"Unable to find git with command "+cmd, logger.DEBUG)
-                output = None
-            elif 'fatal:' in output or err:
-                logger.log(u"Git returned bad info, are you sure this is a git installation?", logger.ERROR)
-                output = None
+            if p.returncode != 0:
+                logger.log(u"Git error: " + cmd, logger.ERROR)
             elif output:
                 break
 
@@ -272,27 +268,28 @@ class GitUpdateManager(UpdateManager):
         output, err = self._run_git('rev-parse HEAD') #@UnusedVariable
 
         if not output:
-            return self._git_error()
+            self._git_error()
+            return False
 
         logger.log(u"Git output: "+str(output), logger.DEBUG)
         cur_commit_hash = output.strip()
 
         if not re.match('^[a-z0-9]+$', cur_commit_hash):
             logger.log(u"Output doesn't look like a hash, not using it", logger.ERROR)
-            return self._git_error()
-        
+            self._git_error()
+            return False
         self._cur_commit_hash = cur_commit_hash
             
         return True
 
     def _find_git_branch(self):
 
-        branch_info = self._run_git('symbolic-ref -q HEAD')
+        branch_info = self._run_git("symbolic-ref -q HEAD")
 
         if not branch_info or not branch_info[0]:
             return 'master'
 
-        branch = branch_info[0].strip().replace('refs/heads/', '', 1)
+        branch = branch_info[0].strip().replace("refs/heads/", "", 1)
 
         return branch or 'master'
 
@@ -311,7 +308,7 @@ class GitUpdateManager(UpdateManager):
         gh = github.GitHub()
 
         # find newest commit
-        for curCommit in gh.commits('midgetspy', 'Sick-Beard', self.branch):
+        for curCommit in gh.commits('jetskijoe', 'Sick-Beard', self.branch):
             if not self._newest_commit_hash:
                 self._newest_commit_hash = curCommit['sha']
                 if not self._cur_commit_hash:
@@ -332,16 +329,17 @@ class GitUpdateManager(UpdateManager):
 
         elif self._num_commits_behind > 0:
             message = "you're %d commit" % self._num_commits_behind
-            if self._num_commits_behind > 1: message += 's'
+            if self._num_commits_behind > 1:
+                message += 's'
             message += ' behind'
 
         else:
             return
 
         if self._newest_commit_hash:
-            url = 'http://github.com/midgetspy/Sick-Beard/compare/'+self._cur_commit_hash+'...'+self._newest_commit_hash
+            url = 'http://github.com/jetskijoe/Sick-Beard/compare/'+self._cur_commit_hash+'...'+self._newest_commit_hash
         else:
-            url = 'http://github.com/midgetspy/Sick-Beard/commits/'
+            url = 'http://github.com/jetskijoe/Sick-Beard/commits/'
 
         new_str = 'There is a <a href="'+url+'" onclick="window.open(this.href); return false;">newer version available</a> ('+message+')'
         new_str += "&mdash; <a href=\""+self.get_update_url()+"\">Update Now</a>"
@@ -372,7 +370,8 @@ class GitUpdateManager(UpdateManager):
         output, err = self._run_git('pull origin '+self.branch) #@UnusedVariable
 
         if not output:
-            return self._git_error()
+            self._git_error()
+            return False
 
         pull_regex = '(\d+) .+,.+(\d+).+\(\+\),.+(\d+) .+\(\-\)'
 
@@ -447,7 +446,7 @@ class SourceUpdateManager(GitUpdateManager):
         Downloads the latest source tarball from github and installs it over the existing version.
         """
 
-        tar_download_url = 'https://github.com/midgetspy/Sick-Beard/tarball/'+version.SICKBEARD_VERSION
+        tar_download_url = 'https://github.com/jetskijoe/Sick-Beard/tarball/'+version.SICKBEARD_VERSION
         sb_update_dir = os.path.join(sickbeard.PROG_DIR, 'sb-update')
         version_path = os.path.join(sickbeard.PROG_DIR, 'version.txt')
 

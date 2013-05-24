@@ -158,7 +158,7 @@ class Quality:
             return Quality.SD264
         elif (checkName(["hdtv", "720p"], all) or checkName(["720p", "[xh]\.?264"], all)):
             return Quality.HDTV
-        elif checkName(["720p|1080i", "hdtv", "mpeg2"], all):
+        elif checkName(["720p|1080i", "hdtv", "mpeg-?2"], all):
             return Quality.RAWHDTV
         elif checkName(["1080p", "hdtv", "x264"], all):
             return Quality.FULLHDTV

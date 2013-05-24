@@ -20,7 +20,6 @@ from __future__ import with_statement
 
 import os
 import traceback
-import re
 
 import sickbeard
 
@@ -43,9 +42,9 @@ from sickbeard.providers.generic import GenericProvider
 def _downloadResult(result):
     """
     Downloads a result to the appropriate black hole folder.
-    
+
     Returns a bool representing success.
-    
+
     result: SearchResult instance to download.
     """
 
@@ -53,7 +52,7 @@ def _downloadResult(result):
 
     newResult = False
 
-    if resProvider == None:
+    if resProvider is None:
         logger.log(u"Invalid provider name - this is a coding error, report it please", logger.ERROR)
         return False
 
@@ -97,9 +96,9 @@ def snatchEpisode(result, endStatus=SNATCHED):
     """
     Contains the internal logic necessary to actually "snatch" a result that
     has been found.
-    
+
     Returns a bool representing success.
-    
+
     result: SearchResult instance to be snatched.
     endStatus: the episode status that should be used for the episode object once it's snatched.
     """
@@ -123,19 +122,19 @@ def snatchEpisode(result, endStatus=SNATCHED):
         logger.log(u"Unknown result type, unable to download it", logger.ERROR)
         dlResult = False
 
-    if dlResult == False:
+    if dlResult is False:
         return False
 
     history.logSnatch(result)
 
     # don't notify when we re-download an episode
     for curEpObj in result.episodes:
+        if curEpObj.status not in Quality.DOWNLOADED:
+            notifiers.notify_snatch(curEpObj.prettyName())
         with curEpObj.lock:
             curEpObj.status = Quality.compositeStatus(endStatus, result.quality)
             curEpObj.saveToDB()
 
-        if curEpObj.status not in Quality.DOWNLOADED:
-            notifiers.notify_snatch(curEpObj.prettyName())
 
     return True
 
@@ -230,7 +229,7 @@ def pickBestResult(results, quality_list=None):
 def isFinalResult(result):
     """
     Checks if the given result is good enough quality that we can stop searching for other ones.
-    
+
     If the result is the highest quality in both the any/best quality lists then this function
     returns True, if not then it's False
 
