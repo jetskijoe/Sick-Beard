@@ -212,13 +212,17 @@ class GenericMetadata():
             logger.log("Metadata provider "+self.name+" creating show metadata for "+ep_obj.prettyName(), logger.DEBUG)
             return self.save_thumbnail(ep_obj)
         return  False
-    
+
     def create_season_thumbs(self, show_obj):
         if self.season_thumbnails and show_obj:
-            logger.log("Metadata provider "+self.name+" creating season thumbnails for "+show_obj.name, logger.DEBUG)
-            return self.save_season_thumbs(show_obj)
+            result = []
+            for season, episodes in show_obj.episodes.iteritems():
+                if not self._has_season_thumb(show_obj, season):
+                    logger.log("Metadata provider " + self.name + " creating season thumbnails for " + show_obj.name, logger.DEBUG)
+                    result = result + [self.save_season_thumbs(show_obj, season)]
+            return all(result)
         return False
-    
+
     def _get_episode_thumb_url(self, ep_obj):
         """
         Returns the URL to use for downloading an episode's thumbnail. Uses
@@ -427,7 +431,7 @@ class GenericMetadata():
         return self._write_image(poster_data, poster_path)
 
 
-    def save_season_thumbs(self, show_obj):
+    def save_season_thumbs(self, show_obj, season):
         """
         Saves all season thumbnails to disk for the given show.
         
@@ -437,19 +441,20 @@ class GenericMetadata():
         method should not need to be overridden by implementing classes, changing
         _season_thumb_dict and get_season_thumb_path should be good enough.
         """
-    
-        season_dict = self._season_thumb_dict(show_obj)
-    
+
+        season_dict = self._season_thumb_dict(show_obj, season)
+        result = []
+
         # Returns a nested dictionary of season art with the season
         # number as primary key. It's really overkill but gives the option
         # to present to user via ui to pick down the road.
         for cur_season in season_dict:
 
             cur_season_art = season_dict[cur_season]
-            
+
             if len(cur_season_art) == 0:
                 continue
-    
+
             # Just grab whatever's there for now
             art_id, season_url = cur_season_art.popitem() #@UnusedVariable
 
@@ -464,9 +469,13 @@ class GenericMetadata():
             if not seasonData:
                 logger.log(u"No season thumb data available, skipping this season", logger.DEBUG)
                 continue
-            
-            self._write_image(seasonData, season_thumb_file_path)
-    
+
+            result = result + [self._write_image(seasonData, season_thumb_file_path)]
+        if result:
+            return all(result)
+        else:
+            return False
+
         return True
 
     def _write_image(self, image_data, image_path):

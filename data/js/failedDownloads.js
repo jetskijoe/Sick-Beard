@@ -1,6 +1,6 @@
 $(document).ready(function(){
   $('#submitMassRemove').click(function(){
-  
+
     var removeArr = new Array()
 
     $('.removeCheck').each(function() {
@@ -13,13 +13,13 @@ $(document).ready(function(){
       return false
 
     url = sbRoot + '/manage/failedDownloads?toRemove='+removeArr.join('|')
-    
+
     window.location.href = url
 
   });
 
   $('.bulkCheck').click(function(){
-    
+
     var bulkCheck = this;
     var whichBulkCheck = $(bulkCheck).attr('id');
 
@@ -44,7 +44,7 @@ $(document).ready(function(){
       $(name+':visible').each(function() {
         switch (found) {
           case 2: return false;
-          case 1: 
+          case 1:
               this.checked = lastCheck.checked;
         }
 
@@ -55,7 +55,7 @@ $(document).ready(function(){
     });
 
   });
-  
+
   $('#addFailedRelease').click(function(){
     releasename = $('#failedRelease').val()
     if (releasename) {
@@ -64,5 +64,7 @@ $(document).ready(function(){
     } else {
       return false
     }
+
   })
+
 });

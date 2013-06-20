@@ -51,7 +51,7 @@ class NzbXProvider(generic.NZBProvider):
 
     def _get_title_and_url(self, item):
         title = item['name']
-        url = self.url + 'nzb?' + str(item['guid']) + '*|*' + urllib.quote(title)
+        url = self.url + 'nzb?' + str(item['guid']) + '*|*' + urllib.quote_plus(title)
         return (title, url)
 
     def _doSearch(self, search, show=None, age=0):
@@ -71,6 +71,9 @@ class NzbXProvider(generic.NZBProvider):
         logger.log(u"nzbX search url: " + url, logger.DEBUG)
 
         data = self.getURL(url)
+        if not data:
+            logger.log(u"nzbX returned no json data", logger.DEBUG)
+            return[]
         try:
             items = json.loads(data)
         except ValueError:
