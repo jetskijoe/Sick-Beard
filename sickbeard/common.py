@@ -149,7 +149,7 @@ class Quality:
 
         checkName = lambda list, func: func([re.search(x, name, re.I) for x in list])
         if checkName(["TrollHD"], all):
-		    return Quality.FULLHDBLURAY
+            return Quality.FULLHDBLURAY
         elif checkName(["(pdtv|hdtv|dsr|hdtvrip|webrip|webhdrip|tvrip)(.repack)?.(xvi-?d)"], all) and not checkName(["HR", "WS"], all) and not checkName(["(720|1080)[pi]"], all):
             return Quality.SDTV
         elif checkName(["(dvdrip|bdrip|brrip|bluray)(.ws)?.(xvi-?d|divx|[xh]\.?264)"], any) and not checkName(["HR", "WS"], all) and not checkName(["(720|1080)[pi]"], all):
@@ -158,7 +158,7 @@ class Quality:
             return Quality.SD264
         elif (checkName(["hdtv", "720p"], all) or checkName(["720p", "[xh]\.?264"], all)):
             return Quality.HDTV
-		elif (checkName(["HR", "WS"], all) or checkName(["720p", "[xh]\.?264"], all)):
+        elif (checkName(["HR", "WS"], all) or checkName(["720p", "[xh]\.?264"], all)):
             return Quality.HDTV
         elif checkName(["720p|1080i", "hdtv", "mpeg-?2"], all):
             return Quality.RAWHDTV
