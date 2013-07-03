@@ -24,7 +24,7 @@ import shutil
 
 import sickbeard 
 from sickbeard import postProcessor
-from sickbeard import db, helpers, exceptions
+from sickbeard import db, helpers, exceptions, show_name_helpers
 
 from sickbeard import encodingKludge as ek
 from sickbeard.exceptions import ex
@@ -32,6 +32,7 @@ from sickbeard.exceptions import ex
 from sickbeard import logger
 
 from sickbeard import failedProcessor
+from sickbeard import failed_history
 
 
 def logHelper (logMessage, logLevel=logger.MESSAGE):

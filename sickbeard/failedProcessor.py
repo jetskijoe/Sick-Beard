@@ -17,9 +17,6 @@
 
 from __future__ import with_statement
 
-import os
-from glob import glob
-
 import sickbeard
 from sickbeard import logger
 from sickbeard import exceptions
@@ -30,7 +27,6 @@ from sickbeard import failed_history
 from sickbeard import scene_exceptions
 from sickbeard import common
 
-from sickbeard import encodingKludge as ek
 from sickbeard.name_parser.parser import NameParser, InvalidNameException
 
 
@@ -52,7 +48,7 @@ class FailedProcessor(object):
     def process(self):
         self._log(u"Failed download detected: (" + str(self.nzb_name) + ", " + self.dir_name + ")")
 
-        releaseName = self._get_release_name()
+        releaseName = show_name_helpers.determineReleaseName(self.dir_name, self.nzb_name)
         if releaseName is None:
             self._log(u"Warning: unable to find a valid release name.", logger.WARNING)
             raise exceptions.FailedProcessingFailed()
@@ -85,7 +81,7 @@ class FailedProcessor(object):
             raise exceptions.FailedProcessingFailed()
 
         self._log(u"Marking release as bad: " + releaseName)
-        failed_history.logFailed(releaseName)
+        self.log += failed_history.logFailed(releaseName)
 
         self._revert_episode_statuses(parsed.season_number, parsed.episode_numbers)
 
@@ -98,37 +94,6 @@ class FailedProcessor(object):
         """Log to regular logfile and save for return for PP script log"""
         logger.log(message, level)
         self.log += message + "\n"
-
-    def _get_release_name(self):
-        """Try to find a valid-looking release name"""
-
-        if self.nzb_name is not None:
-            self._log(u"Using self.nzb_name for release name.")
-            return self.nzb_name.rpartition('.')[0]
-
-        # try to get the release name from nzb/nfo
-        self._log(u"No self.nzb_name given. Trying to guess release name.")
-        file_types = ["*.nzb", "*.nfo"]
-        for search in file_types:
-            search_path = ek.ek(os.path.join, self.dir_name, search)
-            results = ek.ek(glob, search_path)
-            if len(results) == 1:
-                found_file = ek.ek(os.path.basename, results[0])
-                found_file = found_file.rpartition('.')[0]
-                if show_name_helpers.filterBadReleases(found_file):
-                    self._log(u"Release name (" + found_file + ") found from file (" + results[0] + ")")
-                    return found_file
-
-        # If that fails, we try the folder
-        folder = ek.ek(os.path.basename, self.dir_name)
-        if show_name_helpers.filterBadReleases(folder):
-            # NOTE: Multiple failed downloads will change the folder name.
-            # (e.g., appending #s)
-            # Should we handle that?
-            self._log(u"Folder name (" + folder + ") appears to be a valid release name. Using it.")
-            return folder
-
-        return None
 
     def _get_show_id(self, series_name):
         """Find and return show ID by searching exceptions, then DB"""

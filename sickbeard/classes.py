@@ -16,8 +16,6 @@
 # You should have received a copy of the GNU General Public License
 # along with Sick Beard.  If not, see <http://www.gnu.org/licenses/>.
 
-
-
 import sickbeard
 
 import urllib
@@ -25,14 +23,16 @@ import datetime
 
 from common import USER_AGENT, Quality
 
+
 class SickBeardURLopener(urllib.FancyURLopener):
     version = USER_AGENT
+
 
 class AuthURLOpener(SickBeardURLopener):
     """
     URLOpener class that supports http auth without needing interactive password entry.
     If the provided username/password don't work it simply fails.
-    
+
     user: username to use for HTTP auth
     pw: password to use for HTTP auth
     """
@@ -42,7 +42,7 @@ class AuthURLOpener(SickBeardURLopener):
 
         # remember if we've tried the username/password before
         self.numTries = 0
-        
+
         # call the base class
         urllib.FancyURLopener.__init__(self)
 
@@ -56,7 +56,7 @@ class AuthURLOpener(SickBeardURLopener):
         if self.numTries == 0:
             self.numTries = 1
             return (self.username, self.password)
-        
+
         # if we've tried before then return blank which cancels the request
         else:
             return ('', '')
@@ -66,42 +66,45 @@ class AuthURLOpener(SickBeardURLopener):
         self.numTries = 0
         return SickBeardURLopener.open(self, url)
 
+
 class SearchResult:
     """
     Represents a search result from an indexer.
     """
 
     def __init__(self, episodes):
-        self.provider = -1
-
+        self.provider = None
         # URL to the NZB/torrent file
         self.url = ""
-
         # used by some providers to store extra info associated with the result
         self.extraInfo = []
-
         # list of TVEpisode objects that this result is associated with
         self.episodes = episodes
-
         # quality of the release
         self.quality = Quality.UNKNOWN
-
         # release name
         self.name = ""
+        # size of the release. -1 = n/a
+        self.size = -1
 
     def __str__(self):
-
-        if self.provider == None:
+        if self.provider is None:
             return "Invalid provider, unable to print self"
 
         myString = self.provider.name + " @ " + self.url + "\n"
         myString += "Extra Info:\n"
         for extra in self.extraInfo:
             myString += "  " + extra + "\n"
+
+        myString += "Episode: " + str(self.episodes) + "\n"
+        myString += "Quality: " + Quality.qualityStrings[self.quality] + "\n"
+        myString += "Name: " + self.name + "\n"
+        myString += "Size: " + str(self.size) + "\n"
         return myString
 
     def fileName(self):
         return self.episodes[0].prettyName() + "." + self.resultType
+
 
 class NZBSearchResult(SearchResult):
     """
@@ -109,11 +112,13 @@ class NZBSearchResult(SearchResult):
     """
     resultType = "nzb"
 
+
 class NZBDataSearchResult(SearchResult):
     """
     NZB result where the actual NZB XML data is stored in the extraInfo
     """
     resultType = "nzbdata"
+
 
 class TorrentSearchResult(SearchResult):
     """
@@ -126,7 +131,7 @@ class ShowListUI:
     """
     This class is for tvdb-api. Instead of prompting with a UI to pick the
     desired result out of a list of shows it tries to be smart about it
-    based on what shows are in SB. 
+    based on what shows are in SB.
     """
     def __init__(self, config, log=None):
         self.config = config
@@ -143,6 +148,7 @@ class ShowListUI:
         # if nothing matches then just go with the first match I guess
         return allSeries[0]
 
+
 class Proper:
     def __init__(self, name, url, date):
         self.name = name
@@ -156,7 +162,7 @@ class Proper:
         self.episode = -1
 
     def __str__(self):
-        return str(self.date)+" "+self.name+" "+str(self.season)+"x"+str(self.episode)+" of "+str(self.tvdbid)
+        return str(self.date) + " " + self.name + " " + str(self.season) + "x" + str(self.episode) + " of " + str(self.tvdbid)
 
 
 class ErrorViewer():
@@ -177,6 +183,7 @@ class ErrorViewer():
     @staticmethod
     def clear():
         ErrorViewer.errors = []
+
 
 class UIError():
     """

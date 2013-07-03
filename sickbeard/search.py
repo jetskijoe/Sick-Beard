@@ -126,6 +126,7 @@ def snatchEpisode(result, endStatus=SNATCHED):
         return False
 
     history.logSnatch(result)
+    failed_history.logSnatch(result)
 
     # don't notify when we re-download an episode
     for curEpObj in result.episodes:
@@ -207,7 +208,7 @@ def pickBestResult(results, quality_list=None):
             continue
 
         if cur_result.provider.providerType != GenericProvider.TORRENT:
-            if failed_history.hasFailed(cur_result.name):
+            if failed_history.hasFailed(cur_result.name, cur_result.size):
                 logger.log(cur_result.name + u" has previously failed, rejecting it")
                 continue
         

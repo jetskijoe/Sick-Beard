@@ -88,7 +88,7 @@ class NewznabProvider(generic.NZBProvider):
             else:
                 cur_params['q'] = helpers.sanitizeSceneName(cur_exception)
 
-            if season != None:
+            if season is not None:
                 # air-by-date means &season=2010&q=2010.03, no other way to do it atm
                 if show.air_by_date:
                     cur_params['season'] = season.split('-')[0]
@@ -264,7 +264,7 @@ class NewznabProvider(generic.NZBProvider):
                     if resultDate:
                         resultDate = datetime.datetime(*resultDate[0:6])
 
-                if date == None or resultDate > date:
+                if date is None or resultDate > date:
                     search_result = classes.Proper(title, url, resultDate)
                     results.append(search_result)
 

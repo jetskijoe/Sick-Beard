@@ -16,34 +16,39 @@
 # You should have received a copy of the GNU General Public License
 # along with Sick Beard.  If not, see <http://www.gnu.org/licenses/>.
 
-import StringIO, zlib, gzip
+import StringIO
+import zlib
+import gzip
 import os
 import stat
-import urllib, urllib2
-import re, socket
+import urllib
+import urllib2
+import re
+import socket
 import shutil
 import traceback
-import time, sys
+import time
+import sys
 
 from httplib import BadStatusLine
 
 from xml.dom.minidom import Node
 
 import sickbeard
-
-from sickbeard.exceptions import MultipleShowObjectsException, ex
 from sickbeard import logger, classes
-from sickbeard.common import USER_AGENT, mediaExtensions, XML_NSMAP
-
 from sickbeard import db
 from sickbeard import encodingKludge as ek
 from sickbeard import notifiers
+
+from sickbeard.exceptions import MultipleShowObjectsException, ex
+from sickbeard.common import USER_AGENT, mediaExtensions, XML_NSMAP
 
 from lib.tvdb_api import tvdb_api, tvdb_exceptions
 
 import xml.etree.cElementTree as etree
 
 urllib._urlopener = classes.SickBeardURLopener()
+
 
 def indentXML(elem, level=0):
     '''
@@ -111,16 +116,15 @@ def sanitizeFileName (name):
     >>> sanitizeFileName('.a.b..')
     'a.b'
     '''
-    
+
     # remove bad chars from the filename
     name = re.sub(r'[\\/\*]', '-', name)
     name = re.sub(r'[:"<>|?]', '', name)
-    
+
     # remove leading/trailing periods and spaces
     name = name.strip(' .')
-    
-    return name
 
+    return name
 
 def getURL (url, headers=[]):
     """
@@ -193,7 +197,6 @@ def findCertainTVRageShow (showList, tvrid):
         raise MultipleShowObjectsException()
     else:
         return results[0]
-
 
 def makeDir (dir):
     if not ek.ek(os.path.isdir, dir):
@@ -343,7 +346,6 @@ def buildNFOXML(myShow):
 
     return tvNode
 
-
 def searchDBForShow(regShowName):
 
     showNames = [re.sub('[. -]', ' ', regShowName)]
@@ -474,7 +476,6 @@ def make_dirs(path):
 
     return True
 
-
 def rename_ep_file(cur_path, new_path):
     """
     Creates all folders needed to move a file to its new location, renames it, then cleans up any folders
@@ -504,7 +505,6 @@ def rename_ep_file(cur_path, new_path):
     delete_empty_folders(ek.ek(os.path.dirname, cur_path))
 
     return True
-
 
 def delete_empty_folders(check_empty_dir, keep_dir=None):
     """
@@ -539,19 +539,18 @@ def delete_empty_folders(check_empty_dir, keep_dir=None):
         else:
             break
 
-
 def chmodAsParent(childPath):
     if os.name == 'nt' or os.name == 'ce':
         return
 
     parentPath = ek.ek(os.path.dirname, childPath)
-    
+
     if not parentPath:
         logger.log(u"No parent path provided in "+childPath+", unable to get permissions from it", logger.DEBUG)
         return
-    
+
     parentMode = stat.S_IMODE(os.stat(parentPath)[stat.ST_MODE])
-    
+
     childPathStat = ek.ek(os.stat, childPath)
     childPath_mode = stat.S_IMODE(childPathStat[stat.ST_MODE])
 
@@ -612,12 +611,12 @@ def fixSetGroupID(childPath):
         except OSError:
             logger.log(u"Failed to respect the set-group-ID bit on the parent directory for %s (setting group ID %i)" % (childPath, parentGID), logger.ERROR)
 
-def sanitizeSceneName (name, ezrss=False):
+def sanitizeSceneName(name, ezrss=False):
     """
     Takes a show name and returns the "scenified" version of it.
-    
+
     ezrss: If true the scenified version will follow EZRSS's cracksmoker rules as best as possible
-    
+
     Returns: A string containing the scene version of the show name given.
     """
 
@@ -671,6 +670,7 @@ def create_https_certificates(ssl_cert, ssl_key):
 
     return True
 
+
 if __name__ == '__main__':
     import doctest
     doctest.testmod()
@@ -678,15 +678,15 @@ if __name__ == '__main__':
 def get_xml_text(node):
     text = ""
     for child_node in node.childNodes:
-        if child_node.nodeType in (Node.CDATA_SECTION_NODE, Node.TEXT_NODE):
+        if child_node.nodeType in (Node.CDATA_SECTION_NODE, Node.TEXT_NODE, Node.ELEMENT_NODE):
             text += child_node.data
     return text.strip()
 
 def backupVersionedFile(oldFile, version):
     numTries = 0
-    
+
     newFile = oldFile + '.' + 'v'+str(version)
-    
+
     while not ek.ek(os.path.isfile, newFile):
         if not ek.ek(os.path.isfile, oldFile):
             break

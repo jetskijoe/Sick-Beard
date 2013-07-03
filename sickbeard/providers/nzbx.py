@@ -51,8 +51,11 @@ class NzbXProvider(generic.NZBProvider):
 
     def _get_title_and_url(self, item):
         title = item['name']
-        url = self.url + 'nzb?' + str(item['guid']) + '*|*' + urllib.quote_plus(title)
+        url = self.url + 'nzb?' + str(item['guid']) + '*|*' + urllib.quote(title)
         return (title, url)
+
+    def _get_size(self, item):
+        return int(item['size'])
 
     def _doSearch(self, search, show=None, age=0):
         params = {'age': sickbeard.USENET_RETENTION,
@@ -78,7 +81,7 @@ class NzbXProvider(generic.NZBProvider):
             items = json.loads(data)
         except ValueError:
             logger.log(u"Error trying to decode nzbX json data", logger.ERROR)
-            return[]
+            return []
 
         results = []
         for item in items:
@@ -105,8 +108,9 @@ class NzbXCache(tvcache.TVCache):
 
     def _parseItem(self, item):
         title, url = self.provider._get_title_and_url(item)
-        logger.log(u"Adding item from RSS to cache: " + title, logger.DEBUG)
-        self._addCacheEntry(title, url)
+        size = self.provider._get_size(item)
+        logger.log(u"Adding item from RSS to cache: %s (%s, %d)" % (title, url, size), logger.DEBUG)
+        self._addCacheEntry(title, url, size=size)
 
     def updateCache(self):
         if not self.shouldUpdate():

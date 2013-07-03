@@ -5,7 +5,7 @@
 #repository:http://github.com/dbr/tvdb_api
 #license:unlicense (http://unlicense.org/)
 
-"""Simple-to-use Python interface to The TVDB's API (thetvdb.com)
+"""Simple-to-use Python interface to The TVDB's API (www.thetvdb.com)
 
 Example usage:
 

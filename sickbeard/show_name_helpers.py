@@ -16,13 +16,16 @@
 # You should have received a copy of the GNU General Public License
 # along with Sick Beard.  If not, see <http://www.gnu.org/licenses/>.
 
+import os
+from glob import glob
 import sickbeard
 
 from sickbeard.common import countryList
-from sickbeard.helpers import sanitizeSceneName
-from sickbeard.scene_exceptions import get_scene_exceptions
+from sickbeard import scene_exceptions
+from sickbeard import helpers
 from sickbeard import logger
 from sickbeard import db
+from sickbeard import encodingKludge as ek
 
 import re
 import datetime
@@ -37,9 +40,9 @@ def filterBadReleases(name):
     """
     Filters out non-english and just all-around stupid releases by comparing them
     to the resultFilters contents.
-    
+
     name: the release name to check
-    
+
     Returns: True if the release name is OK, False if it's bad.
     """
 
@@ -75,9 +78,9 @@ def filterBadReleases(name):
 def sceneToNormalShowNames(name):
     """
     Takes a show name from a scene dirname and converts it to a more "human-readable" format.
-    
+
     name: The show name to convert
-    
+
     Returns: a list of all the possible "normal" names
     """
 
@@ -110,7 +113,7 @@ def makeSceneShowSearchStrings(show):
     showNames = allPossibleShowNames(show)
 
     # scenify the names
-    return map(sanitizeSceneName, showNames)
+    return map(helpers.sanitizeSceneName, showNames)
 
 
 def makeSceneSeasonSearchString (show, segment, extraSearchType=None):
@@ -205,7 +208,7 @@ def isGoodResult(name, show, log=True):
     """
 
     all_show_names = allPossibleShowNames(show)
-    showNames = map(sanitizeSceneName, all_show_names) + all_show_names
+    showNames = map(helpers.sanitizeSceneName, all_show_names) + all_show_names
 
     for curName in set(showNames):
         escaped_name = re.sub('\\\\[\\s.-]', '\W+', re.escape(curName))
@@ -229,14 +232,14 @@ def allPossibleShowNames(show):
     """
     Figures out every possible variation of the name for a particular show. Includes TVDB name, TVRage name,
     country codes on the end, eg. "Show Name (AU)", and any scene exception names.
-    
+
     show: a TVShow object that we should get the names of
-    
+
     Returns: a list of all the possible show names
     """
 
     showNames = [show.name]
-    showNames += [name for name in get_scene_exceptions(show.tvdbid)]
+    showNames += [name for name in scene_exceptions.get_scene_exceptions(show.tvdbid)]
 
     # if we have a tvrage name then use it
     if show.tvrname != "" and show.tvrname != None:
@@ -263,3 +266,24 @@ def allPossibleShowNames(show):
 
     return showNames
 
+def determineReleaseName(dir_name=None, nzb_name=None):
+    """Determine a release name from an nzb and/or folder name"""
+    if nzb_name is not None:
+        logger.log(u"Using nzb_name for release name.")
+        return nzb_name.rpartition('.')[0]
+    if dir_name:
+        file_types = ["*.nzb", "*.nfo"]
+        for search in file_types:
+            search_path = ek.ek(os.path.join, dir_name, search)
+            results = ek.ek(glob, search_path)
+            if len(results) == 1:
+                found_file = ek.ek(os.path.basename, results[0])
+                found_file = found_file.rpartition('.')[0]
+                if filterBadReleases(found_file):
+                    logger.log(u"Release name (" + found_file + ") found from file (" + results[0] + ")")
+                    return found_file.rpartition('.')[0]
+    folder = ek.ek(os.path.basename, dir_name)
+    if filterBadReleases(folder):
+        logger.log(u"Folder name (" + folder + ") appears to be a valid release name. Using it.")
+        return folder
+    return None

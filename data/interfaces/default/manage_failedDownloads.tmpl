@@ -19,7 +19,7 @@
     \$("#failedTable:has(tbody tr)").tablesorter({
         widgets: ['zebra', 'stickyHeaders', 'filter'],
         sortList: [[0,0]],
-        headers: { 1: { sorter: false, filter: false } }
+        headers: { 3: { sorter: false, filter: false } }
     });
     \$('#limit').change(function(){
         url = '$sbRoot/manage/failedDownloads/?limit='+\$(this).val()
@@ -41,15 +41,17 @@
 
 <div class="add-failed-dl">
   <label for="failedRelease">Add Failed Release</label>
-  <input type="text" id="failedRelease" class="input-block-level" placeholder="Fringe.S05E09.Hofmann.German.Dubbed.REPACK.HDTV.XviD-ITG"/>
-  <span class="help-block">Please use the Original Release Name</span>
+  <input type="text" id="failedRelease" class="input-block-level" placeholder="Game_of_Thrones_S03E09_720p_HDTV_x264_EVOLVE" />
+  <span class="help-block">Please use the original release name</span>
   <input type="button" class="btn btn-primaty pull-right" value="Add Release" id="addFailedRelease" style="margin: 10px 0 20px 0" />
 </div>
 
 <table id="failedTable" class="tablesorter" cellspacing="1" border="0" cellpadding="0">
   <thead>
     <tr>
-      <th class="nowrap">Release</th>
+      <th class="nowrap" width="75%">Release</th>
+      <th width="10%">Size</th>
+      <th width="14%">Provider</th>
       <th width="1%">Remove<br />
         <input type="checkbox" class="bulkCheck" id="removeCheck" />
       </th>
@@ -57,7 +59,7 @@
   </thead>
   <tfoot>
     <tr>
-      <td rowspan="1" colspan="2" class="align-right"><input type="button" class="btn btn-primary" value="Submit" id="submitMassRemove"></td>
+      <td rowspan="1" colspan="4" class="align-right"><input type="button" class="btn btn-primary" value="Submit" id="submitMassRemove"></td>
     </tr>
   </tfoot>
   <tbody>
@@ -65,6 +67,8 @@
 #set $curRemove  = "<input type=\"checkbox\" class=\"removeCheck\" id=\"remove-"+$hItem["release"]+"\" />"
   <tr>
     <td class="nowrap">$hItem["release"]</td>
+    <td>$hItem["size"]</td>
+    <td>$hItem["provider"]</td>
     <td align="center">$curRemove</td>
   </tr>
 #end for
