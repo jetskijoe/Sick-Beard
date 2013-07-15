@@ -182,6 +182,9 @@ def searchForNeededEpisodes():
 
             bestResult = pickBestResult(curFoundResults[curEp])
 
+            if not bestResult:
+                logger.log(u"All found results for "+curEp.prettyName()+" were rejected.", logger.DEBUG)
+                continue
             # if it's already in the list (from another provider) and the newly found quality is no better then skip it
             if curEp in foundResults and bestResult.quality <= foundResults[curEp].quality:
                 continue
@@ -445,6 +448,9 @@ def findSeason(show, season):
         for multiResult in foundResults[MULTI_EP_RESULT]:
 
             logger.log(u"Seeing if we want to bother with multi-episode result "+multiResult.name, logger.DEBUG)
+            if failed_history.hasFailed(multiResult.name, multiResult.size):
+                logger.log(multiResult.name + u" has previously failed, rejecting this multi-ep result")
+                continue
 
             # see how many of the eps that this result covers aren't covered by single results
             neededEps = []

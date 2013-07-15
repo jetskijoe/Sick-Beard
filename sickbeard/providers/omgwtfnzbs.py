@@ -57,6 +57,8 @@ class OmgwtfnzbsProvider(generic.NZBProvider):
     def _get_title_and_url(self, item):
         return (item['release'], item['getnzb'])
 
+    def _get_size(self, item):
+        return item['sizebytes']
     def _doSearch(self, search, show=None, retention=0):
         params = {'user': sickbeard.OMGWTFNZBS_UID,
                   'api': sickbeard.OMGWTFNZBS_KEY,

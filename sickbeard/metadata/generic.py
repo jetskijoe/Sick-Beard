@@ -551,7 +551,7 @@ class GenericMetadata():
 
         return image_data
     
-    def _season_thumb_dict(self, show_obj):
+    def _season_thumb_dict(self, show_obj, season):
         """
         Should return a dict like:
         
@@ -579,7 +579,6 @@ class GenericMetadata():
             return result
     
         #  How many seasons?
-        num_seasons = len(tvdb_show_obj)
     
         # if we have no season banners then just finish
         if 'season' not in tvdb_show_obj['_banners'] or 'season' not in tvdb_show_obj['_banners']['season']:
@@ -591,17 +590,14 @@ class GenericMetadata():
         # Returns a nested dictionary of season art with the season
         # number as primary key. It's really overkill but gives the option
         # to present to user via ui to pick down the road.
-        for cur_season in range(num_seasons):
 
-            result[cur_season] = {}
+        result[season] = {}
             
             # find the correct season in the tvdb object and just copy the dict into our result dict
-            for seasonArtID in seasonsArtObj.keys():
-                if int(seasonsArtObj[seasonArtID]['season']) == cur_season and seasonsArtObj[seasonArtID]['language'] == 'en':
-                    result[cur_season][seasonArtID] = seasonsArtObj[seasonArtID]['_bannerpath']
+        for seasonArtID in seasonsArtObj.keys():
+            if int(seasonsArtObj[seasonArtID]['season']) == season and seasonsArtObj[seasonArtID]['language'] == 'en':
+                result[season][seasonArtID] = seasonsArtObj[seasonArtID]['_bannerpath']
             
-            if len(result[cur_season]) == 0:
-                continue
 
         return result
 
