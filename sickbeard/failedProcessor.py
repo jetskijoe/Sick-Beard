@@ -25,7 +25,6 @@ from sickbeard import helpers
 from sickbeard import search_queue
 from sickbeard import failed_history
 from sickbeard import scene_exceptions
-from sickbeard import common
 
 from sickbeard.name_parser.parser import NameParser, InvalidNameException
 
@@ -80,10 +79,11 @@ class FailedProcessor(object):
             self._log(u"Could not create show object. Either the show hasn't been added to SickBeard, or it's still loading (if SB was restarted recently)", logger.WARNING)
             raise exceptions.FailedProcessingFailed()
 
+        self._log(u"Reverting episodes...")
+        self.log += failed_history.revertEpisodes(self._show_obj, parsed.season_number, parsed.episode_numbers)
         self._log(u"Marking release as bad: " + releaseName)
         self.log += failed_history.logFailed(releaseName)
 
-        self._revert_episode_statuses(parsed.season_number, parsed.episode_numbers)
 
         cur_backlog_queue_item = search_queue.BacklogQueueItem(self._show_obj, parsed.season_number)
         sickbeard.searchQueueScheduler.action.add_item(cur_backlog_queue_item)
@@ -113,38 +113,3 @@ class FailedProcessor(object):
                 return(found_info[0])
 
         return None
-
-    def _revert_episode_statuses(self, season, episodes):
-        """
-        Revert episodes from Snatched to their former state
-
-        season: int
-        episodes: (int, ...)
-        """
-
-        if len(episodes) > 0:
-            for cur_episode in episodes:
-                ep_obj = None
-                try:
-                    ep_obj = self._show_obj.getEpisode(season, cur_episode)
-                except exceptions.EpisodeNotFoundException, e:
-                    self._log(u"Unable to create episode, please set its status manually: " + exceptions.ex(e), logger.WARNING)
-
-                with ep_obj.lock:
-                    # FIXME: Revert, don't just set wanted
-                    self._log(u"Setting episode to WANTED: (" + str(season) + ", " + str(cur_episode) + ") " + ep_obj.name)
-                    ep_obj.status = common.WANTED
-                    ep_obj.saveToDB()
-
-                # Could we hit a race condition where newly-wanted eps aren't included in the backlog search?
-                #queue_item = search_queue.ManualSearchQueueItem(curEp)
-                #sickbeard.searchQueueScheduler.action.add_item(queue_item)
-        else:
-            # Whole season
-            self._log(u"Setting season to wanted: " + str(season))
-            for cur_episode in self._show_obj.getAllEpisodes(season):
-                with cur_episode.lock:
-                    # FIXME: As above
-                    logger.log(u"Setting episode to WANTED: (" + str(season) + ", " + str(cur_episode.episode) + ") " + cur_episode.name, logger.DEBUG)
-                    cur_episode.status = common.WANTED
-                    cur_episode.saveToDB()

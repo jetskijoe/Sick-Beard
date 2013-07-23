@@ -585,6 +585,8 @@ class Manage:
 
         for release in toRemove:
             myDB.action('DELETE FROM failed WHERE release = ?', [release])
+        if toRemove or add:
+            raise cherrypy.HTTPRedirect('/manage/failedDownloads/')
 
         if limit == "0":
             sqlResults = myDB.select("SELECT * FROM failed")
@@ -1138,8 +1140,6 @@ class ConfigProviders:
                 sickbeard.BINREQ = curEnabled
             elif curProvider == 'womble_s_index':
                 sickbeard.WOMBLE = curEnabled
-            elif curProvider == 'nzbx':
-                sickbeard.NZBX = curEnabled
             elif curProvider == 'omgwtfnzbs':
                 sickbeard.OMGWTFNZBS = curEnabled
             elif curProvider == 'ezrss':

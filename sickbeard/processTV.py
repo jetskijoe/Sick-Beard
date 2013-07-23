@@ -24,7 +24,7 @@ import shutil
 
 import sickbeard 
 from sickbeard import postProcessor
-from sickbeard import db, helpers, exceptions, show_name_helpers
+from sickbeard import db, helpers, exceptions
 
 from sickbeard import encodingKludge as ek
 from sickbeard.exceptions import ex
@@ -32,87 +32,47 @@ from sickbeard.exceptions import ex
 from sickbeard import logger
 
 from sickbeard import failedProcessor
-from sickbeard import failed_history
 
 
 def logHelper (logMessage, logLevel=logger.MESSAGE):
     logger.log(logMessage, logLevel)
     return logMessage + u"\n"
 
-def processDir (dirName, nzbName=None, recurse=False, failed=False):
-    """
-    Scans through the files in dirName and processes whatever media files it finds
+def _processFailed(dirName, nzbName):
 
-    dirName: The folder name to look in
-    nzbName: The NZB name which resulted in this folder being downloaded
-    recurse: Boolean for whether we should descend into subfolders or not
-    failed: Boolean for whether or not the download failed
-    """
+    """Process a download that did not complete correctly"""
 
-    returnStr = ''
+    returnStr = u""
 
-    returnStr += logHelper(u"Processing folder "+dirName, logger.DEBUG)
+    try:
+        processor = failedProcessor.FailedProcessor(dirName, nzbName)
+        process_result = processor.process()
+        process_fail_message = ""
+    except exceptions.FailedProcessingFailed, e:
+        process_result = False
+        process_fail_message = ex(e)
 
-    # if they passed us a real dir then assume it's the one we want
-    if ek.ek(os.path.isdir, dirName):
-        dirName = ek.ek(os.path.realpath, dirName)
+    returnStr += processor.log
 
-    # if they've got a download dir configured then use it
-    elif sickbeard.TV_DOWNLOAD_DIR and ek.ek(os.path.isdir, sickbeard.TV_DOWNLOAD_DIR) \
-            and ek.ek(os.path.normpath, dirName) != ek.ek(os.path.normpath, sickbeard.TV_DOWNLOAD_DIR):
-        dirName = ek.ek(os.path.join, sickbeard.TV_DOWNLOAD_DIR, ek.ek(os.path.abspath, dirName).split(os.path.sep)[-1])
-        returnStr += logHelper(u"Trying to use folder "+dirName, logger.DEBUG)
 
-    # if we didn't find a real dir then quit
-    if not ek.ek(os.path.isdir, dirName):
-        returnStr += logHelper(u"Unable to figure out what folder to process. If your downloader and Sick Beard aren't on the same PC make sure you fill out your TV download dir in the config.", logger.DEBUG)
-        failed=True
-
-    if failed:
-            # If not given nzbName, we first try to get the release name from nzb/nfo
-        # If that fails, we try the folder
-                # NOTE: Multiple failed downloads will change the folder name. (e.g., appending #s)
-                # Should we handle that?
-        # Otherwise, we abort.
-
+    if sickbeard.DELETE_FAILED and process_result:
+        returnStr += logHelper(u"Deleting folder of failed download " + dirName, logger.DEBUG)
         try:
-            processor = failedProcessor.FailedProcessor(dirName, nzbName)
-            process_result = processor.process()
-            process_fail_message = ""
-        except exceptions.FailedProcessingFailed, e:
-            process_result = False
-            process_fail_message = ex(e)
+            shutil.rmtree(dirName)
+        except (OSError, IOError), e:
+            returnStr += logHelper(u"Warning: Unable to remove the failed folder " + dirName + ": " + ex(e), logger.WARNING)
 
-        returnStr += processor.log 
+    if process_result:
+        returnStr += logHelper(u"Processing succeeded: (" + str(nzbName) + ", " + dirName + ")")
+    else:
+        returnStr += logHelper(u"Processing failed: (" + str(nzbName) + ", " + dirName + "): " + process_fail_message, logger.WARNING)
+    return returnStr
 
 
-        if sickbeard.DELETE_FAILED and process_result:
-            returnStr += logHelper(u"Deleting folder of failed download " + dirName, logger.DEBUG)
-            try:
-                shutil.rmtree(dirName)
-            except (OSError, IOError), e:
-                returnStr += logHelper(u"Warning: Unable to remove the failed folder " + dirName + ": " + ex(e), logger.WARNING)
+def _processNormal(dirName, nzbName, recurse=False):
+    """Process a download that completed without issue"""
 
-        if process_result:
-            returnStr += logHelper(u"Processing succeeded: ("+str(nzbName) + ", " + dirName + ")")
-        else:
-            returnStr += logHelper(u"Processing failed: (" + str(nzbName)  + ", " + dirName + "): "+process_fail_message, logger.WARNING)
-        return returnStr
-
-    if ek.ek(os.path.basename, dirName).startswith('_UNDERSIZED_'):
-        returnStr += logHelper(u"The directory name indicates that it was previously rejected for being undersized, cancelling", logger.DEBUG)
-        return returnStr
-    elif ek.ek(os.path.basename, dirName).startswith('_UNPACK_'):
-        returnStr += logHelper(u"The directory name indicates that this release is in the process of being unpacked, skipping", logger.DEBUG)
-        return returnStr
-
-    # make sure the dir isn't inside a show dir
-    myDB = db.DBConnection()
-    sqlResults = myDB.select("SELECT * FROM tv_shows")
-    for sqlShow in sqlResults:
-        if dirName.lower().startswith(ek.ek(os.path.realpath, sqlShow["location"]).lower()+os.sep) or dirName.lower() == ek.ek(os.path.realpath, sqlShow["location"]).lower():
-            returnStr += logHelper(u"You're trying to post process an episode that's already been moved to its show dir", logger.ERROR)
-            return returnStr
+    returnStr = u""
 
     fileList = ek.ek(os.listdir, dirName)
 
@@ -123,7 +83,7 @@ def processDir (dirName, nzbName=None, recurse=False, failed=False):
     # recursively process all the folders
     for curFolder in folders:
         returnStr += logHelper(u"Recursively processing a folder: "+curFolder, logger.DEBUG)
-        returnStr += processDir(ek.ek(os.path.join, dirName, curFolder), recurse=True)
+        returnStr += _processNormal(ek.ek(os.path.join, dirName, curFolder), recurse=True)
 
     remainingFolders = filter(lambda x: ek.ek(os.path.isdir, ek.ek(os.path.join, dirName, x)), fileList)
 
@@ -147,11 +107,12 @@ def processDir (dirName, nzbName=None, recurse=False, failed=False):
         returnStr += processor.log 
 
         # as long as the postprocessing was successful delete the old folder unless the config wants us not to
-        if process_result:
-
+        if not process_result:
+            returnStr += logHelper(u"Processing failed for " + cur_video_file_path + ": " + process_fail_message, logger.WARNING)
+        else:
             if len(videoFiles) == 1 and not sickbeard.KEEP_PROCESSED_DIR and \
                 ek.ek(os.path.normpath, dirName) != ek.ek(os.path.normpath, sickbeard.TV_DOWNLOAD_DIR) and \
-                len(remainingFolders) == 0:
+                    len(remainingFolders) == 0:
 
                 returnStr += logHelper(u"Deleting folder " + dirName, logger.DEBUG)
 
@@ -161,8 +122,41 @@ def processDir (dirName, nzbName=None, recurse=False, failed=False):
                     returnStr += logHelper(u"Warning: unable to remove the folder " + dirName + ": " + ex(e), logger.WARNING)
 
             returnStr += logHelper(u"Processing succeeded for "+cur_video_file_path)
-            
-        else:
-            returnStr += logHelper(u"Processing failed for "+cur_video_file_path+": "+process_fail_message, logger.WARNING)
+    return returnStr
+def processDir(dirName, nzbName=None, recurse=False, failed=False):
+    """
+    Scans through the files in dirName and processes whatever media files it finds
+    dirName: The folder name to look in
+    nzbName: The NZB name which resulted in this folder being downloaded
+    recurse: Boolean for whether we should descend into subfolders or not
+    failed: Boolean for whether or not the download failed
+    """
+    returnStr = u""
+    returnStr += logHelper(u"Processing folder " + dirName, logger.DEBUG)
+    if ek.ek(os.path.isdir, dirName):
+        dirName = ek.ek(os.path.realpath, dirName)
+    elif sickbeard.TV_DOWNLOAD_DIR and ek.ek(os.path.isdir, sickbeard.TV_DOWNLOAD_DIR) \
+            and ek.ek(os.path.normpath, dirName) != ek.ek(os.path.normpath, sickbeard.TV_DOWNLOAD_DIR):
+        dirName = ek.ek(os.path.join, sickbeard.TV_DOWNLOAD_DIR, ek.ek(os.path.abspath, dirName).split(os.path.sep)[-1])
+        returnStr += logHelper(u"Trying to use folder " + dirName, logger.DEBUG)
+    if not ek.ek(os.path.isdir, dirName):
+        returnStr += logHelper(u"Unable to figure out what folder to process."
+                               "If your downloader and Sick Beard aren't on the same PC,"
+                               "make sure you fill out your TV download dir in the config.", logger.DEBUG)
+        return returnStr
+    basename = ek.ek(os.path.basename, dirName)
+    if basename.startswith("_UNDERSIZE_") or basename.startswith("_UNPACK_"):
+        returnStr += logHelper(u"The directory name indicates failure. Treating this download as failed.", logger.DEBUG)
+        failed = True
+    if failed:
+        returnStr += _processFailed(dirName, nzbName)
+    else:
+        myDB = db.DBConnection()
+        sqlResults = myDB.select("SELECT * FROM tv_shows")
+        for sqlShow in sqlResults:
+            if dirName.lower().startswith(ek.ek(os.path.realpath, sqlShow["location"]).lower() + os.sep) or dirName.lower() == ek.ek(os.path.realpath, sqlShow["location"]).lower():
+                returnStr += logHelper(u"You're trying to post process an episode that's already been moved to its show dir", logger.ERROR)
+                return returnStr
 
+        returnStr += _processNormal(dirName, nzbName)
     return returnStr

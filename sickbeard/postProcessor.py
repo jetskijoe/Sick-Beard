@@ -36,6 +36,7 @@ from sickbeard import logger
 from sickbeard import notifiers
 from sickbeard import show_name_helpers
 from sickbeard import scene_exceptions
+from sickbeard import failed_history
 
 from sickbeard import encodingKludge as ek
 from sickbeard.exceptions import ex
@@ -804,6 +805,11 @@ class PostProcessor(object):
 
                 cur_ep.saveToDB()
 
+        releaseName = show_name_helpers.determineReleaseName(self.folder_path, self.nzb_name)
+        if releaseName is not None:
+            failed_history.logSuccess(releaseName)
+        else:
+            self._log(u"Couldn't find release in snatch history", logger.WARNING)
         # find the destination folder
         try:
             proper_path = ep_obj.proper_path()

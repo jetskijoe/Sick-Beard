@@ -213,7 +213,11 @@ class GenericProvider:
         """Gets the size from the newznab:attr if available
         non-newznab providers should override this"""
 
-        attrs = item.getElementsByTagName('newznab:attr')
+        try:
+            attrs = item.getElementsByTagName('newznab:attr')
+        except:
+            logger.log(u"Size logging needs to be implemented for " + self.name + ". Please report this.")
+            return -1
         try:
             size = next(x.getAttribute('value') for x in attrs if x.getAttribute('name') == 'size')
             size = int(size)
@@ -222,7 +226,7 @@ class GenericProvider:
             logger.log(u"Provider: " + self.provider.getID(), logger.DEBUG)
             logger.log(u"Attrs: " + str(attrs), logger.DEBUG)
             #logger.log(u"Data: " + item.toprettyxml(), logger.DEBUG)
-            size = -1
+            return -1
 
         return size
 
