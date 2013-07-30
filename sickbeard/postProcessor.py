@@ -742,12 +742,12 @@ class PostProcessor(object):
             # if there's an existing file that we don't want to replace stop here
             if existing_file_status in (PostProcessor.EXISTS_LARGER, PostProcessor.EXISTS_SAME):
                 self._log(u"File exists and we are not going to replace it because it's not smaller, quitting post-processing", logger.DEBUG)
-                return False
+                #return False
             elif existing_file_status == PostProcessor.EXISTS_SMALLER:
                 self._log(u"File exists and is smaller than the new file so I'm going to replace it", logger.DEBUG)
             elif existing_file_status != PostProcessor.DOESNT_EXIST:
                 self._log(u"Unknown existing file status. This should never happen, please log this as a bug.", logger.ERROR)
-                return False
+               # return False
 
         # if the file is priority then we're going to replace it even if it exists
         else:

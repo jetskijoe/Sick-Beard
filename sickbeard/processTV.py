@@ -102,6 +102,8 @@ def _processNormal(dirName, nzbName=None, recurse=False):
             process_fail_message = ""
         except exceptions.PostProcessingFailed, e:
             process_result = False
+            failed = True
+            returnStr += _processFailed(cur_video_file_path, nzbName)
             process_fail_message = ex(e)
 
         returnStr += processor.log 
