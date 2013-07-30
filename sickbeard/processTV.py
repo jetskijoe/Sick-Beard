@@ -145,7 +145,9 @@ def processDir(dirName, nzbName=None, recurse=False, failed=False):
         returnStr += logHelper(u"Unable to figure out what folder to process."
                                "If your downloader and Sick Beard aren't on the same PC,"
                                "make sure you fill out your TV download dir in the config.", logger.DEBUG)
-        return returnStr
+        failed = True
+        if failed:
+            returnStr += _processFailed(dirName, nzbName)
     basename = ek.ek(os.path.basename, dirName)
     if basename.startswith("_UNDERSIZE_") or basename.startswith("_UNPACK_"):
         returnStr += logHelper(u"The directory name indicates failure. Treating this download as failed.", logger.DEBUG)
