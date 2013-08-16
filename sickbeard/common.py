@@ -130,7 +130,7 @@ class Quality:
             if curQual<<16 & quality:
                 bestQualities.append(curQual)
 
-        return (anyQualities, bestQualities)
+        return (sorted(anyQualities), sorted(bestQualities))
 
     @staticmethod
     def nameQuality(name):
@@ -138,7 +138,7 @@ class Quality:
         name = os.path.basename(name)
 
         # if we have our exact text then assume we put it there
-        for x in Quality.qualityStrings:
+        for x in sorted(Quality.qualityStrings, reverse=True):
             if x == Quality.UNKNOWN:
                 continue
 
