@@ -21,17 +21,11 @@ import generic
 import sickbeard
 
 from sickbeard import tvcache
-from sickbeard import helpers
 from sickbeard import classes
 from sickbeard import logger
-from sickbeard.exceptions import ex, AuthException
+from sickbeard import exceptions
 from sickbeard import show_name_helpers
 from datetime import datetime
-
-try:
-    import xml.etree.cElementTree as etree
-except ImportError:
-    import elementtree.ElementTree as etree
 
 try:
     import json
@@ -51,39 +45,8 @@ class OmgwtfnzbsProvider(generic.NZBProvider):
         return sickbeard.OMGWTFNZBS
 
     def _checkAuth(self):
-
-        if not sickbeard.OMGWTFNZBS_USERNAME  or not sickbeard.OMGWTFNZBS_APIKEY:
-            raise AuthException("Your authentication credentials for " + self.name + " are missing, check your config.")
-
-        return True
-
-    def _checkAuthFromData(self, parsed_data, is_XML=True):
-
-        if parsed_data is None:
-            return self._checkAuth()
-
-        if is_XML:
-            # provider doesn't return xml on error
-            return True
-
-        else:
-            parsedJSON = parsed_data
-
-            if 'notice' in parsedJSON:
-                description_text = parsedJSON.get('notice')
-
-                if 'information is incorrect' in parsedJSON.get('notice'):
-                    logger.log(u"Incorrect authentication credentials for " + self.name + " : " + str(description_text), logger.DEBUG)
-                    raise AuthException("Your authentication credentials for " + self.name + " are incorrect, check your config.")
-
-                elif '0 results matched your terms' in parsedJSON.get('notice'):
-                    return True
-
-                else:
-                    logger.log(u"Unknown error given from " + self.name + " : " + str(description_text), logger.DEBUG)
-                    return False
-
-            return True
+        if not sickbeard.OMGWTFNZBS_UID or not sickbeard.OMGWTFNZBS_KEY:
+            raise exceptions.AuthException("omgwtfnzbs authentication details are empty, check your config")
 
     def _get_season_search_strings(self, show, season):
         return [x for x in show_name_helpers.makeSceneSeasonSearchString(show, season)]
@@ -98,11 +61,8 @@ class OmgwtfnzbsProvider(generic.NZBProvider):
         return item['sizebytes']
 
     def _doSearch(self, search, show=None, retention=0):
-
-        self._checkAuth()
-
-        params = {'user': sickbeard.OMGWTFNZBS_USERNAME,
-                  'api': sickbeard.OMGWTFNZBS_APIKEY,
+        params = {'user': sickbeard.OMGWTFNZBS_UID,
+                  'api': sickbeard.OMGWTFNZBS_KEY,
                   'eng': 1,
                   'catid': '19,20',  # SD,HD
                   'retention': sickbeard.USENET_RETENTION,
@@ -111,34 +71,31 @@ class OmgwtfnzbsProvider(generic.NZBProvider):
         if retention or not params['retention']:
             params['retention'] = retention
 
-        search_url = 'https://api.omgwtfnzbs.org/json?' + urllib.urlencode(params)
-        logger.log(u"Search url: " + search_url, logger.DEBUG)
-
-        data = self.getURL(search_url)
-
+        url = 'https://api.omgwtfnzbs.org/json?' + urllib.urlencode(params)
+        logger.log(u"omgwtfnzbs search url: " + url, logger.DEBUG)
+        data = self.getURL(url)
         if not data:
-            logger.log(u"No data returned from " + search_url, logger.ERROR)
+            logger.log(u"omgwtfnzbs returned no json data", logger.DEBUG)
+            return[]
+        try:
+            items = json.loads(data)
+        except ValueError:
+            logger.log(u"Error trying to decode omgwtfnzbs json response", logger.ERROR)
             return []
 
-        parsedJSON = helpers.parse_json(data)
-
-        if parsedJSON is None:
-            logger.log(u"Error trying to load " + self.name + " JSON data", logger.ERROR)
-            return []
-
-        if self._checkAuthFromData(parsedJSON, is_XML=False):
-
-            results = []
-
-            for item in parsedJSON:
+        results = []
+        if 'notice' in items:
+            if 'api information is incorrect' in items.get('notice'):
+                raise exceptions.AuthException("omgwtfnzbs authentication details are incorrect")
+            else:
+                logger.log(u"omgwtfnzbs notice: " + items.get('notice'), logger.DEBUG)
+        else:
+            for item in items:
                 if 'release' in item and 'getnzb' in item:
                     results.append(item)
+        return results
 
-            return results
-
-        return []
-
-    def findPropers(self, search_date=None):
+    def findPropers(self, date=None):
         search_terms = ['.PROPER.', '.REPACK.']
         results = []
 
@@ -157,12 +114,13 @@ class OmgwtfnzbsCache(tvcache.TVCache):
         self.minTime = 20
 
     def _getRSSData(self):
-        params = {'user': sickbeard.OMGWTFNZBS_USERNAME,
-                  'api': sickbeard.OMGWTFNZBS_APIKEY,
+        params = {'user': sickbeard.OMGWTFNZBS_UID,
+                  'api': sickbeard.OMGWTFNZBS_KEY,
                   'eng': 1,
                   'catid': '19,20'}  # SD,HD
 
-    def _checkAuth(self, parsedXML):
-            return self.provider._checkAuthFromData(parsedXML)
+        url = 'http://rss.omgwtfnzbs.org/rss-download.php?' + urllib.urlencode(params)
+        logger.log(u"omgwtfnzbs cache update URL: " + url, logger.DEBUG)
+        return self.provider.getURL(url)
 
 provider = OmgwtfnzbsProvider()
