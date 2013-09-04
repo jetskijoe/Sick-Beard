@@ -88,7 +88,7 @@ def _processNormal(dirName, nzbName=None, recurse=False):
     remainingFolders = filter(lambda x: ek.ek(os.path.isdir, ek.ek(os.path.join, dirName, x)), fileList)
 
     # If nzbName is set and there's more than one videofile in the folder, files will be lost (overwritten).
-    if nzbName is not None and len(videoFiles) >= 2:
+    if nzbName != None and len(videoFiles) >= 2:
         nzbName = None
 
     # process any files in the dir

@@ -16,36 +16,43 @@
 # You should have received a copy of the GNU General Public License
 # along with Sick Beard.  If not, see <http://www.gnu.org/licenses/>.
 
-import StringIO
-import zlib
 import gzip
 import os
+import re
+import shutil
+import socket
 import stat
+import StringIO
+import sys
+import time
+import traceback
 import urllib
 import urllib2
-import re
-import socket
-import shutil
-import traceback
-import time
-import sys
+import zlib
 
 from httplib import BadStatusLine
 
+try:
+    import json
+except ImportError:
+    from lib import simplejson as json
 from xml.dom.minidom import Node
 
+try:
+    import xml.etree.cElementTree as etree
+except ImportError:
+    import elementtree.ElementTree as etree
 import sickbeard
+from sickbeard.exceptions import MultipleShowObjectsException, ex
 from sickbeard import logger, classes
+from sickbeard.common import USER_AGENT, mediaExtensions, XML_NSMAP
 from sickbeard import db
 from sickbeard import encodingKludge as ek
 from sickbeard import notifiers
 
-from sickbeard.exceptions import MultipleShowObjectsException, ex
-from sickbeard.common import USER_AGENT, mediaExtensions, XML_NSMAP
 
 from lib.tvdb_api import tvdb_api, tvdb_exceptions
 
-import xml.etree.cElementTree as etree
 
 urllib._urlopener = classes.SickBeardURLopener()
 
@@ -71,7 +78,7 @@ def indentXML(elem, level=0):
         if level and (not elem.tail or not elem.tail.strip()):
             elem.tail = i
 
-def replaceExtension(file, newExt):
+def replaceExtension(filename, newExt):
     '''
     >>> replaceExtension('foo.avi', 'mkv')
     'foo.mkv'
@@ -84,22 +91,22 @@ def replaceExtension(file, newExt):
     >>> replaceExtension('foo.bar', '')
     'foo.'
     '''
-    sepFile = file.rpartition(".")
+    sepFile = filename.rpartition(".")
     if sepFile[0] == "":
-        return file
+        return filename
     else:
         return sepFile[0] + "." + newExt
 
-def isMediaFile (file):
+def isMediaFile(filename):
     # ignore samples
-    if re.search('(^|[\W_])sample\d*[\W_]', file):
+    if re.search('(^|[\W_])sample\d*[\W_]', filename.lower()):
         return False
 
     # ignore MAC OS's retarded "resource fork" files
-    if file.startswith('._'):
+    if filename.startswith('._'):
         return False
 
-    sepFile = file.rpartition(".")
+    sepFile = filename.rpartition(".")
     if sepFile[2].lower() in mediaExtensions:
         return True
     else:
@@ -198,12 +205,12 @@ def findCertainTVRageShow (showList, tvrid):
     else:
         return results[0]
 
-def makeDir (dir):
-    if not ek.ek(os.path.isdir, dir):
+def makeDir(path):
+    if not ek.ek(os.path.isdir, path):
         try:
-            ek.ek(os.makedirs, dir)
+            ek.ek(os.makedirs, path)
             # do the library update for synoindex
-            notifiers.synoindex_notifier.addFolder(dir)
+            notifiers.synoindex_notifier.addFolder(path)
         except OSError:
             return False
     return True
@@ -399,14 +406,14 @@ def sizeof_fmt(num):
             return "%3.1f %s" % (num, x)
         num /= 1024.0
 
-def listMediaFiles(dir):
+def listMediaFiles(path):
 
-    if not dir or not ek.ek(os.path.isdir, dir):
+    if not path or not ek.ek(os.path.isdir, path):
         return []
 
     files = []
-    for curFile in ek.ek(os.listdir, dir):
-        fullCurFile = ek.ek(os.path.join, dir, curFile)
+    for curFile in ek.ek(os.listdir, path):
+        fullCurFile = ek.ek(os.path.join, path, curFile)
 
         # if it's a dir do it recursively
         if ek.ek(os.path.isdir, fullCurFile) and not curFile.startswith('.') and not curFile == 'Extras':
@@ -457,7 +464,7 @@ def make_dirs(path):
 
             # look through each subfolder and make sure they all exist
             for cur_folder in folder_list:
-                sofar += cur_folder + os.path.sep;
+                sofar += cur_folder + os.path.sep
 
                 # if it exists then just keep walking down the line
                 if ek.ek(os.path.isdir, sofar):
@@ -675,11 +682,51 @@ if __name__ == '__main__':
     import doctest
     doctest.testmod()
 
-def get_xml_text(node):
+def parse_json(data):
+    """
+    Parse json data into a python object
+    data: data string containing json
+    Returns: parsed data as json or None
+    """
+    try:
+        parsedJSON = json.loads(data)
+    except ValueError:
+        logger.log(u"Error trying to decode json data:" + data, logger.ERROR)
+        return None
+    return parsedJSON
+def parse_xml(data, del_xmlns=False):
+    """
+    Parse data into an xml elementtree.ElementTree
+    data: data string containing xml
+    del_xmlns: if True, removes xmlns namesspace from data before parsing
+    Returns: parsed data as elementtree or None
+    """
+    if del_xmlns:
+        data = re.sub(' xmlns="[^"]+"', '', data)
+    try:
+        parsedXML = etree.fromstring(data)
+    except Exception, e:
+        logger.log(u"Error trying to parse xml data: " + data + " to Elementtree, Error: " + ex(e), logger.DEBUG)
+        parsedXML = None
+    return parsedXML
+def get_xml_text(element, mini_dom=False):
+    """
+    Get all text inside a xml element
+    element: A xml element either created with elementtree.ElementTree or xml.dom.minidom
+    mini_dom: Default False use elementtree, True use minidom
+    Returns: text
+    """
     text = ""
-    for child_node in node.childNodes:
-        if child_node.nodeType in (Node.CDATA_SECTION_NODE, Node.TEXT_NODE, Node.ELEMENT_NODE):
-            text += child_node.data
+    if mini_dom:
+        node = element
+        for child in node.childNodes:
+            if child.nodeType in (Node.CDATA_SECTION_NODE, Node.TEXT_NODE):
+                text += child.data
+    else:
+        if element is not None:
+            for child in [element] + element.findall('.//*'):
+                if child.text:
+                    text += child.text
     return text.strip()
 
 def backupVersionedFile(oldFile, version):

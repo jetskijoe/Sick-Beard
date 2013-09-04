@@ -3,7 +3,7 @@
 //** Updated Nov 10th, 09'- Fixed anchor jumping issue in IE7
 
 var bookmarkscroll={
-	setting: {duration:1000, yoffset:0}, //{duration_of_scroll_milliseconds, offset_from_target_element_to_rest}
+	setting: {duration:1000, yoffset:-50}, //{duration_of_scroll_milliseconds, offset_from_target_element_to_rest}
 	topkeyword: '#top', //keyword used in your anchors and scrollTo() to cause script to scroll page to very top
 
 	scrollTo:function(dest, options, hash){
@@ -11,8 +11,8 @@ var bookmarkscroll={
 		var $dest=(typeof dest=="string" && dest.length>0)? (dest==this.topkeyword? 0 : $('#'+dest)) : (dest)? $(dest) : [] //get element based on id, topkeyword, or dom ref
 		if ($dest===0 || $dest.length==1 && (!options.autorun || options.autorun && Math.abs($dest.offset().top+(options.yoffset||this.setting.yoffset)-$(window).scrollTop())>5)){
 			this.$body.animate({scrollTop: ($dest===0)? 0 : $dest.offset().top+(options.yoffset||this.setting.yoffset)}, (options.duration||this.setting.duration), function(){
-				if ($dest!==0 && hash)
-					location.hash=hash
+//**				if ($dest!==0 && hash)
+//**					location.hash=hash
 			})
 		}
 	},

@@ -88,7 +88,7 @@ class SearchResult:
         self.size = -1
 
     def __str__(self):
-        if self.provider is None:
+        if self.provider == None:
             return "Invalid provider, unable to print self"
 
         myString = self.provider.name + " @ " + self.url + "\n"
@@ -131,7 +131,7 @@ class ShowListUI:
     """
     This class is for tvdb-api. Instead of prompting with a UI to pick the
     desired result out of a list of shows it tries to be smart about it
-    based on what shows are in SB.
+    based on what shows are in SB. 
     """
     def __init__(self, config, log=None):
         self.config = config

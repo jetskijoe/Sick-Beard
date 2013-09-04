@@ -22,6 +22,8 @@ import operator
 import sickbeard
 
 from sickbeard import db
+from sickbeard import exceptions
+from sickbeard.exceptions import ex
 from sickbeard import helpers, logger, show_name_helpers
 from sickbeard import providers
 from sickbeard import search
@@ -71,10 +73,14 @@ class ProperFinder():
             if not curProvider.isActive():
                 continue
 
-            date = datetime.datetime.today() - datetime.timedelta(days=2)
+            search_date = datetime.datetime.today() - datetime.timedelta(days=2)
 
             logger.log(u"Searching for any new PROPER releases from "+curProvider.name)
-            curPropers = curProvider.findPropers(date)
+            try:
+                curPropers = curProvider.findPropers(search_date)
+            except exceptions.AuthException, e:
+                logger.log(u"Authentication error: " + ex(e), logger.ERROR)
+                continue
 
             # if they haven't been added by a different provider than add the proper to the list
             for x in curPropers:

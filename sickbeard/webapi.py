@@ -1608,6 +1608,23 @@ class CMD_SickBeardShutdown(ApiCall):
         return _responds(RESULT_SUCCESS, msg="SickBeard is shutting down...")
 
 
+class CMD_SickBeardAnalyzeName(ApiCall):
+    _help = {"desc": "takes a name and tries to figure out a show, season and episode from it.",
+            "requiredParameters": {"name": {"desc": "the name to lookup"}}
+            }
+    def __init__(self, args, kwargs):
+        self.name, args = self.check_params(args, kwargs, "name", None, True, "string", [])
+        ApiCall.__init__(self, args, kwargs)
+    def run(self):
+        processor = postProcessor.PostProcessor('', self.name)
+        try:
+            analyzed_name = processor._analyze_name(self.name, file=False)
+        except InvalidNameException, e:
+            logger.log(u"API :: SickBeardAnalyzeName :: NameParser failed with InvalidNameException: "+ repr(e), logger.DEBUG)
+            return _responds(RESULT_FAILURE, msg=ex(e))
+        return _responds(RESULT_SUCCESS, data={'tvdbid': analyzed_name[0],
+                                                'season':  analyzed_name[1],
+                                                'episodes': analyzed_name[2]})
 class CMD_Show(ApiCall):
     _help = {"desc": "display information for a given show",
              "requiredParameters": {"tvdbid": {"desc": "thetvdb.com unique id of a show"},
