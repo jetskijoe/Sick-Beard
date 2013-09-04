@@ -130,12 +130,12 @@ def snatchEpisode(result, endStatus=SNATCHED):
 
     # don't notify when we re-download an episode
     for curEpObj in result.episodes:
-        if curEpObj.status not in Quality.DOWNLOADED:
-            notifiers.notify_snatch(curEpObj.prettyName())
         with curEpObj.lock:
             curEpObj.status = Quality.compositeStatus(endStatus, result.quality)
             curEpObj.saveToDB()
 
+        if curEpObj.status not in Quality.DOWNLOADED:
+            notifiers.notify_snatch(curEpObj.prettyName())
 
     return True
 
