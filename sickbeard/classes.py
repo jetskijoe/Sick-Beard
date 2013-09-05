@@ -81,7 +81,7 @@ class SearchResult:
         # list of TVEpisode objects that this result is associated with
         self.episodes = episodes
         # quality of the release
-        self.quality = Quality.UNKNOWN
+        self.quality = -1
         # release name
         self.name = ""
         # size of the release. -1 = n/a
@@ -155,7 +155,7 @@ class Proper:
         self.url = url
         self.date = date
         self.provider = None
-        self.quality = Quality.UNKNOWN
+        self.quality = -1
 
         self.tvdbid = -1
         self.season = -1

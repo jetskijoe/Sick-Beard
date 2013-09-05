@@ -531,9 +531,7 @@ displayShow.tmpl + manage_backlogOverview.tmpl
 .wanted {
   background-color: #ffb0b0;
 }
-.snatched {
-  background-color: #ebc1ea;
-}
+
 /* =======================================================================
 manage_backlogOverview.tmpl
 ========================================================================== */
@@ -1081,7 +1079,7 @@ span.Any {
   /* black */
 }
 span.RawHD {
-  background: none repeat scroll 0 0 #994;
+  background: none repeat scroll 0 0 #999944;
   /* dark orange */
 }
 /* unused boolean tags */
@@ -1100,10 +1098,8 @@ Lib overrides -- global (except jui/bootstrap)
 /* pines notify related */
 div.ui-pnotify {
   width: auto !important;
-  max-width: 600px;
-  min-width: 400px;
-  top: 10px;
-  right: 15px;
+  max-width: 550px;
+  min-width: 340px;
 }
 /* qTip2 related */
 .ui-tooltip-sb .ui-tooltip-titlebar a {

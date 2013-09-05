@@ -217,9 +217,9 @@ class Manage:
         status_list = [int(whichStatus)]
         if status_list[0] == SNATCHED:
             status_list = Quality.SNATCHED + Quality.SNATCHED_PROPER
-
+        
         cur_show_results = myDB.select("SELECT season, episode, name FROM tv_episodes WHERE showid = ? AND season != 0 AND status IN ("+','.join(['?']*len(status_list))+")", [int(tvdb_id)] + status_list)
-
+        
         result = {}
         for cur_result in cur_show_results:
             cur_season = int(cur_result["season"])

@@ -160,7 +160,7 @@ def change_VERSION_NOTIFY(version_notify):
     sickbeard.VERSION_NOTIFY = version_notify
 
     if version_notify == False:
-        sickbeard.NEWEST_VERSION_STRING = None
+        sickbeard.NEWEST_VERSION_STRING = None;
         
     if oldSetting == False and version_notify == True:
         sickbeard.versionCheckScheduler.action.run() #@UndefinedVariable
@@ -255,19 +255,16 @@ class ConfigMigrator():
 
         # check the version of the config
         self.config_version = check_setting_int(config_obj, 'General', 'config_version', 0)
-        self.expected_config_version = sickbeard.CONFIG_VERSION
-        self.migration_names = {1: 'Custom naming',
-                                2: 'Sync backup number with version number',
-                                3: 'Rename omgwtfnzb variables'
-                                }
+
+        self.migration_names = {1: 'Custom naming'}
+
 
     def migrate_config(self):
         """
         Calls each successive migration until the config is the same version as SB expects
         """
         
-        sickbeard.CONFIG_VERSION = self.config_version
-        while self.config_version < self.expected_config_version:
+        while self.config_version < sickbeard.CONFIG_VERSION:
             next_version = self.config_version + 1
             
             if next_version in self.migration_names:
@@ -275,16 +272,13 @@ class ConfigMigrator():
             else:
                 migration_name = ''
             
-            helpers.backupVersionedFile(sickbeard.CONFIG_FILE, self.config_version)
+            helpers.backupVersionedFile(sickbeard.CONFIG_FILE, next_version)
             
             # do the migration, expect a method named _migrate_v<num>
             logger.log(u"Migrating config up to version "+str(next_version)+migration_name)
             getattr(self, '_migrate_v'+str(next_version))()
             self.config_version = next_version
 
-            sickbeard.CONFIG_VERSION = self.config_version
-            logger.log(u"Saving config file to disk")
-            sickbeard.save_config()
     def _migrate_v1(self):
         """
         Reads in the old naming settings from your config and generates a new config template from them.
@@ -391,12 +385,4 @@ class ConfigMigrator():
 
         return finalName
 
-    def _migrate_v2(self):
-        return
 
-    def _migrate_v3(self):
-        """
-        Reads in the old naming settings from your config and generates a new config template from them.
-        """
-        sickbeard.OMGWTFNZBS_USERNAME = check_setting_str(self.config_obj, 'omgwtfnzbs', 'omgwtfnzbs_uid', '')
-        sickbeard.OMGWTFNZBS_APIKEY = check_setting_str(self.config_obj, 'omgwtfnzbs', 'omgwtfnzbs_key', '')
