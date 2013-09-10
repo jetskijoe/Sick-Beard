@@ -72,22 +72,32 @@ def change_HTTPS_KEY(https_key):
 
     return True
 
-def change_LOG_DIR(log_dir):
+def change_LOG_DIR(log_dir, web_log):
 
-    if os.path.normpath(sickbeard.LOG_DIR) != os.path.normpath(log_dir):
-        if helpers.makeDir(log_dir):
-            sickbeard.LOG_DIR = os.path.normpath(log_dir)
+    log_dir_changed = False
+    abs_log_dir = os.path.normpath(os.path.join(sickbeard.DATA_DIR, log_dir))
+    if os.path.normpath(sickbeard.LOG_DIR) != abs_log_dir:
+        if helpers.makeDir(abs_log_dir):
+            sickbeard.ACTUAL_LOG_DIR = os.path.normpath(log_dir)
+            sickbeard.LOG_DIR = abs_log_dir
             logger.sb_log_instance.initLogging()
-            logger.log(u"Initialized new log file in " + log_dir)
-
-            cherry_log = os.path.join(sickbeard.LOG_DIR, "cherrypy.log")
-            cherrypy.config.update({'log.access_file': cherry_log})
-
-            logger.log(u"Changed cherry log file to " + cherry_log)
+            logger.log(u"Initialized new log file in " + sickbeard.LOG_DIR)
+            log_dir_changed = True
 
         else:
             return False
+    if sickbeard.WEB_LOG != web_log or log_dir_changed == True:
+        sickbeard.WEB_LOG = web_log
+        if sickbeard.WEB_LOG == 1:
+            cherry_log = os.path.join(sickbeard.LOG_DIR, "cherrypy.log")
 
+            logger.log(u"Change cherry log file to " + cherry_log)
+
+        else:
+            cherry_log = None
+            logger.log(u"Disable cherry logging")
+
+        cherrypy.config.update({'log.access_file': cherry_log})
     return True
 
 def change_NZB_DIR(nzb_dir):
@@ -160,7 +170,7 @@ def change_VERSION_NOTIFY(version_notify):
     sickbeard.VERSION_NOTIFY = version_notify
 
     if version_notify == False:
-        sickbeard.NEWEST_VERSION_STRING = None;
+        sickbeard.NEWEST_VERSION_STRING = None
         
     if oldSetting == False and version_notify == True:
         sickbeard.versionCheckScheduler.action.run() #@UndefinedVariable
@@ -255,16 +265,19 @@ class ConfigMigrator():
 
         # check the version of the config
         self.config_version = check_setting_int(config_obj, 'General', 'config_version', 0)
-
-        self.migration_names = {1: 'Custom naming'}
-
+        self.expected_config_version = sickbeard.CONFIG_VERSION
+        self.migration_names = {1: 'Custom naming',
+                                2: 'Sync backup number with version number',
+                                3: 'Rename omgwtfnzb variables'
+                                }
 
     def migrate_config(self):
         """
         Calls each successive migration until the config is the same version as SB expects
         """
         
-        while self.config_version < sickbeard.CONFIG_VERSION:
+        sickbeard.CONFIG_VERSION = self.config_version
+        while self.config_version < self.expected_config_version:
             next_version = self.config_version + 1
             
             if next_version in self.migration_names:
@@ -272,13 +285,16 @@ class ConfigMigrator():
             else:
                 migration_name = ''
             
-            helpers.backupVersionedFile(sickbeard.CONFIG_FILE, next_version)
+            helpers.backupVersionedFile(sickbeard.CONFIG_FILE, self.config_version)
             
             # do the migration, expect a method named _migrate_v<num>
             logger.log(u"Migrating config up to version "+str(next_version)+migration_name)
             getattr(self, '_migrate_v'+str(next_version))()
             self.config_version = next_version
 
+            sickbeard.CONFIG_VERSION = self.config_version
+            logger.log(u"Saving config file to disk")
+            sickbeard.save_config()
     def _migrate_v1(self):
         """
         Reads in the old naming settings from your config and generates a new config template from them.
@@ -385,4 +401,12 @@ class ConfigMigrator():
 
         return finalName
 
+    def _migrate_v2(self):
+        return
 
+    def _migrate_v3(self):
+        """
+        Reads in the old naming settings from your config and generates a new config template from them.
+        """
+        sickbeard.OMGWTFNZBS_USERNAME = check_setting_str(self.config_obj, 'omgwtfnzbs', 'omgwtfnzbs_uid', '')
+        sickbeard.OMGWTFNZBS_APIKEY = check_setting_str(self.config_obj, 'omgwtfnzbs', 'omgwtfnzbs_key', '')

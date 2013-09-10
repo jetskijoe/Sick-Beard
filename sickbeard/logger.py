@@ -51,6 +51,7 @@ class SBRotatingLogHandler(object):
         self.num_bytes = num_bytes
         
         self.log_file = log_file
+        self.log_file_path = log_file
         self.cur_handler = None
 
         self.writes_since_check = 0
@@ -59,49 +60,58 @@ class SBRotatingLogHandler(object):
 
     def initLogging(self, consoleLogging=True):
     
-        self.log_file = os.path.join(sickbeard.LOG_DIR, self.log_file)
+        old_handler = None
+        if self.cur_handler:
+            old_handler = self.cur_handler
+        else:
+            if consoleLogging:
+                console = logging.StreamHandler()
+                console.setLevel(logging.INFO)
+                console.setFormatter(logging.Formatter('%(asctime)s %(levelname)s::%(message)s', '%H:%M:%S'))
+                logging.getLogger('sickbeard').addHandler(console)
+        self.log_file_path = os.path.join(sickbeard.LOG_DIR, self.log_file)
     
         self.cur_handler = self._config_handler()
     
         logging.getLogger('sickbeard').addHandler(self.cur_handler)
     
         # define a Handler which writes INFO messages or higher to the sys.stderr
-        if consoleLogging:
-            console = logging.StreamHandler()
     
-            console.setLevel(logging.INFO)
     
             # set a format which is simpler for console use
-            console.setFormatter(logging.Formatter('%(asctime)s %(levelname)s::%(message)s', '%H:%M:%S'))
     
             # add the handler to the root logger
-            logging.getLogger('sickbeard').addHandler(console)
     
         logging.getLogger('sickbeard').setLevel(logging.DEBUG)
 
+        if old_handler:
+            old_handler.flush()
+            old_handler.close()
+            sb_logger = logging.getLogger('sickbeard')
+            sb_logger.removeHandler(old_handler)
     def _config_handler(self):
         """
         Configure a file handler to log at file_name and return it.
         """
     
-        file_handler = logging.FileHandler(self.log_file)
+        file_handler = logging.FileHandler(self.log_file_path, encoding='utf-8')
         file_handler.setLevel(logging.DEBUG)
-        file_handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)-8s %(message)s', '%b-%d %H:%M:%S'))
+        file_handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)-8s %(message)s', '%Y-%m-%d %H:%M:%S'))
         return file_handler
 
     def _log_file_name(self, i):
         """
         Returns a numbered log file name depending on i. If i==0 it just uses logName, if not it appends
         it to the extension (blah.log.3 for i == 3)
-        
+
         i: Log number to ues
         """
-        return self.log_file + ('.' + str(i) if i else '')
+        return self.log_file_path + ('.' + str(i) if i else '')
     
     def _num_logs(self):
         """
         Scans the log folder and figures out how many log files there are already on disk
-        
+
         Returns: The number of the last used file (eg. mylog.log.3 would return 3). If there are no logs it returns -1
         """
         cur_log = 0
@@ -143,7 +153,7 @@ class SBRotatingLogHandler(object):
     
             # check the size and see if we need to rotate
             if self.writes_since_check >= 10:
-                if os.path.isfile(self.log_file) and os.path.getsize(self.log_file) >= LOG_SIZE:
+                if os.path.isfile(self.log_file_path) and os.path.getsize(self.log_file_path) >= LOG_SIZE:
                     self._rotate_logs()
                 self.writes_since_check = 0
             else:

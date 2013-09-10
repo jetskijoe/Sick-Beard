@@ -205,12 +205,12 @@ def findCertainTVRageShow (showList, tvrid):
     else:
         return results[0]
 
-def makeDir (dir):
-    if not ek.ek(os.path.isdir, dir):
+def makeDir(path):
+    if not ek.ek(os.path.isdir, path):
         try:
-            ek.ek(os.makedirs, dir)
+            ek.ek(os.makedirs, path)
             # do the library update for synoindex
-            notifiers.synoindex_notifier.addFolder(dir)
+            notifiers.synoindex_notifier.addFolder(path)
         except OSError:
             return False
     return True
@@ -406,14 +406,14 @@ def sizeof_fmt(num):
             return "%3.1f %s" % (num, x)
         num /= 1024.0
 
-def listMediaFiles(dir):
+def listMediaFiles(path):
 
-    if not dir or not ek.ek(os.path.isdir, dir):
+    if not path or not ek.ek(os.path.isdir, path):
         return []
 
     files = []
-    for curFile in ek.ek(os.listdir, dir):
-        fullCurFile = ek.ek(os.path.join, dir, curFile)
+    for curFile in ek.ek(os.listdir, path):
+        fullCurFile = ek.ek(os.path.join, path, curFile)
 
         # if it's a dir do it recursively
         if ek.ek(os.path.isdir, fullCurFile) and not curFile.startswith('.') and not curFile == 'Extras':
@@ -464,7 +464,7 @@ def make_dirs(path):
 
             # look through each subfolder and make sure they all exist
             for cur_folder in folder_list:
-                sofar += cur_folder + os.path.sep;
+                sofar += cur_folder + os.path.sep
 
                 # if it exists then just keep walking down the line
                 if ek.ek(os.path.isdir, sofar):
@@ -483,17 +483,21 @@ def make_dirs(path):
 
     return True
 
-def rename_ep_file(cur_path, new_path):
+def rename_ep_file(cur_path, new_path, old_path_length=0):
     """
     Creates all folders needed to move a file to its new location, renames it, then cleans up any folders
     left that are now empty.
 
     cur_path: The absolute path to the file you want to move/rename
     new_path: The absolute path to the destination for the file WITHOUT THE EXTENSION
+    old_path_length: The length of media file path (old name) WITHOUT THE EXTENSION
     """
 
     new_dest_dir, new_dest_name = os.path.split(new_path) #@UnusedVariable
-    cur_file_name, cur_file_ext = os.path.splitext(cur_path) #@UnusedVariable
+    if old_path_length == 0 or old_path_length > len(cur_path):
+        cur_file_name, cur_file_ext = os.path.splitext(cur_path)  # @UnusedVariable
+    else:
+        cur_file_ext = cur_path[old_path_length:]
 
     # put the extension on the incoming file
     new_path += cur_file_ext
