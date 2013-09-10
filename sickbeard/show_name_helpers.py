@@ -16,13 +16,16 @@
 # You should have received a copy of the GNU General Public License
 # along with Sick Beard.  If not, see <http://www.gnu.org/licenses/>.
 
+import os
+from glob import glob
 import sickbeard
 
 from sickbeard.common import countryList
-from sickbeard.helpers import sanitizeSceneName
-from sickbeard.scene_exceptions import get_scene_exceptions
+from sickbeard import scene_exceptions
+from sickbeard import helpers
 from sickbeard import logger
 from sickbeard import db
+from sickbeard import encodingKludge as ek
 
 import re
 import datetime
@@ -110,7 +113,7 @@ def makeSceneShowSearchStrings(show):
     showNames = allPossibleShowNames(show)
 
     # scenify the names
-    return map(sanitizeSceneName, showNames)
+    return map(helpers.sanitizeSceneName, showNames)
 
 
 def makeSceneSeasonSearchString (show, segment, extraSearchType=None):
@@ -205,7 +208,7 @@ def isGoodResult(name, show, log=True):
     """
 
     all_show_names = allPossibleShowNames(show)
-    showNames = map(sanitizeSceneName, all_show_names) + all_show_names
+    showNames = map(helpers.sanitizeSceneName, all_show_names) + all_show_names
 
     for curName in set(showNames):
         escaped_name = re.sub('\\\\[\\s.-]', '\W+', re.escape(curName))
@@ -236,7 +239,7 @@ def allPossibleShowNames(show):
     """
 
     showNames = [show.name]
-    showNames += [name for name in get_scene_exceptions(show.tvdbid)]
+    showNames += [name for name in scene_exceptions.get_scene_exceptions(show.tvdbid)]
 
     # if we have a tvrage name then use it
     if show.tvrname != "" and show.tvrname != None:

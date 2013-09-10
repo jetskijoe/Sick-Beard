@@ -103,7 +103,7 @@ class FailedProcessor(object):
         logger.log(u"show_names: " + str(show_names), logger.DEBUG)
 
         for show_name in show_names:
-            exception = get_scene_exception_by_name(show_name)
+            exception = scene_exceptions.get_scene_exception_by_name(show_name)
             if exception is not None:
                 return exception
 

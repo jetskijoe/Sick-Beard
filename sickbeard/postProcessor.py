@@ -170,6 +170,8 @@ class PostProcessor(object):
             if associated_file_path == file_path:
                 continue
             # only list it if the only non-shared part is the extension
+            if '.' in associated_file_path[len(base_name):]:
+                continue
 
             file_path_list.append(associated_file_path)
 
