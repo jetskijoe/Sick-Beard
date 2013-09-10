@@ -103,13 +103,13 @@ class GenericProvider:
         if not headers:
             headers = []
 
-        result = helpers.getURL(url, headers)
+        data = helpers.getURL(url, headers)
 
-        if result is None:
+        if not data:
             logger.log(u"Error loading " + self.name + " URL: " + url, logger.ERROR)
             return None
 
-        return result
+        return data
 
     def downloadResult(self, result):
         """
@@ -120,7 +120,7 @@ class GenericProvider:
 
         data = self.getURL(result.url)
 
-        if data is None:
+        if not data:
             return False
 
         # use the appropriate watch folder
@@ -134,21 +134,21 @@ class GenericProvider:
             return False
 
         # use the result name as the filename
-        fileName = ek.ek(os.path.join, saveDir, helpers.sanitizeFileName(result.name) + '.' + self.providerType)
+        file_name = ek.ek(os.path.join, saveDir, helpers.sanitizeFileName(result.name) + '.' + self.providerType)
 
-        logger.log(u"Saving to " + fileName, logger.DEBUG)
+        logger.log(u"Saving to " + file_name, logger.DEBUG)
 
         try:
-            fileOut = open(fileName, writeMode)
+            fileOut = open(file_name, writeMode)
             fileOut.write(data)
             fileOut.close()
-            helpers.chmodAsParent(fileName)
+            helpers.chmodAsParent(file_name)
         except IOError, e:
-            logger.log("Unable to save the file: " + ex(e), logger.ERROR)
+            logger.log(u"Unable to save the file: " + ex(e), logger.ERROR)
             return False
 
         # as long as it's a valid download then consider it a successful snatch
-        return self._verify_download(fileName)
+        return self._verify_download(file_name)
 
     def _verify_download(self, file_name=None):
         """
@@ -170,15 +170,23 @@ class GenericProvider:
 
         return True
 
+    def searchRSS(self):
+
+        self._checkAuth()
+        self.cache.updateCache()
+
+        return self.cache.findNeededEpisodes()
+
     def getQuality(self, item):
         """
         Figures out the quality of the given RSS item node
 
-        item: An xml.dom.minidom.Node representing the <item> tag of the RSS feed
+        item: An elementtree.ElementTree element representing the <item> tag of the RSS feed
 
         Returns a Quality value obtained from the node's data
+
         """
-        (title, url) = self._get_title_and_url(item)
+        (title, url) = self._get_title_and_url(item)  # @UnusedVariable
         quality = Quality.nameQuality(title)
         return quality
 
@@ -195,49 +203,21 @@ class GenericProvider:
         """
         Retrieves the title and URL data from the item XML node
 
-        item: An xml.dom.minidom.Node representing the <item> tag of the RSS feed
+        item: An elementtree.ElementTree element representing the <item> tag of the RSS feed
 
         Returns: A tuple containing two strings representing title and URL respectively
         """
-        title = helpers.get_xml_text(item.getElementsByTagName('title')[0])
-        try:
-            url = helpers.get_xml_text(item.getElementsByTagName('link')[0])
-            if url:
-                url = url.replace('&amp;', '&')
-        except IndexError:
-            url = None
+        title = helpers.get_xml_text(item.find('title'))
+        if title:
+            title = title.replace(' ', '.')
+
+        url = helpers.get_xml_text(item.find('link'))
+        if url:
+            url = url.replace('&amp;', '&')
 
         return (title, url)
 
-    def _get_size(self, item):
-        """Gets the size from the newznab:attr if available
-        non-newznab providers should override this"""
-
-        try:
-            attrs = item.getElementsByTagName('newznab:attr')
-        except:
-            logger.log(u"Size logging needs to be implemented for " + self.name + ". Please report this.")
-            return -1
-
-        try:
-            size = next(x.getAttribute('value') for x in attrs if x.getAttribute('name') == 'size')
-            size = int(size)
-        except StopIteration:
-            logger.log(u"RSS did not contain size", logger.DEBUG)
-            logger.log(u"Provider: " + self.provider.getID(), logger.DEBUG)
-            logger.log(u"Attrs: " + str(attrs), logger.DEBUG)
-            #logger.log(u"Data: " + item.toprettyxml(), logger.DEBUG)
-            return -1
-
-        return size
-
-    def searchRSS(self):
-        self.cache.updateCache()
-        return self.cache.findNeededEpisodes()
-
     def findEpisode(self, episode, manualSearch=False):
-
-        self._checkAuth()
 
         logger.log(u"Searching " + self.name + " for " + episode.prettyName())
 
@@ -259,7 +239,6 @@ class GenericProvider:
         for item in itemList:
 
             (title, url) = self._get_title_and_url(item)
-            size = self._get_size(item)
 
             # parse the file name
             try:
@@ -271,10 +250,12 @@ class GenericProvider:
 
             if episode.show.air_by_date:
                 if parse_result.air_date != episode.airdate:
-                    logger.log("Episode " + title + " didn't air on " + str(episode.airdate) + ", skipping it", logger.DEBUG)
+
+                    logger.log(u"Episode " + title + " didn't air on " + str(episode.airdate) + ", skipping it", logger.DEBUG)
                     continue
+
             elif parse_result.season_number != episode.season or episode.episode not in parse_result.episode_numbers:
-                logger.log("Episode " + title + " isn't " + str(episode.season) + "x" + str(episode.episode) + ", skipping it", logger.DEBUG)
+                logger.log(u"Episode " + title + " isn't " + str(episode.season) + "x" + str(episode.episode) + ", skipping it", logger.DEBUG)
                 continue
 
             quality = self.getQuality(item)
@@ -283,13 +264,12 @@ class GenericProvider:
                 logger.log(u"Ignoring result " + title + " because we don't want an episode that is " + Quality.qualityStrings[quality], logger.DEBUG)
                 continue
 
-            logger.log(u"Found result " + title + " at " + url + " size " + str(size), logger.DEBUG)
+            logger.log(u"Found result " + title + " at " + url, logger.DEBUG)
 
             result = self.getResult([episode])
             result.url = url
             result.name = title
             result.quality = quality
-            result.size = size
 
             results.append(result)
 
@@ -300,13 +280,12 @@ class GenericProvider:
         itemList = []
         results = {}
 
-        for curString in self._get_season_search_strings(show, season):
-            itemList += self._doSearch(curString)
+        for cur_string in self._get_season_search_strings(show, season):
+            itemList += self._doSearch(cur_string)
 
         for item in itemList:
 
             (title, url) = self._get_title_and_url(item)
-            size = self._get_size(item)
 
             quality = self.getQuality(item)
 
@@ -320,7 +299,7 @@ class GenericProvider:
 
             if not show.air_by_date:
                 # this check is meaningless for non-season searches
-                if (parse_result.season_number is not None and parse_result.season_number != season) or (parse_result.season_number is None and season != 1):
+                if (parse_result.season_number != None and parse_result.season_number != season) or (parse_result.season_number == None and season != 1):
                     logger.log(u"The result " + title + " doesn't seem to be a valid episode for season " + str(season) + ", ignoring")
                     continue
 
@@ -365,7 +344,6 @@ class GenericProvider:
             result.url = url
             result.name = title
             result.quality = quality
-            result.size = size
 
             if len(epObj) == 1:
                 epNum = epObj[0].episode
@@ -384,9 +362,9 @@ class GenericProvider:
 
         return results
 
-    def findPropers(self, date=None):
+    def findPropers(self, search_date=None):
 
-        results = self.cache.listPropers(date)
+        results = self.cache.listPropers(search_date)
 
         return [classes.Proper(x['name'], x['url'], datetime.datetime.fromtimestamp(x['time'])) for x in results]
 
