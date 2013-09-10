@@ -805,7 +805,7 @@ class PostProcessor(object):
 
                 cur_ep.saveToDB()
 
-        releaseName = determineReleaseName(self.folder_path, self.nzb_name)
+        releaseName = show_name_helpers.determineReleaseName(self.folder_path, self.nzb_name)
         if releaseName is not None:
             failed_history.logSuccess(releaseName)
         else:
