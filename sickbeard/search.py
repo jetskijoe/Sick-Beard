@@ -52,7 +52,7 @@ def _downloadResult(result):
 
     newResult = False
 
-    if resProvider is None:
+    if resProvider == None:
         logger.log(u"Invalid provider name - this is a coding error, report it please", logger.ERROR)
         return False
 
@@ -122,7 +122,7 @@ def snatchEpisode(result, endStatus=SNATCHED):
         logger.log(u"Unknown result type, unable to download it", logger.ERROR)
         dlResult = False
 
-    if dlResult is False:
+    if dlResult == False:
         return False
 
     history.logSnatch(result)
@@ -130,12 +130,12 @@ def snatchEpisode(result, endStatus=SNATCHED):
 
     # don't notify when we re-download an episode
     for curEpObj in result.episodes:
-        if curEpObj.status not in Quality.DOWNLOADED:
-            notifiers.notify_snatch(curEpObj.prettyName())
         with curEpObj.lock:
             curEpObj.status = Quality.compositeStatus(endStatus, result.quality)
             curEpObj.saveToDB()
 
+        if curEpObj.status not in Quality.DOWNLOADED:
+            notifiers.notify_snatch(curEpObj.prettyName())
 
     return True
 

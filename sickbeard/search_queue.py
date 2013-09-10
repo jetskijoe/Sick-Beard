@@ -88,7 +88,7 @@ class ManualSearchQueueItem(generic_queue.QueueItem):
     def execute(self):
         generic_queue.QueueItem.execute(self)
 
-        logger.log("Searching for download for " + self.ep_obj.prettyName())
+        logger.log(u"Beginning manual search for " + self.ep_obj.prettyName())
 
         foundEpisode = search.findEpisode(self.ep_obj, manualSearch=True)
         result = False

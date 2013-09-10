@@ -88,7 +88,7 @@ class SearchResult:
         self.size = -1
 
     def __str__(self):
-        if self.provider is None:
+        if self.provider == None:
             return "Invalid provider, unable to print self"
 
         myString = self.provider.name + " @ " + self.url + "\n"
@@ -191,4 +191,4 @@ class UIError():
     """
     def __init__(self, message):
         self.message = message
-        self.time = datetime.datetime.now()
+        self.time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')

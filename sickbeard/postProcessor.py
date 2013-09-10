@@ -170,8 +170,6 @@ class PostProcessor(object):
             if associated_file_path == file_path:
                 continue
             # only list it if the only non-shared part is the extension
-            if '.' in associated_file_path[len(base_name):]:
-                continue
 
             file_path_list.append(associated_file_path)
 
@@ -807,7 +805,7 @@ class PostProcessor(object):
 
                 cur_ep.saveToDB()
 
-        releaseName = show_name_helpers.determineReleaseName(self.folder_path, self.nzb_name)
+        releaseName = determineReleaseName(self.folder_path, self.nzb_name)
         if releaseName is not None:
             failed_history.logSuccess(releaseName)
         else:

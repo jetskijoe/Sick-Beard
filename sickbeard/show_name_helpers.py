@@ -21,8 +21,8 @@ from glob import glob
 import sickbeard
 
 from sickbeard.common import countryList
-from sickbeard import scene_exceptions
-from sickbeard import helpers
+from sickbeard.helpers import sanitizeSceneName
+from sickbeard.scene_exceptions import get_scene_exceptions
 from sickbeard import logger
 from sickbeard import db
 from sickbeard import encodingKludge as ek
@@ -113,7 +113,7 @@ def makeSceneShowSearchStrings(show):
     showNames = allPossibleShowNames(show)
 
     # scenify the names
-    return map(helpers.sanitizeSceneName, showNames)
+    return map(sanitizeSceneName, showNames)
 
 
 def makeSceneSeasonSearchString (show, segment, extraSearchType=None):
@@ -208,7 +208,7 @@ def isGoodResult(name, show, log=True):
     """
 
     all_show_names = allPossibleShowNames(show)
-    showNames = map(helpers.sanitizeSceneName, all_show_names) + all_show_names
+    showNames = map(sanitizeSceneName, all_show_names) + all_show_names
 
     for curName in set(showNames):
         escaped_name = re.sub('\\\\[\\s.-]', '\W+', re.escape(curName))
@@ -239,7 +239,7 @@ def allPossibleShowNames(show):
     """
 
     showNames = [show.name]
-    showNames += [name for name in scene_exceptions.get_scene_exceptions(show.tvdbid)]
+    showNames += [name for name in get_scene_exceptions(show.tvdbid)]
 
     # if we have a tvrage name then use it
     if show.tvrname != "" and show.tvrname != None:
