@@ -21,8 +21,8 @@ from glob import glob
 import sickbeard
 
 from sickbeard.common import countryList
-from sickbeard.helpers import sanitizeSceneName
-from sickbeard.scene_exceptions import get_scene_exceptions
+from sickbeard import scene_exceptions
+from sickbeard import helpers
 from sickbeard import logger
 from sickbeard import db
 from sickbeard import encodingKludge as ek
@@ -271,17 +271,18 @@ def determineReleaseName(dir_name=None, nzb_name=None):
     if nzb_name is not None:
         logger.log(u"Using nzb_name for release name.")
         return nzb_name.rpartition('.')[0]
-    if dir_name:
-        file_types = ["*.nzb", "*.nfo"]
-        for search in file_types:
-            search_path = ek.ek(os.path.join, dir_name, search)
-            results = ek.ek(glob, search_path)
-            if len(results) == 1:
-                found_file = ek.ek(os.path.basename, results[0])
-                found_file = found_file.rpartition('.')[0]
-                if filterBadReleases(found_file):
-                    logger.log(u"Release name (" + found_file + ") found from file (" + results[0] + ")")
-                    return found_file.rpartition('.')[0]
+    if dir_name is None:
+        return None
+    file_types = ["*.nzb", "*.nfo"]
+    for search in file_types:
+        search_path = ek.ek(os.path.join, dir_name, search)
+        results = ek.ek(glob, search_path)
+        if len(results) == 1:
+            found_file = ek.ek(os.path.basename, results[0])
+            found_file = found_file.rpartition('.')[0]
+            if filterBadReleases(found_file):
+                logger.log(u"Release name (" + found_file + ") found from file (" + results[0] + ")")
+                return found_file.rpartition('.')[0]
     folder = ek.ek(os.path.basename, dir_name)
     if filterBadReleases(folder):
         logger.log(u"Folder name (" + folder + ") appears to be a valid release name. Using it.")

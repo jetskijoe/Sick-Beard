@@ -2388,8 +2388,10 @@ class CMD_Shows(ApiCall):
             if not showDict["network"]:
                 showDict["network"] = ""
             if self.sort == "name":
+                showDict["tvdbid"] = curShow.tvdbid
                 shows[curShow.name] = showDict
             else:
+                showDict["show_name"] = curShow.name
                 shows[curShow.tvdbid] = showDict
         return _responds(RESULT_SUCCESS, shows)
 

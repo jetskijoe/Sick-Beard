@@ -45,7 +45,7 @@ class FailedProcessor(object):
         self.log = ""
 
     def process(self):
-        self._log(u"Failed download detected: (" + str(self.nzb_name) + ", " + self.dir_name + ")")
+        self._log(u"Failed download detected: (" + str(self.nzb_name) + ", " + str(self.dir_name) + ")")
 
         releaseName = show_name_helpers.determineReleaseName(self.dir_name, self.nzb_name)
         if releaseName is None:

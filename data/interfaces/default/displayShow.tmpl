@@ -4,7 +4,9 @@
 #import os.path, os
 #import datetime
 #set global $title=$show.name
-#set global $header = '<a href="http://thetvdb.com/?tab=series&amp;id=%d" target="_new">%s</a>' % ($show.tvdbid, $show.name)
+#set global $tvdb_url = 'http://thetvdb.com/?tab=series&amp;id=%d' % ($show.tvdbid)
+
+#set global $header = '<a href="%s" title="%s" rel="noreferrer" onclick="window.open(\'%s\', \'_blank\'); return false;">%s</a>' % ($tvdb_url, $tvdb_url, $sickbeard.ANON_REDIRECT + $tvdb_url, $show.name)
 
 #set global $topmenu="manageShows"#
 #include $os.path.join($sickbeard.PROG_DIR, "data/interfaces/default/inc_top.tmpl")
@@ -46,6 +48,7 @@
 <script type="text/javascript" src="$sbRoot/js/displayShow.js?$sbPID"></script>
 <script type="text/javascript" src="$sbRoot/js/plotTooltip.js?$sbPID"></script>
 <script type="text/javascript" src="$sbRoot/js/ajaxEpSearch.js?$sbPID"></script>
+<script type="text/javascript" src="$sbRoot/js/ajaxEpRetry.js?$sbPID"></script>
 
 <div class="align-left"><b>Change Show:</b>
 <div class="navShow"><img id="prevShow" width="16" height="18" src="$sbRoot/images/prev.gif" alt="&lt;&lt;" title="Prev Show" /></div>
@@ -134,7 +137,7 @@ Change selected episodes to
         <h2>#if int($epResult["season"]) == 0 then "Specials" else "Season "+str($epResult["season"])#</h2>
     </td>
   </tr>
-  <tr id="season-$epResult["season"]-cols"><th width="1%"><input type="checkbox" class="seasonCheck" id="$epResult["season"]" /></th><th>NFO</th><th>TBN</th><th>Episode</th><th>Name</th><th class="nowrap">Airdate</th><th>Filename</th><th>Status</th><th>Search</th></tr>
+  <tr id="season-$epResult["season"]-cols"><th width="1%"><input type="checkbox" class="seasonCheck" id="$epResult["season"]" /></th><th>NFO</th><th>TBN</th><th>Episode</th><th>Name</th><th class="nowrap">Airdate</th><th>Filename</th><th>Status</th><th>Mark Failed</th><th>Search</th></tr>
         #set $curSeason = int($epResult["season"])
     #end if    
 
@@ -165,6 +168,11 @@ $epLoc
 
     </td>
     <td class="status_column">$statusStrings[int($epResult["status"])]</td>
+    <td align="center">
+#if int($epResult["status"]) in $Quality.SNATCHED or int($epResult["status"]) in $Quality.DOWNLOADED:
+      <a class="epRetry" href="retryEpisode?show=$show.tvdbid&amp;season=$epResult["season"]&amp;episode=$epResult["episode"]"><img src="$sbRoot/images/search16.png" height="16" alt="retry" title="Retry Download" /></a>
+#end if
+    </td>
     <td align="center">
     #if int($epResult["season"]) != 0:
       <a class="epSearch" href="searchEpisode?show=$show.tvdbid&amp;season=$epResult["season"]&amp;episode=$epResult["episode"]"><img src="$sbRoot/images/search16.png" height="16" alt="search" title="Manual Search" /></a>

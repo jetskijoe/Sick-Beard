@@ -205,12 +205,12 @@ def findCertainTVRageShow (showList, tvrid):
     else:
         return results[0]
 
-def makeDir(path):
-    if not ek.ek(os.path.isdir, path):
+def makeDir (dir):
+    if not ek.ek(os.path.isdir, dir):
         try:
-            ek.ek(os.makedirs, path)
+            ek.ek(os.makedirs, dir)
             # do the library update for synoindex
-            notifiers.synoindex_notifier.addFolder(path)
+            notifiers.synoindex_notifier.addFolder(dir)
         except OSError:
             return False
     return True
@@ -406,14 +406,14 @@ def sizeof_fmt(num):
             return "%3.1f %s" % (num, x)
         num /= 1024.0
 
-def listMediaFiles(path):
+def listMediaFiles(dir):
 
-    if not path or not ek.ek(os.path.isdir, path):
+    if not dir or not ek.ek(os.path.isdir, dir):
         return []
 
     files = []
-    for curFile in ek.ek(os.listdir, path):
-        fullCurFile = ek.ek(os.path.join, path, curFile)
+    for curFile in ek.ek(os.listdir, dir):
+        fullCurFile = ek.ek(os.path.join, dir, curFile)
 
         # if it's a dir do it recursively
         if ek.ek(os.path.isdir, fullCurFile) and not curFile.startswith('.') and not curFile == 'Extras':
@@ -464,7 +464,7 @@ def make_dirs(path):
 
             # look through each subfolder and make sure they all exist
             for cur_folder in folder_list:
-                sofar += cur_folder + os.path.sep
+                sofar += cur_folder + os.path.sep;
 
                 # if it exists then just keep walking down the line
                 if ek.ek(os.path.isdir, sofar):
