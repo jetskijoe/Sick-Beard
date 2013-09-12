@@ -1,7 +1,6 @@
 $(document).ready(function(){
 
     $('#sbRoot').ajaxEpSearch({'colorRow': true});
-    $('#sbRoot').ajaxEpRetry({'colorRow': true});
 
     $('#seasonJump').change(function() {
         var id = $(this).val();
