@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Sick Beard.  If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import with_statement 
+from __future__ import with_statement
 
 import os
 import threading
@@ -32,7 +32,7 @@ from sickbeard import classes
 NUM_LOGS = 3
 
 # log size in bytes
-LOG_SIZE = 10000000 # 10 megs
+LOG_SIZE = 10000000  # 10 megs
 
 ERROR = logging.ERROR
 WARNING = logging.WARNING
@@ -44,12 +44,13 @@ reverseNames = {u'ERROR': ERROR,
                 u'INFO': MESSAGE,
                 u'DEBUG': DEBUG}
 
+
 class SBRotatingLogHandler(object):
 
     def __init__(self, log_file, num_files, num_bytes):
         self.num_files = num_files
         self.num_bytes = num_bytes
-        
+
         self.log_file = log_file
         self.log_file_path = log_file
         self.cur_handler = None
@@ -59,41 +60,41 @@ class SBRotatingLogHandler(object):
         self.log_lock = threading.Lock()
 
     def initLogging(self, consoleLogging=True):
-    
+
         old_handler = None
+        # get old handler in case we want to close it
         if self.cur_handler:
             old_handler = self.cur_handler
         else:
+            # only start consoleLogging on first initialize
             if consoleLogging:
+                # define a Handler which writes INFO messages or higher to the sys.stderr
                 console = logging.StreamHandler()
+
                 console.setLevel(logging.INFO)
+
+                # set a format which is simpler for console use
                 console.setFormatter(logging.Formatter('%(asctime)s %(levelname)s::%(message)s', '%H:%M:%S'))
+
+                # add the handler to the root logger
                 logging.getLogger('sickbeard').addHandler(console)
+
         self.log_file_path = os.path.join(sickbeard.LOG_DIR, self.log_file)
-    
         self.cur_handler = self._config_handler()
-    
         logging.getLogger('sickbeard').addHandler(self.cur_handler)
-    
-        # define a Handler which writes INFO messages or higher to the sys.stderr
-    
-    
-            # set a format which is simpler for console use
-    
-            # add the handler to the root logger
-    
         logging.getLogger('sickbeard').setLevel(logging.DEBUG)
 
+        # already logging in new log folder, close the old handler
         if old_handler:
             old_handler.flush()
             old_handler.close()
             sb_logger = logging.getLogger('sickbeard')
             sb_logger.removeHandler(old_handler)
+
     def _config_handler(self):
         """
         Configure a file handler to log at file_name and return it.
         """
-    
         file_handler = logging.FileHandler(self.log_file_path, encoding='utf-8')
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)-8s %(message)s', '%Y-%m-%d %H:%M:%S'))
@@ -107,7 +108,7 @@ class SBRotatingLogHandler(object):
         i: Log number to ues
         """
         return self.log_file_path + ('.' + str(i) if i else '')
-    
+
     def _num_logs(self):
         """
         Scans the log folder and figures out how many log files there are already on disk
@@ -118,17 +119,17 @@ class SBRotatingLogHandler(object):
         while os.path.isfile(self._log_file_name(cur_log)):
             cur_log += 1
         return cur_log - 1
-    
+
     def _rotate_logs(self):
-        
+
         sb_logger = logging.getLogger('sickbeard')
-        
+
         # delete the old handler
         if self.cur_handler:
             self.cur_handler.flush()
             self.cur_handler.close()
             sb_logger.removeHandler(self.cur_handler)
-    
+
         # rename or delete all the old log files
         for i in range(self._num_logs(), -1, -1):
             cur_file_name = self._log_file_name(i)
@@ -136,21 +137,21 @@ class SBRotatingLogHandler(object):
                 if i >= NUM_LOGS:
                     os.remove(cur_file_name)
                 else:
-                    os.rename(cur_file_name, self._log_file_name(i+1))
+                    os.rename(cur_file_name, self._log_file_name(i + 1))
             except OSError:
                 pass
-        
+
         # the new log handler will always be on the un-numbered .log file
         new_file_handler = self._config_handler()
-        
+
         self.cur_handler = new_file_handler
-        
+
         sb_logger.addHandler(new_file_handler)
 
     def log(self, toLog, logLevel=MESSAGE):
-    
+
         with self.log_lock:
-    
+
             # check the size and see if we need to rotate
             if self.writes_since_check >= 10:
                 if os.path.isfile(self.log_file_path) and os.path.getsize(self.log_file_path) >= LOG_SIZE:
@@ -158,14 +159,14 @@ class SBRotatingLogHandler(object):
                 self.writes_since_check = 0
             else:
                 self.writes_since_check += 1
-    
+
             meThread = threading.currentThread().getName()
             message = meThread + u" :: " + toLog
-        
+
             out_line = message.encode('utf-8')
-        
+
             sb_logger = logging.getLogger('sickbeard')
-    
+
             try:
                 if logLevel == DEBUG:
                     sb_logger.debug(out_line)
@@ -175,7 +176,7 @@ class SBRotatingLogHandler(object):
                     sb_logger.warning(out_line)
                 elif logLevel == ERROR:
                     sb_logger.error(out_line)
-            
+
                     # add errors to the UI logger
                     classes.ErrorViewer.add(classes.UIError(message))
                 else:
@@ -184,6 +185,7 @@ class SBRotatingLogHandler(object):
                 pass
 
 sb_log_instance = SBRotatingLogHandler('sickbeard.log', NUM_LOGS, LOG_SIZE)
+
 
 def log(toLog, logLevel=MESSAGE):
     sb_log_instance.log(toLog, logLevel)

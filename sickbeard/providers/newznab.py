@@ -187,7 +187,7 @@ class NewznabProvider(generic.NZBProvider):
         params = {"t": "tvsearch",
                   "maxage": sickbeard.USENET_RETENTION,
                   "limit": 100,
-                  "cat": '5030,5040'}
+                  "cat": '5030,5040,5050,5070,5080'}
 
         # if max_age is set, use it, don't allow it to be missing
         if max_age or not params['maxage']:
@@ -290,13 +290,13 @@ class NewznabCache(tvcache.TVCache):
 
         tvcache.TVCache.__init__(self, provider)
 
-        # only poll newznab providers every 15 minutes max
-        self.minTime = 15
+        # only poll newznab providers every 5 minutes max
+        self.minTime = 5
 
     def _getRSSData(self):
 
         params = {"t": "tvsearch",
-                  "cat": '5040,5030'}
+                  "cat": '5030,5040,5050,5070,5080'}
 
         # hack this in for now
         if self.provider.getID() == 'nzbs_org':
