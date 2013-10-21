@@ -26,6 +26,7 @@ from sickbeard.providers.generic import GenericProvider
 from sickbeard import encodingKludge as ek
 from sickbeard.name_parser.parser import NameParser, InvalidNameException
 
+MIN_DB_VERSION = 9  # oldest db version we support migrating from
 MAX_DB_VERSION = 12
 
 class MainSanityCheck(db.DBSanityCheck):
