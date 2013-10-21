@@ -616,10 +616,13 @@ class Tvdb:
         data = data.replace(u"&amp;", u"&")
         data = data.strip()
         return data
+    #end _cleanData
 
-    def search(self, series):
-        """This searches TheTVDB.com for the series name
-        and returns the result list
+    def _getSeries(self, series):
+        """This searches TheTVDB.com for the series name,
+        If a custom_ui UI is configured, it uses this to select the correct
+        series. If not, and interactive == True, ConsoleUI is used, if not
+        BaseUI is used to select the first result.
         """
         series = urllib.quote(series.encode("utf-8"))
         log().debug("Searching for show %s" % series)
@@ -631,16 +634,7 @@ class Tvdb:
             result['lid'] = self.config['langabbv_to_id'][result['language']]
             log().debug('Found series %(seriesname)s' % result)
             allSeries.append(result)
-        
-        return allSeries
-
-    def _getSeries(self, series):
-        """This searches TheTVDB.com for the series name,
-        If a custom_ui UI is configured, it uses this to select the correct
-        series. If not, and interactive == True, ConsoleUI is used, if not
-        BaseUI is used to select the first result.
-        """
-        allSeries = self.search(series)
+        #end for series
 
         if len(allSeries) == 0:
             log().debug('Series result returned zero')
@@ -656,12 +650,16 @@ class Tvdb:
             else:
                 log().debug('Interactively selecting show using ConsoleUI')
                 ui = ConsoleUI(config = self.config)
+            #end if config['interactive]
+        #end if custom_ui != None
 
         return ui.selectSeries(allSeries)
 
+    #end _getSeries
+
     def _parseBanners(self, sid):
         """Parses banners XML, from
-        http://thetvdb.com/api/[APIKEY]/series/[SERIES ID]/banners.xml
+        http://www.thetvdb.com/api/[APIKEY]/series/[SERIES ID]/banners.xml
 
         Banners are retrieved using t['show name]['_banners'], for example:
 
@@ -669,7 +667,7 @@ class Tvdb:
         >>> t['scrubs']['_banners'].keys()
         ['fanart', 'poster', 'series', 'season']
         >>> t['scrubs']['_banners']['poster']['680x1000']['35308']['_bannerpath']
-        u'http://thetvdb.com/banners/posters/76156-2.jpg'
+        u'http://www.thetvdb.com/banners/posters/76156-2.jpg'
         >>>
 
         Any key starting with an underscore has been processed (not the raw
@@ -713,7 +711,7 @@ class Tvdb:
 
     def _parseActors(self, sid):
         """Parsers actors XML, from
-        http://thetvdb.com/api/[APIKEY]/series/[SERIES ID]/actors.xml
+        http://www.thetvdb.com/api/[APIKEY]/series/[SERIES ID]/actors.xml
 
         Actors are retrieved using t['show name]['_actors'], for example:
 
@@ -730,7 +728,7 @@ class Tvdb:
         >>> actors[0]['name']
         u'Zach Braff'
         >>> actors[0]['image']
-        u'http://thetvdb.com/banners/actors/43640.jpg'
+        u'http://www.thetvdb.com/banners/actors/43640.jpg'
 
         Any key starting with an underscore has been processed (not the raw
         data from the XML)
