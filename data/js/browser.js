@@ -50,7 +50,6 @@
     }
 
     $.fn.nFileBrowser = function (callback, options) {
-
         options = $.extend({}, $.Browser.defaults, options);
 
         // make a fileBrowserDialog object if one doesn't exist already

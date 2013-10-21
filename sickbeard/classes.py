@@ -25,16 +25,14 @@ import datetime
 
 from common import USER_AGENT, Quality
 
-
 class SickBeardURLopener(urllib.FancyURLopener):
     version = USER_AGENT
-
 
 class AuthURLOpener(SickBeardURLopener):
     """
     URLOpener class that supports http auth without needing interactive password entry.
     If the provided username/password don't work it simply fails.
-
+    
     user: username to use for HTTP auth
     pw: password to use for HTTP auth
     """
@@ -44,7 +42,7 @@ class AuthURLOpener(SickBeardURLopener):
 
         # remember if we've tried the username/password before
         self.numTries = 0
-
+        
         # call the base class
         urllib.FancyURLopener.__init__(self)
 
@@ -58,7 +56,7 @@ class AuthURLOpener(SickBeardURLopener):
         if self.numTries == 0:
             self.numTries = 1
             return (self.username, self.password)
-
+        
         # if we've tried before then return blank which cancels the request
         else:
             return ('', '')
@@ -67,7 +65,6 @@ class AuthURLOpener(SickBeardURLopener):
     def openit(self, url):
         self.numTries = 0
         return SickBeardURLopener.open(self, url)
-
 
 class SearchResult:
     """
@@ -78,10 +75,13 @@ class SearchResult:
         self.provider = None
         # URL to the NZB/torrent file
         self.url = ""
+
         # used by some providers to store extra info associated with the result
         self.extraInfo = []
+
         # list of TVEpisode objects that this result is associated with
         self.episodes = episodes
+
         # quality of the release
         self.quality = -1
         # release name

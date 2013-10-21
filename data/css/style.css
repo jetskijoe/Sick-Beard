@@ -46,7 +46,7 @@ browser.css
 .ui-menu .ui-menu-item {
   background-color: #eee;
 }
-.ui-menu .ui-menu-item-alternate{
+.ui-menu .ui-menu-item-alternate {
   background-color: #fff;
 }
 .ui-autocomplete .ui-menu-item .ui-state-focus {
@@ -973,6 +973,9 @@ td.tvShow a {
   font-size: 14px;
   color: #333;
   text-decoration: none;
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 td.tvShow:hover a {
   color:#000;

@@ -196,22 +196,25 @@ def upgradeDatabase(connection, schema):
     logger.log(u"Checking database structure...", logger.MESSAGE)
     _processUpgrade(connection, schema)
 
-def prettyName(str):
-    return ' '.join([x.group() for x in re.finditer("([A-Z])([a-z0-9]+)", str)])
+
+def prettyName(class_name):
+    return ' '.join([x.group() for x in re.finditer("([A-Z])([a-z0-9]+)", class_name)])
+
 
 def _processUpgrade(connection, upgradeClass):
     instance = upgradeClass(connection)
-    logger.log(u"Checking " + prettyName(upgradeClass.__name__) + " database upgrade", logger.DEBUG)
+    pretty_class_name = prettyName(upgradeClass.__name__)
+    logger.log(u"Checking " + pretty_class_name + " database upgrade", logger.DEBUG)
     if not instance.test():
-        logger.log(u"Database upgrade required: " + prettyName(upgradeClass.__name__), logger.MESSAGE)
+        logger.log(u"Database upgrade required: " + pretty_class_name, logger.MESSAGE)
         try:
             instance.execute()
         except sqlite3.DatabaseError, e:
-            print "Error in " + str(upgradeClass.__name__) + ": " + ex(e)
+            print "Error in " + str(pretty_class_name) + ": " + ex(e)
             raise
-        logger.log(upgradeClass.__name__ + " upgrade completed", logger.DEBUG)
+        logger.log(pretty_class_name + u" upgrade completed", logger.DEBUG)
     else:
-        logger.log(upgradeClass.__name__ + " upgrade not required", logger.DEBUG)
+        logger.log(pretty_class_name + u" upgrade not required", logger.DEBUG)
 
     for upgradeSubClass in upgradeClass.__subclasses__():
         _processUpgrade(connection, upgradeSubClass)
@@ -227,16 +230,12 @@ class SchemaUpgrade (object):
     def hasColumn(self, tableName, column):
         return column in self.connection.tableInfo(tableName)
 
-    def addColumn(self, table, column, type="NUMERIC", default=0):
-        self.connection.action("ALTER TABLE %s ADD %s %s" % (table, column, type))
-        self.connection.action("UPDATE %s SET %s = ?" % (table, column), (default,))
+    def addColumn(self, tableName, column, data_type="NUMERIC", default=0):
+        self.connection.action("ALTER TABLE %s ADD %s %s" % (tableName, column, data_type))
+        self.connection.action("UPDATE %s SET %s = ?" % (tableName, column), (default,))
 
     def checkDBVersion(self):
-        result = self.connection.select("SELECT db_version FROM db_version")
-        if result:
-            return int(result[0]["db_version"])
-        else:
-            return 0
+        return self.connection.checkDBVersion()
 
     def incDBVersion(self):
         curVersion = self.checkDBVersion()

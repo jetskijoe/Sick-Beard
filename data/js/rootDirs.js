@@ -24,8 +24,10 @@
 $(document).ready(function() {
 
     function addRootDir(path) {
+
         if (!path.length)
             return;
+
         // check if it's the first one
         var is_default = false;
         if (!$('#whichDefaultRootDir').val().length)
@@ -44,8 +46,10 @@ $(document).ready(function() {
     }
 
     function editRootDir(path) {
+
         if (!path.length)
             return;
+
         // as long as something is selected
         if ($("#rootDirs option:selected").length) {
 
