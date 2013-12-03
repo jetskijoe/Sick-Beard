@@ -27,7 +27,8 @@ from sickbeard import encodingKludge as ek
 from sickbeard.name_parser.parser import NameParser, InvalidNameException
 
 MIN_DB_VERSION = 9  # oldest db version we support migrating from
-MAX_DB_VERSION = 12
+MAX_DB_VERSION = 14
+
 
 class MainSanityCheck(db.DBSanityCheck):
     def check(self):
@@ -84,7 +85,13 @@ class MainSanityCheck(db.DBSanityCheck):
 
 
 def backupDatabase(version):
-    helpers.backupVersionedFile(db.dbFilename(), version)
+    logger.log(u"Backing up database before upgrade")
+
+    if not helpers.backupVersionedFile(db.dbFilename(), version):
+        logger.log(u"Database backup failed, abort upgrading database")
+        sys.exit("Database backup failed, abort upgrading database")
+    else:
+        logger.log(u"Proceeding with upgrade")
 
 # ======================
 # = Main DB Migrations =
@@ -92,7 +99,7 @@ def backupDatabase(version):
 # Add new migrations at the bottom of the list; subclass the previous migration.
 
 
-# schema is based off v12 - build 501
+# schema is based off v14 - build 502
 class InitialSchema (db.SchemaUpgrade):
     def test(self):
         return self.hasTable("tv_shows") and self.hasTable("db_version") and self.checkDBVersion() >= MIN_DB_VERSION and self.checkDBVersion() <= MAX_DB_VERSION
@@ -104,10 +111,13 @@ class InitialSchema (db.SchemaUpgrade):
                 "CREATE TABLE history (action NUMERIC, date NUMERIC, showid NUMERIC, season NUMERIC, episode NUMERIC, quality NUMERIC, resource TEXT, provider TEXT);",
                 "CREATE TABLE info (last_backlog NUMERIC, last_tvdb NUMERIC);",
                 "CREATE TABLE tv_episodes (episode_id INTEGER PRIMARY KEY, showid NUMERIC, tvdbid NUMERIC, name TEXT, season NUMERIC, episode NUMERIC, description TEXT, airdate NUMERIC, hasnfo NUMERIC, hastbn NUMERIC, status NUMERIC, location TEXT, file_size NUMERIC, release_name TEXT);",
-                "CREATE TABLE tv_shows (show_id INTEGER PRIMARY KEY, location TEXT, show_name TEXT, tvdb_id NUMERIC, network TEXT, genre TEXT, runtime NUMERIC, quality NUMERIC, airs TEXT, status TEXT, flatten_folders NUMERIC, paused NUMERIC, startyear NUMERIC, tvr_id NUMERIC, tvr_name TEXT, air_by_date NUMERIC, lang TEXT);",
-                "CREATE INDEX idx_tv_episodes_showid_airdate ON tv_episodes(showid,airdate);",
-                "INSERT INTO db_version (db_version) VALUES (12);"
+                "CREATE TABLE tv_shows (show_id INTEGER PRIMARY KEY, location TEXT, show_name TEXT, tvdb_id NUMERIC, network TEXT, genre TEXT, runtime NUMERIC, quality NUMERIC, airs TEXT, status TEXT, flatten_folders NUMERIC, paused NUMERIC, startyear NUMERIC, tvr_id NUMERIC, tvr_name TEXT, air_by_date NUMERIC, lang TEXT, last_update_tvdb NUMERIC);",
+                "CREATE INDEX idx_tv_episodes_showid_airdate ON tv_episodes (showid,airdate);",
+                "CREATE INDEX idx_showid ON tv_episodes (showid);",
+                "CREATE UNIQUE INDEX idx_tvdb_id ON tv_shows (tvdb_id);",
+                "INSERT INTO db_version (db_version) VALUES (14);"
             ]
+
             for query in queries:
                 self.connection.action(query)
 
@@ -358,3 +368,40 @@ class Add1080pAndRawHDQualities(RenameSeasonFolders):
         # cleanup and reduce db if any previous data was removed
         logger.log(u"Performing a vacuum on the database.", logger.DEBUG)
         self.connection.action("VACUUM")
+
+
+# included in build 502 (TBD)
+class AddShowidTvdbidIndex(Add1080pAndRawHDQualities):
+    """ Adding index on tvdb_id (tv_shows) and showid (tv_episodes) to speed up searches/queries """
+
+    def test(self):
+        return self.checkDBVersion() >= 13
+
+    def execute(self):
+        backupDatabase(13)
+
+        logger.log(u"Check for duplicate shows before adding unique index.")
+        MainSanityCheck(self.connection).fix_duplicate_shows()
+
+        logger.log(u"Adding index on tvdb_id (tv_shows) and showid (tv_episodes) to speed up searches/queries.")
+        self.connection.action("CREATE INDEX idx_showid ON tv_episodes (showid);")
+        self.connection.action("CREATE UNIQUE INDEX idx_tvdb_id ON tv_shows (tvdb_id);")
+
+        self.incDBVersion()
+
+
+# included in build 502 (TBD)
+class AddLastUpdateTVDB(AddShowidTvdbidIndex):
+    """ Adding column last_update_tvdb to tv_shows for controlling nightly updates """
+
+    def test(self):
+        return self.checkDBVersion() >= 14
+
+    def execute(self):
+        backupDatabase(14)
+
+        logger.log(u"Adding column last_update_tvdb to tvshows")
+        if not self.hasColumn("tv_shows", "last_update_tvdb"):
+            self.addColumn("tv_shows", "last_update_tvdb", default=1)
+
+        self.incDBVersion()

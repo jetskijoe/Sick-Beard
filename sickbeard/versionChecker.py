@@ -17,10 +17,12 @@
 # along with Sick Beard.  If not, see <http://www.gnu.org/licenses/>.
 
 import sickbeard
+from sickbeard import helpers
 from sickbeard import version, ui
 from sickbeard import logger
 from sickbeard import scene_exceptions
 from sickbeard.exceptions import ex
+from sickbeard import encodingKludge as ek
 from sickbeard import failed_history
 
 import os, platform, shutil

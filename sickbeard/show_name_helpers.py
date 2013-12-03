@@ -16,16 +16,13 @@
 # You should have received a copy of the GNU General Public License
 # along with Sick Beard.  If not, see <http://www.gnu.org/licenses/>.
 
-import os
-from glob import glob
 import sickbeard
 
 from sickbeard.common import countryList
-from sickbeard import scene_exceptions
-from sickbeard import helpers
+from sickbeard.helpers import sanitizeSceneName
+from sickbeard.scene_exceptions import get_scene_exceptions
 from sickbeard import logger
 from sickbeard import db
-from sickbeard import encodingKludge as ek
 
 import re
 import datetime
@@ -35,6 +32,7 @@ from name_parser.parser import NameParser, InvalidNameException
 resultFilters = ["sub(pack|s|bed)", "nlsub(bed|s)?", "swesub(bed)?",
                  "(dir|sample|sub|nfo)fix", "sample", "(dvd)?extras",
                  "dub(bed)?"]
+
 
 def filterBadReleases(name):
     """
@@ -50,7 +48,7 @@ def filterBadReleases(name):
         fp = NameParser()
         parse_result = fp.parse(name)
     except InvalidNameException:
-        logger.log(u"Unable to parse the filename "+name+" into a valid episode", logger.WARNING)
+        logger.log(u"Unable to parse the filename " + name + " into a valid episode", logger.WARNING)
         return False
 
     # use the extra info and the scene group to filter against
@@ -61,7 +59,7 @@ def filterBadReleases(name):
         if check_string:
             check_string = check_string + '-' + parse_result.release_group
         else:
-            check_string = parse_result.release_group 
+            check_string = parse_result.release_group
 
     # if there's no info after the season info then assume it's fine
     if not check_string:
@@ -69,11 +67,12 @@ def filterBadReleases(name):
 
     # if any of the bad strings are in the name then say no
     for x in resultFilters + sickbeard.IGNORE_WORDS.split(','):
-        if re.search('(^|[\W_])'+x+'($|[\W_])', check_string, re.I):
-            logger.log(u"Invalid scene release: "+name+" contains "+x+", ignoring it", logger.DEBUG)
+        if re.search('(^|[\W_])' + x + '($|[\W_])', check_string, re.I):
+            logger.log(u"Invalid scene release: " + name + " contains " + x + ", ignoring it", logger.DEBUG)
             return False
 
     return True
+
 
 def sceneToNormalShowNames(name):
     """
@@ -88,7 +87,7 @@ def sceneToNormalShowNames(name):
         return []
 
     name_list = [name]
-    
+
     # use both and and &
     new_name = re.sub('(?i)([\. ])and([\. ])', '\\1&\\2', name, re.I)
     if new_name not in name_list:
@@ -99,33 +98,34 @@ def sceneToNormalShowNames(name):
     for cur_name in name_list:
         # add brackets around the year
         results.append(re.sub('(\D)(\d{4})$', '\\1(\\2)', cur_name))
-    
+
         # add brackets around the country
         country_match_str = '|'.join(countryList.values())
-        results.append(re.sub('(?i)([. _-])('+country_match_str+')$', '\\1(\\2)', cur_name))
+        results.append(re.sub('(?i)([. _-])(' + country_match_str + ')$', '\\1(\\2)', cur_name))
 
     results += name_list
 
     return list(set(results))
+
 
 def makeSceneShowSearchStrings(show):
 
     showNames = allPossibleShowNames(show)
 
     # scenify the names
-    return map(helpers.sanitizeSceneName, showNames)
+    return map(sanitizeSceneName, showNames)
 
 
-def makeSceneSeasonSearchString (show, segment, extraSearchType=None):
+def makeSceneSeasonSearchString(show, segment, extraSearchType=None):
 
     myDB = db.DBConnection()
 
     if show.air_by_date:
         numseasons = 0
-        
-        # the search string for air by date shows is just 
+
+        # the search string for air by date shows is just
         seasonStrings = [segment]
-    
+
     else:
         numseasonsSQlResult = myDB.select("SELECT COUNT(DISTINCT season) as numseasons FROM tv_episodes WHERE showid = ? and season != 0", [show.tvdbid])
         numseasons = int(numseasonsSQlResult[0][0])
@@ -151,7 +151,7 @@ def makeSceneSeasonSearchString (show, segment, extraSearchType=None):
     return toReturn
 
 
-def makeSceneSearchString (episode):
+def makeSceneSearchString(episode):
 
     myDB = db.DBConnection()
     numseasonsSQlResult = myDB.select("SELECT COUNT(DISTINCT season) as numseasons FROM tv_episodes WHERE showid = ? and season != 0", [episode.show.tvdbid])
@@ -181,31 +181,33 @@ def makeSceneSearchString (episode):
 
     return toReturn
 
+
 def isGoodResult(name, show, log=True):
     """
     Use an automatically-created regex to make sure the result actually is the show it claims to be
     """
 
     all_show_names = allPossibleShowNames(show)
-    showNames = map(helpers.sanitizeSceneName, all_show_names) + all_show_names
+    showNames = map(sanitizeSceneName, all_show_names) + all_show_names
 
     for curName in set(showNames):
         escaped_name = re.sub('\\\\[\\s.-]', '\W+', re.escape(curName))
         if show.startyear:
-            escaped_name += "(?:\W+"+str(show.startyear)+")?"
+            escaped_name += "(?:\W+" + str(show.startyear) + ")?"
         curRegex = '^' + escaped_name + '\W+(?:(?:S\d[\dE._ -])|(?:\d\d?x)|(?:\d{4}\W\d\d\W\d\d)|(?:(?:part|pt)[\._ -]?(\d|[ivx]))|Season\W+\d+\W+|E\d+\W+)'
         if log:
-            logger.log(u"Checking if show "+name+" matches " + curRegex, logger.DEBUG)
+            logger.log(u"Checking if show " + name + " matches " + curRegex, logger.DEBUG)
 
         match = re.search(curRegex, name, re.I)
 
         if match:
-            logger.log(u"Matched "+curRegex+" to "+name, logger.DEBUG)
+            logger.log(u"Matched " + curRegex + " to " + name, logger.DEBUG)
             return True
 
     if log:
-        logger.log(u"Provider gave result "+name+" but that doesn't seem like a valid result for "+show.name+" so I'm ignoring it")
+        logger.log(u"Provider gave result " + name + " but that doesn't seem like a valid result for " + show.name + " so I'm ignoring it")
     return False
+
 
 def allPossibleShowNames(show):
     """
@@ -218,7 +220,7 @@ def allPossibleShowNames(show):
     """
 
     showNames = [show.name]
-    showNames += [name for name in scene_exceptions.get_scene_exceptions(show.tvdbid)]
+    showNames += [name for name in get_scene_exceptions(show.tvdbid)]
 
     # if we have a tvrage name then use it
     if show.tvrname != "" and show.tvrname != None:
@@ -236,34 +238,11 @@ def allPossibleShowNames(show):
         if not curName:
             continue
         for curCountry in country_list:
-            if curName.endswith(' '+curCountry):
-                newShowNames.append(curName.replace(' '+curCountry, ' ('+country_list[curCountry]+')'))
-            elif curName.endswith(' ('+curCountry+')'):
-                newShowNames.append(curName.replace(' ('+curCountry+')', ' ('+country_list[curCountry]+')'))
+            if curName.endswith(' ' + curCountry):
+                newShowNames.append(curName.replace(' ' + curCountry, ' (' + country_list[curCountry] + ')'))
+            elif curName.endswith(' (' + curCountry + ')'):
+                newShowNames.append(curName.replace(' (' + curCountry + ')', ' (' + country_list[curCountry] + ')'))
 
     showNames += newShowNames
 
     return showNames
-
-def determineReleaseName(dir_name=None, nzb_name=None):
-    """Determine a release name from an nzb and/or folder name"""
-    if nzb_name is not None:
-        logger.log(u"Using nzb_name for release name.")
-        return nzb_name.rpartition('.')[0]
-    if dir_name is None:
-        return None
-    file_types = ["*.nzb", "*.nfo"]
-    for search in file_types:
-        search_path = ek.ek(os.path.join, dir_name, search)
-        results = ek.ek(glob, search_path)
-        if len(results) == 1:
-            found_file = ek.ek(os.path.basename, results[0])
-            found_file = found_file.rpartition('.')[0]
-            if filterBadReleases(found_file):
-                logger.log(u"Release name (" + found_file + ") found from file (" + results[0] + ")")
-                return found_file.rpartition('.')[0]
-    folder = ek.ek(os.path.basename, dir_name)
-    if filterBadReleases(folder):
-        logger.log(u"Folder name (" + folder + ") appears to be a valid release name. Using it.")
-        return folder
-    return None

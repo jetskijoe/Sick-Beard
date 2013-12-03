@@ -289,7 +289,7 @@ EXTRA_SCRIPTS = []
 
 GIT_PATH = None
 
-IGNORE_WORDS = "german,french,core2hd,dutch,swedish"
+IGNORE_WORDS = "german,french,core2hd,dutch,swedish,480p"
 
 __INITIALIZED__ = False
 
@@ -852,6 +852,17 @@ def halt():
             __INITIALIZED__ = False
 
 
+def remove_pid_file(PIDFILE):
+    try:
+        if os.path.exists(PIDFILE):
+            os.remove(PIDFILE)
+
+    except (IOError, OSError):
+        return False
+
+    return True
+
+
 def sig_handler(signum=None, frame=None):
     if type(signum) != type(None):
         logger.log(u"Signal %i caught, saving and exiting..." % int(signum))
@@ -883,7 +894,7 @@ def saveAndShutdown(restart=False):
 
     if CREATEPID:
         logger.log(u"Removing pidfile " + str(PIDFILE))
-        os.remove(PIDFILE)
+        remove_pid_file(PIDFILE)
 
     if restart:
         install_type = versionCheckScheduler.action.install_type
@@ -905,6 +916,7 @@ def saveAndShutdown(restart=False):
             if '--nolaunch' not in popen_list:
                 popen_list += ['--nolaunch']
             logger.log(u"Restarting Sick Beard with " + str(popen_list))
+            logger.close()
             subprocess.Popen(popen_list, cwd=os.getcwd())
 
     os._exit(0)
@@ -996,8 +1008,8 @@ def save_config():
     new_config['General']['process_automatically'] = int(PROCESS_AUTOMATICALLY)
     new_config['General']['delete_failed'] = int(DELETE_FAILED)
     new_config['General']['rename_episodes'] = int(RENAME_EPISODES)
-    new_config['General']['create_missing_show_dirs'] = CREATE_MISSING_SHOW_DIRS
-    new_config['General']['add_shows_wo_dir'] = ADD_SHOWS_WO_DIR
+    new_config['General']['create_missing_show_dirs'] = int(CREATE_MISSING_SHOW_DIRS)
+    new_config['General']['add_shows_wo_dir'] = int(ADD_SHOWS_WO_DIR)
 
     new_config['General']['extra_scripts'] = '|'.join(EXTRA_SCRIPTS)
     new_config['General']['git_path'] = GIT_PATH

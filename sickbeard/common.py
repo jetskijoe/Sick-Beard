@@ -45,15 +45,15 @@ notifyStrings[NOTIFY_SNATCH] = "Started Download"
 notifyStrings[NOTIFY_DOWNLOAD] = "Download Finished"
 
 ### Episode statuses
-UNKNOWN = -1 # should never happen
-UNAIRED = 1 # episodes that haven't aired yet
-SNATCHED = 2 # qualified with quality
-WANTED = 3 # episodes we don't have but want to get
-DOWNLOADED = 4 # qualified with quality
-SKIPPED = 5 # episodes we don't want
-ARCHIVED = 6 # episodes that you don't have locally (counts toward download completion stats)
-IGNORED = 7 # episodes that you don't want included in your download stats
-SNATCHED_PROPER = 9 # qualified with quality
+UNKNOWN = -1         # should never happen
+UNAIRED = 1          # episodes that haven't aired yet
+SNATCHED = 2         # qualified with quality
+WANTED = 3           # episodes we don't have but want to get
+DOWNLOADED = 4       # qualified with quality
+SKIPPED = 5          # episodes we don't want
+ARCHIVED = 6         # episodes that you don't have locally (counts toward download completion stats)
+IGNORED = 7          # episodes that you don't want included in your download stats
+SNATCHED_PROPER = 9  # qualified with quality
 
 NAMING_REPEAT = 1
 NAMING_EXTEND = 2
@@ -147,7 +147,7 @@ class Quality:
             if regex_match:
                 return x
 
-        checkName = lambda list, func: func([re.search(x, name, re.I) for x in list])
+        checkName = lambda namelist, func: func([re.search(x, name, re.I) for x in namelist])
         if checkName(["TrollHD"], all):
             return Quality.FULLHDBLURAY
         elif checkName(["(pdtv|hdtv|dsr|hdtvrip|webrip|webhdrip|tvrip)(.repack)?.(xvi-?d)"], all) and not checkName(["HR", "WS"], all) and not checkName(["(720|1080)[pi]"], all):

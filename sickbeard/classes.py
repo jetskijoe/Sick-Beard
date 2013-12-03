@@ -72,7 +72,8 @@ class SearchResult:
     """
 
     def __init__(self, episodes):
-        self.provider = None
+        self.provider = -1
+
         # URL to the NZB/torrent file
         self.url = ""
 
@@ -83,13 +84,13 @@ class SearchResult:
         self.episodes = episodes
 
         # quality of the release
-        self.quality = -1
+        self.quality = Quality.UNKNOWN
+
         # release name
         self.name = ""
-        # size of the release. -1 = n/a
-        self.size = -1
 
     def __str__(self):
+
         if self.provider == None:
             return "Invalid provider, unable to print self"
 
@@ -97,16 +98,10 @@ class SearchResult:
         myString += "Extra Info:\n"
         for extra in self.extraInfo:
             myString += "  " + extra + "\n"
-
-        myString += "Episode: " + str(self.episodes) + "\n"
-        myString += "Quality: " + Quality.qualityStrings[self.quality] + "\n"
-        myString += "Name: " + self.name + "\n"
-        myString += "Size: " + str(self.size) + "\n"
         return myString
 
     def fileName(self):
         return self.episodes[0].prettyName() + "." + self.resultType
-
 
 class NZBSearchResult(SearchResult):
     """
@@ -114,13 +109,11 @@ class NZBSearchResult(SearchResult):
     """
     resultType = "nzb"
 
-
 class NZBDataSearchResult(SearchResult):
     """
     NZB result where the actual NZB XML data is stored in the extraInfo
     """
     resultType = "nzbdata"
-
 
 class TorrentSearchResult(SearchResult):
     """
@@ -150,21 +143,20 @@ class ShowListUI:
         # if nothing matches then just go with the first match I guess
         return allSeries[0]
 
-
 class Proper:
     def __init__(self, name, url, date):
         self.name = name
         self.url = url
         self.date = date
         self.provider = None
-        self.quality = -1
+        self.quality = Quality.UNKNOWN
 
         self.tvdbid = -1
         self.season = -1
         self.episode = -1
 
     def __str__(self):
-        return str(self.date) + " " + self.name + " " + str(self.season) + "x" + str(self.episode) + " of " + str(self.tvdbid)
+        return str(self.date)+" "+self.name+" "+str(self.season)+"x"+str(self.episode)+" of "+str(self.tvdbid)
 
 
 class ErrorViewer():
