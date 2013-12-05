@@ -16,6 +16,9 @@
 # You should have received a copy of the GNU General Public License
 # along with Sick Beard.  If not, see <http://www.gnu.org/licenses/>.
 
+import os
+from glob import glob
+
 import sickbeard
 
 from sickbeard.common import countryList
@@ -23,6 +26,7 @@ from sickbeard.helpers import sanitizeSceneName
 from sickbeard.scene_exceptions import get_scene_exceptions
 from sickbeard import logger
 from sickbeard import db
+from sickbeard import encodingKludge as ek
 
 import re
 import datetime
