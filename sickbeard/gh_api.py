@@ -23,16 +23,19 @@ except ImportError:
 
 import helpers
 
+
 class GitHub(object):
     """
     Simple api wrapper for the Github API v3. Currently only supports the small thing that SB
     needs it for - list of commits.
     """
-    
+
     def __init__(self, github_repo_user, github_repo, branch='master'):
+
         self.github_repo_user = github_repo_user
         self.github_repo = github_repo
         self.branch = branch
+
     def _access_API(self, path, params=None):
         """
         Access the API at the path given and with the optional params given.
@@ -42,18 +45,20 @@ class GitHub(object):
 
         Returns a deserialized json object of the result. Doesn't do any error checking (hope it works).
         """
-        
+
         url = 'https://api.github.com/' + '/'.join(path)
-        
+
         if params and type(params) is dict:
             url += '?' + '&'.join([str(x) + '=' + str(params[x]) for x in params.keys()])
+
         data = helpers.getURL(url)
+
         if data:
             json_data = json.loads(data)
             return json_data
         else:
             return []
-    
+
     def commits(self):
         """
         Uses the API to get a list of the 100 most recent commits from the specified user/repo/branch, starting from HEAD.

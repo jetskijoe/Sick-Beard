@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Sick Beard.  If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import with_statement 
+from __future__ import with_statement
 
 import os.path
 import re
@@ -32,6 +32,7 @@ from sickbeard.exceptions import ex
 
 db_lock = threading.Lock()
 
+
 def dbFilename(filename="sickbeard.db", suffix=None):
     """
     @param filename: The sqlite database filename to use. If not specified,
@@ -43,6 +44,7 @@ def dbFilename(filename="sickbeard.db", suffix=None):
     if suffix:
         filename = "%s.%s" % (filename, suffix)
     return ek.ek(os.path.join, sickbeard.DATA_DIR, filename)
+
 
 class DBConnection:
     def __init__(self, filename="sickbeard.db", suffix=None, row_type=None):
@@ -60,17 +62,22 @@ class DBConnection:
         except sqlite3.OperationalError, e:
             if "no such table: db_version" in e.message:
                 return 0
+
         if result:
             return int(result[0]["db_version"])
         else:
             return 0
 
     def mass_action(self, querylist, logTransaction=False):
+
         with db_lock:
+
             if querylist == None:
                 return
+
             sqlResult = []
             attempt = 0
+
             while attempt < 5:
                 try:
                     for qu in querylist:
@@ -102,42 +109,43 @@ class DBConnection:
                         self.connection.rollback()
                     logger.log(u"Fatal error executing query: " + ex(e), logger.ERROR)
                     raise
+
             return sqlResult
+
     def action(self, query, args=None):
 
         with db_lock:
 
             if query == None:
                 return
-    
+
             sqlResult = None
             attempt = 0
-    
+
             while attempt < 5:
                 try:
                     if args == None:
-                        logger.log(self.filename+": "+query, logger.DEBUG)
+                        logger.log(self.filename + ": " + query, logger.DEBUG)
                         sqlResult = self.connection.execute(query)
                     else:
-                        logger.log(self.filename+": "+query+" with args "+str(args), logger.DEBUG)
+                        logger.log(self.filename + ": " + query + " with args " + str(args), logger.DEBUG)
                         sqlResult = self.connection.execute(query, args)
                     self.connection.commit()
                     # get out of the connection attempt loop since we were successful
                     break
                 except sqlite3.OperationalError, e:
                     if "unable to open database file" in e.message or "database is locked" in e.message:
-                        logger.log(u"DB error: "+ex(e), logger.WARNING)
+                        logger.log(u"DB error: " + ex(e), logger.WARNING)
                         attempt += 1
                         time.sleep(1)
                     else:
-                        logger.log(u"DB error: "+ex(e), logger.ERROR)
+                        logger.log(u"DB error: " + ex(e), logger.ERROR)
                         raise
                 except sqlite3.DatabaseError, e:
                     logger.log(u"Fatal error executing query: " + ex(e), logger.ERROR)
                     raise
-    
-            return sqlResult
 
+            return sqlResult
 
     def select(self, query, args=None):
 
@@ -152,14 +160,14 @@ class DBConnection:
 
         changesBefore = self.connection.total_changes
 
-        genParams = lambda myDict : [x + " = ?" for x in myDict.keys()]
+        genParams = lambda myDict: [x + " = ?" for x in myDict.keys()]
 
-        query = "UPDATE "+tableName+" SET " + ", ".join(genParams(valueDict)) + " WHERE " + " AND ".join(genParams(keyDict))
+        query = "UPDATE " + tableName + " SET " + ", ".join(genParams(valueDict)) + " WHERE " + " AND ".join(genParams(keyDict))
 
         self.action(query, valueDict.values() + keyDict.values())
 
         if self.connection.total_changes == changesBefore:
-            query = "INSERT INTO "+tableName+" (" + ", ".join(valueDict.keys() + keyDict.keys()) + ")" + \
+            query = "INSERT INTO " + tableName + " (" + ", ".join(valueDict.keys() + keyDict.keys()) + ")" + \
                      " VALUES (" + ", ".join(["?"] * len(valueDict.keys() + keyDict.keys())) + ")"
             self.action(query, valueDict.values() + keyDict.values())
 
@@ -170,16 +178,18 @@ class DBConnection:
         for column in cursor:
             columns[column['name']] = { 'type': column['type'] }
         return columns
-    
+
     # http://stackoverflow.com/questions/3300464/how-can-i-get-dict-from-sqlite-query
     def _dict_factory(self, cursor, row):
         d = {}
         for idx, col in enumerate(cursor.description):
             d[col[0]] = row[idx]
         return d
-    
+
+
 def sanityCheckDatabase(connection, sanity_check):
     sanity_check(connection).check()
+
 
 class DBSanityCheck(object):
     def __init__(self, connection):
@@ -191,6 +201,7 @@ class DBSanityCheck(object):
 # ===============
 # = Upgrade API =
 # ===============
+
 
 def upgradeDatabase(connection, schema):
     logger.log(u"Checking database structure...", logger.MESSAGE)
@@ -218,6 +229,7 @@ def _processUpgrade(connection, upgradeClass):
 
     for upgradeSubClass in upgradeClass.__subclasses__():
         _processUpgrade(connection, upgradeSubClass)
+
 
 # Base migration class. All future DB changes should be subclassed from this class
 class SchemaUpgrade (object):

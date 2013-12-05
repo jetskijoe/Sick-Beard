@@ -255,7 +255,6 @@ class TVRage:
             result = result.decode('utf-8')
 
         urlData = result.splitlines()
-
         info = {}
 
         for x in urlData:

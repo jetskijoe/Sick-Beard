@@ -21,7 +21,6 @@ from __future__ import with_statement
 import os
 import shutil
 
-
 import sickbeard 
 from sickbeard import postProcessor
 from sickbeard import db, helpers, exceptions

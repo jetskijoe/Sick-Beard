@@ -15,7 +15,7 @@ Example usage:
 u'Cabin Fever'
 """
 __author__ = "dbr/Ben"
-__version__ = "1.8.2"
+__version__ = "1.9"
 
 import os
 import time
@@ -306,7 +306,8 @@ class Tvdb:
                 search_all_languages = False,
                 apikey = None,
                 forceConnect=False,
-                useZip=False):
+                useZip=False,
+                dvdorder=False):
 
         """interactive (True/False):
             When True, uses built-in console UI is used to select the correct show.
@@ -408,6 +409,7 @@ class Tvdb:
 
         self.config['useZip'] = useZip
 
+        self.config['dvdorder'] = dvdorder
 
         if cache is True:
             self.config['cache_enabled'] = True
@@ -616,13 +618,10 @@ class Tvdb:
         data = data.replace(u"&amp;", u"&")
         data = data.strip()
         return data
-    #end _cleanData
 
-    def _getSeries(self, series):
-        """This searches TheTVDB.com for the series name,
-        If a custom_ui UI is configured, it uses this to select the correct
-        series. If not, and interactive == True, ConsoleUI is used, if not
-        BaseUI is used to select the first result.
+    def search(self, series):
+        """This searches TheTVDB.com for the series name
+        and returns the result list
         """
         series = urllib.quote(series.encode("utf-8"))
         log().debug("Searching for show %s" % series)
@@ -632,9 +631,20 @@ class Tvdb:
             result = dict((k.tag.lower(), k.text) for k in series.getchildren())
             result['id'] = int(result['id'])
             result['lid'] = self.config['langabbv_to_id'][result['language']]
+            if 'aliasnames' in result:
+                result['aliasnames'] = result['aliasnames'].split("|")
             log().debug('Found series %(seriesname)s' % result)
             allSeries.append(result)
-        #end for series
+        
+        return allSeries
+
+    def _getSeries(self, series):
+        """This searches TheTVDB.com for the series name,
+        If a custom_ui UI is configured, it uses this to select the correct
+        series. If not, and interactive == True, ConsoleUI is used, if not
+        BaseUI is used to select the first result.
+        """
+        allSeries = self.search(series)
 
         if len(allSeries) == 0:
             log().debug('Series result returned zero')
@@ -650,16 +660,12 @@ class Tvdb:
             else:
                 log().debug('Interactively selecting show using ConsoleUI')
                 ui = ConsoleUI(config = self.config)
-            #end if config['interactive]
-        #end if custom_ui != None
 
         return ui.selectSeries(allSeries)
 
-    #end _getSeries
-
     def _parseBanners(self, sid):
         """Parses banners XML, from
-        http://www.thetvdb.com/api/[APIKEY]/series/[SERIES ID]/banners.xml
+        http://thetvdb.com/api/[APIKEY]/series/[SERIES ID]/banners.xml
 
         Banners are retrieved using t['show name]['_banners'], for example:
 
@@ -667,7 +673,7 @@ class Tvdb:
         >>> t['scrubs']['_banners'].keys()
         ['fanart', 'poster', 'series', 'season']
         >>> t['scrubs']['_banners']['poster']['680x1000']['35308']['_bannerpath']
-        u'http://www.thetvdb.com/banners/posters/76156-2.jpg'
+        u'http://thetvdb.com/banners/posters/76156-2.jpg'
         >>>
 
         Any key starting with an underscore has been processed (not the raw
@@ -711,7 +717,7 @@ class Tvdb:
 
     def _parseActors(self, sid):
         """Parsers actors XML, from
-        http://www.thetvdb.com/api/[APIKEY]/series/[SERIES ID]/actors.xml
+        http://thetvdb.com/api/[APIKEY]/series/[SERIES ID]/actors.xml
 
         Actors are retrieved using t['show name]['_actors'], for example:
 
@@ -728,7 +734,7 @@ class Tvdb:
         >>> actors[0]['name']
         u'Zach Braff'
         >>> actors[0]['image']
-        u'http://www.thetvdb.com/banners/actors/43640.jpg'
+        u'http://thetvdb.com/banners/actors/43640.jpg'
 
         Any key starting with an underscore has been processed (not the raw
         data from the XML)
@@ -807,8 +813,20 @@ class Tvdb:
         epsEt = self._getetsrc( url, language=language)
 
         for cur_ep in epsEt.findall("Episode"):
-            seas_no = int(cur_ep.find('SeasonNumber').text)
-            ep_no = int(cur_ep.find('EpisodeNumber').text)
+
+            if self.config['dvdorder']:
+                log().debug('Using DVD ordering.')
+                use_dvd = cur_ep.find('DVD_season').text != None and cur_ep.find('DVD_episodenumber').text != None
+            else:
+                use_dvd = False
+
+            if use_dvd:
+                seas_no = int(cur_ep.find('DVD_season').text)
+                ep_no   = int(float(cur_ep.find('DVD_episodenumber').text))
+            else:
+                seas_no = int(cur_ep.find('SeasonNumber').text)
+                ep_no = int(cur_ep.find('EpisodeNumber').text)
+
             for cur_item in cur_ep.getchildren():
                 tag = cur_item.tag.lower()
                 value = cur_item.text

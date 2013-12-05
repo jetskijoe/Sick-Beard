@@ -107,7 +107,7 @@ class Quality:
     def _getStatusStrings(status):
         toReturn = {}
         for x in Quality.qualityStrings.keys():
-            toReturn[Quality.compositeStatus(status, x)] = Quality.statusPrefixes[status]+" ("+Quality.qualityStrings[x]+")"
+            toReturn[Quality.compositeStatus(status, x)] = Quality.statusPrefixes[status] + " (" + Quality.qualityStrings[x] + ")"
         return toReturn
 
     @staticmethod
@@ -118,7 +118,7 @@ class Quality:
             anyQuality = reduce(operator.or_, anyQualities)
         if bestQualities:
             bestQuality = reduce(operator.or_, bestQualities)
-        return anyQuality | (bestQuality<<16)
+        return anyQuality | (bestQuality << 16)
 
     @staticmethod
     def splitQuality(quality):
@@ -127,14 +127,13 @@ class Quality:
         for curQual in Quality.qualityStrings.keys():
             if curQual & quality:
                 anyQualities.append(curQual)
-            if curQual<<16 & quality:
+            if curQual << 16 & quality:
                 bestQualities.append(curQual)
 
         return (sorted(anyQualities), sorted(bestQualities))
 
     @staticmethod
     def nameQuality(name):
-
         name = os.path.basename(name)
 
         # if we have our exact text then assume we put it there
@@ -142,7 +141,7 @@ class Quality:
             if x == Quality.UNKNOWN:
                 continue
 
-            regex = '\W'+Quality.qualityStrings[x].replace(' ','\W')+'\W'
+            regex = '\W' + Quality.qualityStrings[x].replace(' ', '\W') + '\W'
             regex_match = re.search(regex, name, re.I)
             if regex_match:
                 return x
@@ -202,10 +201,10 @@ class Quality:
         """Returns a tuple containing (status, quality)"""
         if status == UNKNOWN:
             return (UNKNOWN, Quality.UNKNOWN)
-        
+
         for x in sorted(Quality.qualityStrings.keys(), reverse=True):
-            if status > x*100:
-                return (status-x*100, x)
+            if status > x * 100:
+                return (status - x * 100, x)
 
         return (status, Quality.NONE)
 
@@ -238,12 +237,13 @@ qualityPresetStrings = {SD: "SD",
                         HD1080p: "HD1080p",
                         ANY: "Any"}
 
+
 class StatusStrings:
     def __init__(self):
         self.statusStrings = {UNKNOWN: "Unknown",
                               UNAIRED: "Unaired",
                               SNATCHED: "Snatched",
-                              DOWNLOADED:  "Downloaded",
+                              DOWNLOADED: "Downloaded",
                               SKIPPED: "Skipped",
                               SNATCHED_PROPER: "Snatched (Proper)",
                               WANTED: "Wanted",
