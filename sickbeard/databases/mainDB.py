@@ -21,7 +21,6 @@ import os.path
 import sys
 
 from sickbeard import db, common, helpers, logger
-from sickbeard.providers.generic import GenericProvider
 
 from sickbeard import encodingKludge as ek
 from sickbeard.name_parser.parser import NameParser, InvalidNameException

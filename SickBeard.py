@@ -19,17 +19,20 @@
 
 # Check needed software dependencies to nudge users to fix their setup
 import sys
-if sys.version_info < (2, 5):
-    sys.exit("Sorry, requires Python 2.5, 2.6 or 2.7.")
+if sys.version_info < (2, 6):
+    print "Sorry, requires Python 2.6 or 2.7."
+    sys.exit(1)
 
 try:
     import Cheetah
     if Cheetah.Version[0] != '2':
         raise ValueError
 except ValueError:
-    sys.exit("Sorry, requires Python module Cheetah 2.1.0 or newer.")
+    print "Sorry, requires Python module Cheetah 2.1.0 or newer."
+    sys.exit(1)
 except:
-    sys.exit("The Python module Cheetah is required")
+    print "The Python module Cheetah is required"
+    sys.exit(1)
 
 # We only need this for compiling an EXE and I will just always do that on 2.6+
 if sys.hexversion >= 0x020600F0:

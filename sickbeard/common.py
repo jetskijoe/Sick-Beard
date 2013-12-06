@@ -146,7 +146,7 @@ class Quality:
             if regex_match:
                 return x
 
-        checkName = lambda namelist, func: func([re.search(x, name, re.I) for x in namelist])
+        checkName = lambda list, func: func([re.search(x, name, re.I) for x in list])
         if checkName(["TrollHD"], all):
             return Quality.FULLHDBLURAY
         elif checkName(["(pdtv|hdtv|dsr|hdtvrip|webrip|webhdrip|tvrip)(.repack)?.(xvi-?d)"], all) and not checkName(["HR", "WS"], all) and not checkName(["(720|1080)[pi]"], all):
