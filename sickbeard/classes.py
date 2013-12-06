@@ -72,7 +72,7 @@ class SearchResult:
     """
 
     def __init__(self, episodes):
-        self.provider = -1
+        self.provider = None
 
         # URL to the NZB/torrent file
         self.url = ""
@@ -84,10 +84,11 @@ class SearchResult:
         self.episodes = episodes
 
         # quality of the release
-        self.quality = Quality.UNKNOWN
+        self.quality = -1
 
         # release name
         self.name = ""
+        self.size = -1
 
     def __str__(self):
 
@@ -98,6 +99,10 @@ class SearchResult:
         myString += "Extra Info:\n"
         for extra in self.extraInfo:
             myString += "  " + extra + "\n"
+        myString += "Episode: " + str(self.episodes) + "\n"
+        myString += "Quality: " + Quality.qualityStrings[self.quality] + "\n"
+        myString += "Name: " + self.name + "\n"
+        myString += "Size: " + str(self.size) + "\n"
         return myString
 
     def fileName(self):
@@ -149,7 +154,7 @@ class Proper:
         self.url = url
         self.date = date
         self.provider = None
-        self.quality = Quality.UNKNOWN
+        self.quality = -1
 
         self.tvdbid = -1
         self.season = -1

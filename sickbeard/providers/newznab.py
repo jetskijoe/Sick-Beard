@@ -196,7 +196,7 @@ class NewznabProvider(generic.NZBProvider):
         params = {"t": "tvsearch",
                   "maxage": sickbeard.USENET_RETENTION,
                   "limit": 100,
-                  "cat": self.catIDs}
+                  "cat": '5030,5040,5050,5070,5080'}
 
         # if max_age is set, use it, don't allow it to be missing
         if max_age or not params['maxage']:
@@ -205,7 +205,7 @@ class NewznabProvider(generic.NZBProvider):
         if search_params:
             params.update(search_params)
 
-        if self.needs_auth and self.key:
+        if self.key:
             params['apikey'] = self.key
 
         search_url = self.url + 'api?' + urllib.urlencode(params)
@@ -301,9 +301,10 @@ class NewznabCache(tvcache.TVCache):
     def _getRSSData(self):
 
         params = {"t": "tvsearch",
-                  "cat": self.provider.catIDs}
+                  "cat": '5030,5040,5050,5070,5080'}
 
-        if self.provider.needs_auth and self.provider.key:
+
+        if self.provider.key:
             params['apikey'] = self.provider.key
 
         rss_url = self.provider.url + 'api?' + urllib.urlencode(params)
