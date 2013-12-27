@@ -22,7 +22,7 @@
 import sys
 import autoProcessTV
 
-if len(sys.argv) < 8:
+if len(sys.argv) < 3:
     print "Not enough arguments received from SABnzbd. Please update it."
     sys.exit()
 else:
