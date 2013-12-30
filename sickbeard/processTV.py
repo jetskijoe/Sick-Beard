@@ -121,6 +121,7 @@ def _processNormal(dirName, nzbName=None, recurse=False):
                     returnStr += logHelper(u"Warning: unable to remove the folder " + dirName + ": " + ex(e), logger.WARNING)
 
             returnStr += logHelper(u"Processing succeeded for "+cur_video_file_path)
+
     return returnStr
 def processDir(dirName, nzbName=None, recurse=False, failed=False):
     """

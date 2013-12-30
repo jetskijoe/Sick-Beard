@@ -654,6 +654,7 @@ class PostProcessor(object):
 
             # generate a safe command line string to execute the script and provide all the parameters
             script_cmd = [piece for piece in re.split("( |\\\".*?\\\"|'.*?')", curScriptName) if piece.strip()]
+            self._log(u"abspath: " + os.path.abspath, logger.DEBUG)
             script_cmd[0] = ek.ek(os.path.abspath, script_cmd[0])
             self._log(u"Absolute path to script: " + script_cmd[0], logger.DEBUG)
             script_cmd = script_cmd + [ep_obj.location, self.file_path, str(ep_obj.show.tvdbid), str(ep_obj.season), str(ep_obj.episode), str(ep_obj.airdate)]
