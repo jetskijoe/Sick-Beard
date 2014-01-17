@@ -42,7 +42,7 @@ from sickbeard.exceptions import ex, AuthException
 
 class NewznabProvider(generic.NZBProvider):
 
-    def __init__(self, name, url, key='', catIDs='5030,5040,5050,5060,5070,5080'):
+    def __init__(self, name, url, key='', catIDs='5030,5040'):
 
         generic.NZBProvider.__init__(self, name)
 
@@ -61,7 +61,7 @@ class NewznabProvider(generic.NZBProvider):
         if catIDs:
             self.catIDs = catIDs
         else:
-            self.catIDs = '5030,5040,5050,5060,5070,5080'
+            self.catIDs = '5030,5040'
 
         self.enabled = True
         self.supportsBacklog = True
@@ -196,7 +196,7 @@ class NewznabProvider(generic.NZBProvider):
         params = {"t": "tvsearch",
                   "maxage": sickbeard.USENET_RETENTION,
                   "limit": 100,
-                  "cat": '5030,5040,5050,5060,5070,5080'}
+                  "cat": self.catIDs}
 
         # if max_age is set, use it, don't allow it to be missing
         if max_age or not params['maxage']:
@@ -205,7 +205,7 @@ class NewznabProvider(generic.NZBProvider):
         if search_params:
             params.update(search_params)
 
-        if self.key:
+        if self.needs_auth and self.key:
             params['apikey'] = self.key
 
         search_url = self.url + 'api?' + urllib.urlencode(params)
@@ -301,7 +301,7 @@ class NewznabCache(tvcache.TVCache):
     def _getRSSData(self):
 
         params = {"t": "tvsearch",
-                  "cat": '5030,5040,5050,5060,070,5080'}
+                  "cat": self.provider.catIDs}
 
 
         if self.provider.key:
