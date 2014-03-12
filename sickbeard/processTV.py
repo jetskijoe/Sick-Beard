@@ -164,7 +164,7 @@ def _processNormal(dirName, nzbName=None, recurse=False):
             returnStr += logHelper(u"Ignoring hidden folder: " + cur_folder, logger.DEBUG)
         else:
             returnStr += logHelper(u"Recursively processing a folder: " + cur_folder, logger.DEBUG)
-            returnStr += _processNormal(cur_folder, nzbName=parent_nzbName, recurse=True, method=method, pp_options=pp_options)
+            returnStr += _processNormal(cur_folder, nzbName=parent_nzbName, recurse=True)
 
     remainingFolders = filter(lambda x: ek.ek(os.path.isdir, ek.ek(os.path.join, dirName, x)), fileList)
 
