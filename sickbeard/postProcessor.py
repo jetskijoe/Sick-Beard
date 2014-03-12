@@ -62,7 +62,7 @@ class PostProcessor(object):
     FOLDER_NAME = 2
     FILE_NAME = 3
 
-    def __init__(self, file_path, nzb_name=None, pp_options={}):
+    def __init__(self, file_path, nzb_name=None):
         """
         Creates a new post processor with the given file path and optionally an NZB name.
 

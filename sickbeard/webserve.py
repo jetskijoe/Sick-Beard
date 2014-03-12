@@ -1386,12 +1386,10 @@ class HomePostProcess:
         if not dir:
             redirect("/home/postprocess/")
         else:
-            pp_options = {}
             for key, value in kwargs.iteritems():
                 if value == 'on':
                     value = True
-                pp_options[key] = value
-            result = processTV.processDir(dir, nzbName, method=method, pp_options=pp_options)
+            result = processTV.processDir(dir, nzbName, method=method)
             if quiet != None and int(quiet) == 1:
                 return result
 

@@ -65,7 +65,7 @@ def logHelper (logMessage, logLevel=logger.MESSAGE):
     logger.log(logMessage, logLevel)
     return logMessage + u"\n"
 
-def processDir(dirName, nzbName=None, method=None, recurse=False, pp_options={}, failed=False):
+def processDir(dirName, nzbName=None, method=None, recurse=False, failed=False):
     """
     Scans through the files in dirName and processes whatever media files it finds
     dirName: The folder name to look in
@@ -195,7 +195,7 @@ def _processNormal(dirName, nzbName=None, recurse=False):
             continue
         try:
             returnStr += u"\n"
-            processor = postProcessor.PostProcessor(cur_video_file_path, nzb_name=nzbName, pp_options=pp_options)
+            processor = postProcessor.PostProcessor(cur_video_file_path, nzb_name=nzbName)
             process_result = processor.process()
             process_fail_message = ""
         except exceptions.PostProcessingFailed, e:
