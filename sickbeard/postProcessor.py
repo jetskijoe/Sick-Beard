@@ -678,9 +678,7 @@ class PostProcessor(object):
         if old_ep_status == common.ARCHIVED:
             self._log(u"Existing episode status is archived, marking it unsafe to replace", logger.DEBUG)
             return False
-        if self.force_replace:
-            self._log(u"Processed episode is set to force replace existing episode, marking it safe to replace", logger.DEBUG)
-            return True
+
 
         # if the user downloaded it manually and it appears to be a PROPER/REPACK then it's priority
         if new_ep_quality > old_ep_quality and new_ep_quality != common.Quality.UNKNOWN:
