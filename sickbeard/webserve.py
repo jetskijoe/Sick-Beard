@@ -839,7 +839,7 @@ class ConfigPostProcessing:
     def savePostProcessing(self, naming_pattern=None, naming_multi_ep=None,
                     xbmc_data=None, xbmc_12plus_data=None, mediabrowser_data=None, sony_ps3_data=None, wdtv_data=None, tivo_data=None,
                     keep_processed_dir=None, process_automatically=None, rename_episodes=None,
-                    move_associated_files=None, tv_download_dir=None, naming_custom_abd=None, naming_abd_pattern=None):
+                    move_associated_files=None, tv_download_dir=None, naming_custom_abd=None, naming_abd_pattern=None, delete_failed=None):
 
         results = []
 
@@ -855,6 +855,10 @@ class ConfigPostProcessing:
 
 
 
+        if delete_failed == "on":
+            delete_failed = 1
+        else:
+            delete_failed = 0
 
         sickbeard.PROCESS_AUTOMATICALLY = config.checkbox_to_value(process_automatically)
         if sickbeard.PROCESS_AUTOMATICALLY:
@@ -864,6 +868,7 @@ class ConfigPostProcessing:
 
         # Naming
         sickbeard.NAMING_CUSTOM_ABD = config.checkbox_to_value(naming_custom_abd)
+        sickbeard.DELETE_FAILED = delete_failed
 
 
         if self.isNamingValid(naming_pattern, naming_multi_ep) != "invalid":
@@ -1381,15 +1386,17 @@ class HomePostProcess:
         return _munge(t)
 
     @cherrypy.expose
-    def processEpisode(self, dir=None, nzbName=None, method=None, jobName=None, quiet=None, *args, **kwargs):
+    def processEpisode(self, dir=None, nzbName=None, jobName=None, quiet=None, failed="0"):
 
+        if failed == "0":
+            failed = False
+        else:
+            failed = True
         if not dir:
             redirect("/home/postprocess/")
         else:
-            for key, value in kwargs.iteritems():
-                if value == 'on':
-                    value = True
-            result = processTV.processDir(dir, nzbName, method=method)
+
+            result = processTV.processDir(dir, nzbName, failed=failed)
             if quiet != None and int(quiet) == 1:
                 return result
 
