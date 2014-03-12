@@ -76,7 +76,7 @@ def processEpisode(dirName, nzbName=None, failed=False):
     
     params['quiet'] = 1
 
-    params['dirName'] = dirName
+    params['dir'] = dirName
     if nzbName != None:
         params['nzbName'] = nzbName
 
