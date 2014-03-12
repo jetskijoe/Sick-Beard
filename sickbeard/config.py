@@ -555,6 +555,8 @@ class ConfigMigrator():
 
             sickbeard.NEWZNAB_DATA = "!!!".join(new_newznab_data)
 
+    def _migrate_v5(self):
+        """ Updates metadata values to the new format """
         """ Quick overview of what the upgrade does:
 
         new | old | description (new)
