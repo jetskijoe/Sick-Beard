@@ -205,7 +205,6 @@ def _processNormal(dirName, nzbName=None, recurse=False):
         except Exception, e:
             process_result = False
             process_fail_message = "Post Processor returned unhandled exception: " + ex(e)
-        returnStr += processor.log 
 
         # as long as the postprocessing was successful delete the old folder unless the config wants us not to
         if process_result:
