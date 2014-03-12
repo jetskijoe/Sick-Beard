@@ -211,6 +211,10 @@ def pickBestResult(results, quality_list=None):
             logger.log(cur_result.name+" is a quality we know we don't want, rejecting it", logger.DEBUG)
             continue
 
+        if cur_result.provider.providerType != GenericProvider.TORRENT:
+            if failed_history.hasFailed(cur_result.name, cur_result.size):
+                logger.log(cur_result.name + u" has previously failed, rejecting it")
+                continue
         
         if not bestResult or bestResult.quality < cur_result.quality and cur_result.quality != Quality.UNKNOWN:
             bestResult = cur_result
@@ -445,6 +449,9 @@ def findSeason(show, season):
         for multiResult in foundResults[MULTI_EP_RESULT]:
 
             logger.log(u"Seeing if we want to bother with multi-episode result "+multiResult.name, logger.DEBUG)
+            if failed_history.hasFailed(multiResult.name, multiResult.size):
+                logger.log(multiResult.name + u" has previously failed, rejecting this multi-ep result")
+                continue
 
             # see how many of the eps that this result covers aren't covered by single results
             neededEps = []
