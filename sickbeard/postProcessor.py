@@ -83,7 +83,6 @@ class PostProcessor(object):
 
         # name of the NZB that resulted in this folder
         self.nzb_name = nzb_name
-        self.force_replace = pp_options.get('force_replace', False)
 
         self.in_history = False
         self.release_group = None
