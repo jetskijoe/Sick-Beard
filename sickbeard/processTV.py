@@ -139,7 +139,7 @@ def _processFailed(dirName, nzbName):
     return returnStr
 
 
-def _processNormal(dirName, nzbName=None, method=Automatic, recurse=False):
+def _processNormal(dirName, nzbName=None recurse=False):
     """Process a download that completed without issue"""
 
     returnStr = u""
@@ -171,9 +171,8 @@ def _processNormal(dirName, nzbName=None, method=Automatic, recurse=False):
 	
     if num_videoFiles == 0:
         returnStr += logHelper(u"There are no videofiles in folder: " + dirName, logger.DEBUG)
-        if method != 'Manual':
-            if delete_folder(dirName, check_empty=True):
-                returnStr += logHelper(u"Deleted empty folder: " + dirName, logger.DEBUG)
+        if delete_folder(dirName, check_empty=True):
+            returnStr += logHelper(u"Deleted empty folder: " + dirName, logger.DEBUG)
     # If nzbName is set and there's more than one videofile in the folder, files will be lost (overwritten).
     if num_videoFiles >= 2:
         nzbName = None
@@ -183,17 +182,17 @@ def _processNormal(dirName, nzbName=None, method=Automatic, recurse=False):
 
         cur_video_file_path = ek.ek(os.path.join, dirName, cur_video_file)
 
-        if method == 'Automatic':
-            cur_video_file_path_size = ek.ek(os.path.getsize, cur_video_file_path)
-            myDB = db.DBConnection()
-            search_sql = "SELECT tv_episodes.tvdbid, history.resource FROM tv_episodes INNER JOIN history ON history.showid=tv_episodes.showid"
-            search_sql += " WHERE history.season=tv_episodes.season and history.episode=tv_episodes.episode"
-            search_sql += " and tv_episodes.status IN (" + ",".join([str(x) for x in common.Quality.DOWNLOADED]) + ")"
-            search_sql += " and history.resource LIKE ? and tv_episodes.file_size = ?"
-            sql_results = myDB.select(search_sql, [cur_video_file_path, cur_video_file_path_size])
-            if len(sql_results):
-                returnStr += logHelper(u"Ignoring file: " + cur_video_file_path + " looks like it's been processed already", logger.DEBUG)
-                continue
+
+        cur_video_file_path_size = ek.ek(os.path.getsize, cur_video_file_path)
+        myDB = db.DBConnection()
+        search_sql = "SELECT tv_episodes.tvdbid, history.resource FROM tv_episodes INNER JOIN history ON history.showid=tv_episodes.showid"
+        search_sql += " WHERE history.season=tv_episodes.season and history.episode=tv_episodes.episode"
+        search_sql += " and tv_episodes.status IN (" + ",".join([str(x) for x in common.Quality.DOWNLOADED]) + ")"
+        search_sql += " and history.resource LIKE ? and tv_episodes.file_size = ?"
+        sql_results = myDB.select(search_sql, [cur_video_file_path, cur_video_file_path_size])
+        if len(sql_results):
+            returnStr += logHelper(u"Ignoring file: " + cur_video_file_path + " looks like it's been processed already", logger.DEBUG)
+            continue
         try:
             returnStr += u"\n"
             processor = postProcessor.PostProcessor(cur_video_file_path, nzb_name=nzbName, pp_options=pp_options)
