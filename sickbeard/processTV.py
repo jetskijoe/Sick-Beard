@@ -139,7 +139,7 @@ def _processFailed(dirName, nzbName):
     return returnStr
 
 
-def _processNormal(dirName, nzbName=None recurse=False):
+def _processNormal(dirName, nzbName=None, recurse=False):
     """Process a download that completed without issue"""
 
     returnStr = u""
