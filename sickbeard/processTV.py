@@ -168,6 +168,7 @@ def _processNormal(dirName, nzbName=None, recurse=False):
 
     remainingFolders = filter(lambda x: ek.ek(os.path.isdir, ek.ek(os.path.join, dirName, x)), fileList)
 
+	
     if num_videoFiles == 0:
         returnStr += logHelper(u"There are no videofiles in folder: " + dirName, logger.DEBUG)
         if method != 'Manual':
