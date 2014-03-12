@@ -19,20 +19,17 @@
 
 # Check needed software dependencies to nudge users to fix their setup
 import sys
-if sys.version_info < (2, 6):
-    print "Sorry, requires Python 2.6 or 2.7."
-    sys.exit(1)
+if sys.version_info < (2, 5):
+    sys.exit("Sorry, requires Python 2.5, 2.6 or 2.7.")
 
 try:
     import Cheetah
     if Cheetah.Version[0] != '2':
         raise ValueError
 except ValueError:
-    print "Sorry, requires Python module Cheetah 2.1.0 or newer."
-    sys.exit(1)
+    sys.exit("Sorry, requires Python module Cheetah 2.1.0 or newer.")
 except:
-    print "The Python module Cheetah is required"
-    sys.exit(1)
+    sys.exit("The Python module Cheetah is required")
 
 # We only need this for compiling an EXE and I will just always do that on 2.6+
 if sys.hexversion >= 0x020600F0:
@@ -117,9 +114,7 @@ def daemonize():
         try:
             file(sickbeard.PIDFILE, 'w').write("%s\n" % pid)
         except IOError, e:
-            error_msg = "Unable to write PID file: " + sickbeard.PIDFILE + " Error: " + str(e.strerror) + " [" + str(e.errno) + "]"
-            logger.log(u"" + error_msg, logger.ERROR)
-            sys.exit(error_msg)
+            logger.log_error_and_exit(u"Unable to write PID file: " + sickbeard.PIDFILE + " Error: " + str(e.strerror) + " [" + str(e.errno) + "]")
 
     # Redirect all output
     sys.stdout.flush()

@@ -296,7 +296,7 @@ class NewznabCache(tvcache.TVCache):
         tvcache.TVCache.__init__(self, provider)
 
         # only poll newznab providers every 5 minutes max
-        self.minTime = 20
+        self.minTime = 15
 
     def _getRSSData(self):
 

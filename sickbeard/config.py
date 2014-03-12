@@ -20,7 +20,6 @@ import cherrypy
 import os.path
 import datetime
 import re
-import sys
 
 from sickbeard import helpers
 from sickbeard import logger
@@ -80,6 +79,7 @@ def change_LOG_DIR(log_dir, web_log):
 
     log_dir_changed = False
     abs_log_dir = os.path.normpath(os.path.join(sickbeard.DATA_DIR, log_dir))
+    web_log_value = checkbox_to_value(web_log)
 
     if os.path.normpath(sickbeard.LOG_DIR) != abs_log_dir:
         if helpers.makeDir(abs_log_dir):
@@ -93,10 +93,10 @@ def change_LOG_DIR(log_dir, web_log):
         else:
             return False
 
-    if sickbeard.WEB_LOG != web_log or log_dir_changed == True:
-        sickbeard.WEB_LOG = web_log
+    if sickbeard.WEB_LOG != web_log_value or log_dir_changed == True:
+        sickbeard.WEB_LOG = web_log_value
 
-        if sickbeard.WEB_LOG == 1:
+        if sickbeard.WEB_LOG:
             cherry_log = os.path.join(sickbeard.LOG_DIR, "cherrypy.log")
             logger.log(u"Change cherry log file to " + cherry_log)
         else:
@@ -158,15 +158,11 @@ def change_TV_DOWNLOAD_DIR(tv_download_dir):
 
 def change_SEARCH_FREQUENCY(freq):
 
-    if freq == None:
-        freq = sickbeard.DEFAULT_SEARCH_FREQUENCY
-    else:
-        freq = int(freq)
+    sickbeard.SEARCH_FREQUENCY = to_int(freq, default=sickbeard.DEFAULT_SEARCH_FREQUENCY)
 
-    if freq < sickbeard.MIN_SEARCH_FREQUENCY:
-        freq = sickbeard.MIN_SEARCH_FREQUENCY
+    if sickbeard.SEARCH_FREQUENCY < sickbeard.MIN_SEARCH_FREQUENCY:
+        sickbeard.SEARCH_FREQUENCY = sickbeard.MIN_SEARCH_FREQUENCY
 
-    sickbeard.SEARCH_FREQUENCY = freq
 
     sickbeard.currentSearchScheduler.cycleTime = datetime.timedelta(minutes=sickbeard.SEARCH_FREQUENCY)
     sickbeard.backlogSearchScheduler.cycleTime = datetime.timedelta(minutes=sickbeard.get_backlog_cycle_time())
@@ -195,19 +191,106 @@ def CheckSection(CFG, sec):
         return False
 
 
-################################################################################
-# Check_setting_int                                                            #
-################################################################################
-def minimax(val, low, high):
-    """ Return value forced within range """
+def checkbox_to_value(option, value_on=1, value_off=0):
+    """
+    Turns checkbox option 'on' or 'true' to value_on (1)
+    any other value returns value_off (0)
+    """
+    if option == 'on' or option == 'true':
+        return value_on
+    return value_off
+def clean_host(host, default_port=None):
+    """
+    Returns host or host:port or empty string from a given url or host
+    If no port is found and default_port is given use host:default_port
+    """
+    host = host.strip()
+    if host:
+        match_host_port = re.search(r'(?:http.*://)?(?P<host>[^:/]+).?(?P<port>[0-9]*).*', host)
+
+        cleaned_host = match_host_port.group('host')
+        cleaned_port = match_host_port.group('port')
+
+        if cleaned_host:
+
+            if cleaned_port:
+                host = cleaned_host + ':' + cleaned_port
+
+            elif default_port:
+                host = cleaned_host + ':' + str(default_port)
+
+            else:
+                host = cleaned_host
+
+        else:
+            host = ''
+
+    return host
+
+
+def clean_hosts(hosts, default_port=None):
+
+    cleaned_hosts = []
+
+    for cur_host in [x.strip() for x in hosts.split(",")]:
+        if cur_host:
+            cleaned_host = clean_host(cur_host, default_port)
+            if cleaned_host:
+                cleaned_hosts.append(cleaned_host)
+
+    if cleaned_hosts:
+        cleaned_hosts = ",".join(cleaned_hosts)
+
+    else:
+        cleaned_hosts = ''
+
+    return cleaned_hosts
+
+
+def clean_url(url):
+    """
+    Returns an url starting with http:// or https:// and ending with /
+    or an empty string
+    """
+
+    if url:
+
+        if not re.match(r'https?://.*', url):
+            url = 'http://' + url
+
+        if not url.endswith('/'):
+            url = url + '/'
+
+    else:
+        url = ''
+
+    return url
+
+
+def to_int(val, default=0):
+    """ Return int value of val or default on error """
+
     try:
         val = int(val)
     except:
-        val = 0
+        val = default
+
+    return val
+
+
+################################################################################
+# Check_setting_int                                                            #
+################################################################################
+def minimax(val, default, low, high):
+    """ Return value forced within range """
+
+    val = to_int(val, default=default)
+
     if val < low:
         return low
     if val > high:
         return high
+
     return val
 
 
@@ -283,13 +366,17 @@ class ConfigMigrator():
         self.migration_names = {1: 'Custom naming',
                                 2: 'Sync backup number with version number',
                                 3: 'Rename omgwtfnzb variables',
-                                4: 'Add newznab catIDs'
+                                4: 'Add newznab catIDs',
+                                5: 'Metadata update'
                                 }
 
     def migrate_config(self):
         """
         Calls each successive migration until the config is the same version as SB expects
         """
+        if self.config_version > self.expected_config_version:
+            logger.log_error_and_exit(u"Your config version (" + str(self.config_version) + ") has been incremented past what this version of Sick Beard supports (" + str(self.expected_config_version) + ").\n" + \
+                                      "If you have used other forks or a newer version of Sick Beard, your config file may be unusable due to their modifications.")
 
         sickbeard.CONFIG_VERSION = self.config_version
 
@@ -304,8 +391,7 @@ class ConfigMigrator():
 
             logger.log(u"Backing up config before upgrade")
             if not helpers.backupVersionedFile(sickbeard.CONFIG_FILE, self.config_version):
-                logger.log(u"Config backup failed, abort upgrading config")
-                sys.exit("Config backup failed, abort upgrading config")
+                logger.log_error_and_exit(u"Config backup failed, abort upgrading config")
             else:
                 logger.log(u"Proceeding with upgrade")
 
@@ -468,3 +554,67 @@ class ConfigMigrator():
                 new_newznab_data.append("|".join(cur_provider_data_list))
 
             sickbeard.NEWZNAB_DATA = "!!!".join(new_newznab_data)
+
+        """ Quick overview of what the upgrade does:
+
+        new | old | description (new)
+        ----+-----+--------------------
+          1 |  1  | show metadata
+          2 |  2  | episode metadata
+          3 |  4  | show fanart
+          4 |  3  | show poster
+          5 |  -  | show banner
+          6 |  5  | episode thumb
+          7 |  6  | season poster
+          8 |  -  | season banner
+          9 |  -  | season all poster
+         10 |  -  | season all banner
+
+        Note that the ini places start at 1 while the list index starts at 0.
+        old format: 0|0|0|0|0|0 -- 6 places
+        new format: 0|0|0|0|0|0|0|0|0|0 -- 10 places
+
+        Drop the use of use_banner option.
+        Migrate the poster override to just using the banner option (applies to xbmc only).
+        """
+
+        metadata_xbmc = check_setting_str(self.config_obj, 'General', 'metadata_xbmc', '0|0|0|0|0|0')
+        metadata_xbmc_12plus = check_setting_str(self.config_obj, 'General', 'metadata_xbmc_12plus', '0|0|0|0|0|0')
+        metadata_mediabrowser = check_setting_str(self.config_obj, 'General', 'metadata_mediabrowser', '0|0|0|0|0|0')
+        metadata_ps3 = check_setting_str(self.config_obj, 'General', 'metadata_ps3', '0|0|0|0|0|0')
+        metadata_wdtv = check_setting_str(self.config_obj, 'General', 'metadata_wdtv', '0|0|0|0|0|0')
+        metadata_tivo = check_setting_str(self.config_obj, 'General', 'metadata_tivo', '0|0|0|0|0|0')
+
+        use_banner = bool(check_setting_int(self.config_obj, 'General', 'use_banner', 0))
+
+        def _migrate_metadata(metadata, metadata_name, use_banner):
+            cur_metadata = metadata.split('|')
+            # if target has the old number of values, do upgrade
+            if len(cur_metadata) == 6:
+                logger.log(u"Upgrading " + metadata_name + " metadata, old value: " + metadata)
+                cur_metadata.insert(4, '0')
+                cur_metadata.append('0')
+                cur_metadata.append('0')
+                cur_metadata.append('0')
+                # swap show fanart, show poster
+                cur_metadata[3], cur_metadata[2] = cur_metadata[2], cur_metadata[3]
+                # if user was using use_banner to override the poster, instead enable the banner option and deactivate poster
+                if metadata_name == 'XBMC' and use_banner:
+                    cur_metadata[4], cur_metadata[3] = cur_metadata[3], '0'
+                # write new format
+                metadata = '|'.join(cur_metadata)
+                logger.log(u"Upgrading " + metadata_name + " metadata, new value: " + metadata)
+
+            else:
+                logger.log(u"Skipping " + metadata_name + " metadata: '" + metadata + "', incorrect format", logger.ERROR)
+                metadata = '0|0|0|0|0|0|0|0|0|0'
+                logger.log(u"Setting " + metadata_name + " metadata, new value: " + metadata)
+
+            return metadata
+
+        sickbeard.METADATA_XBMC = _migrate_metadata(metadata_xbmc, 'XBMC', use_banner)
+        sickbeard.METADATA_XBMC_12PLUS = _migrate_metadata(metadata_xbmc_12plus, 'XBMC 12+', use_banner)
+        sickbeard.METADATA_MEDIABROWSER = _migrate_metadata(metadata_mediabrowser, 'MediaBrowser', use_banner)
+        sickbeard.METADATA_PS3 = _migrate_metadata(metadata_ps3, 'PS3', use_banner)
+        sickbeard.METADATA_WDTV = _migrate_metadata(metadata_wdtv, 'WDTV', use_banner)
+        sickbeard.METADATA_TIVO = _migrate_metadata(metadata_tivo, 'TIVO', use_banner)

@@ -17,7 +17,7 @@ $(document).ready(function(){
             show.parent().children('option:last').attr('selected', 'selected');
         } else{
             show.prev('option').attr('selected', 'selected');
-        };
+        }
         $("#pickShow").change();
     });
 
@@ -27,27 +27,28 @@ $(document).ready(function(){
             show.parent().children('option:first').attr('selected', 'selected');
         } else{
             show.next('option').attr('selected', 'selected');
-        };
+        }
         $("#pickShow").change();
     });
 
     $('#changeStatus').click(function(){
-        var sbRoot = $('#sbRoot').val()
-        var epArr = new Array()
+        var sbRoot = $('#sbRoot').val();
+        var epArr = new Array();
 
         $('.epCheck').each(function() {
       
             if (this.checked == true) {
-                epArr.push($(this).attr('id'))
+                epArr.push($(this).attr('id'));
             }
 
         });  
 
-        if (epArr.length == 0)
-            return false
+        if (epArr.length == 0) {
+            return false;
+        }
 
-        url = sbRoot+'/home/setStatus?show='+$('#showID').attr('value')+'&eps='+epArr.join('|')+'&status='+$('#statusSelect').attr('value')
-        window.location.href = url
+        url = sbRoot + '/home/setStatus?show=' + $('#showID').attr('value') + '&eps=' + epArr.join('|') + '&status=' + $('#statusSelect').attr('value');
+        window.location.href = url;
 
     });
 
@@ -56,10 +57,10 @@ $(document).ready(function(){
         var seasNo = $(seasCheck).attr('id');
 
         $('.epCheck:visible').each(function(){
-            var epParts = $(this).attr('id').split('x')
+            var epParts = $(this).attr('id').split('x');
 
             if (epParts[0] == seasNo) {
-                this.checked = seasCheck.checked
+                this.checked = seasCheck.checked;
             }
         });
     });
@@ -81,8 +82,9 @@ $(document).ready(function(){
           case 1: this.checked = lastCheck.checked;
         }
 
-        if (this == check || this == lastCheck)
+        if (this == check || this == lastCheck) {
           found++;
+        }
       });
 
       lastClick = this;
@@ -91,41 +93,38 @@ $(document).ready(function(){
     // selects all visible episode checkboxes.
     $('.seriesCheck').click(function(){
         $('.epCheck:visible').each(function(){
-                this.checked = true
+                this.checked = true;
         });
         $('.seasonCheck:visible').each(function(){
-                this.checked = true
-        })
+                this.checked = true;
+        });
     });
 
     // clears all visible episode checkboxes and the season selectors
     $('.clearAll').click(function(){
         $('.epCheck:visible').each(function(){
-                this.checked = false
+                this.checked = false;
         });
         $('.seasonCheck:visible').each(function(){
-                this.checked = false
+                this.checked = false;
         });
     });
 
     // handle the show selection dropbox
     $('#pickShow').change(function(){
-        var sbRoot = $('#sbRoot').val()
-        var val = $(this).attr('value')
-        if (val == 0)
-            return
-        url = sbRoot+'/home/displayShow?show='+val
-        window.location.href = url
+        var sbRoot = $('#sbRoot').val();
+        var val = $(this).attr('value');
+        if (val == 0) {
+            return;
+        }
+        url = sbRoot + '/home/displayShow?show=' + val;
+        window.location.href = url;
     });
 
     // show/hide different types of rows when the checkboxes are changed
     $("#checkboxControls input").change(function(e){
-        var whichClass = $(this).attr('id')
-        $(this).showHideRows(whichClass)
-        return
-        $('tr.'+whichClass).each(function(i){
-            $(this).toggle();
-        });
+        var whichClass = $(this).attr('id');
+        $(this).showHideRows(whichClass);
     }); 
 
     // initially show/hide all the rows according to the checkboxes
@@ -142,7 +141,7 @@ $(document).ready(function(){
     
     $.fn.showHideRows = function(whichClass){
 
-        var status = $('#checkboxControls > input, #'+whichClass).prop('checked')
+        var status = $('#checkboxControls > input, #' + whichClass).prop('checked');
         $("tr."+whichClass).each(function(e){
             if (status) {
                 $(this).show();
@@ -153,20 +152,20 @@ $(document).ready(function(){
 
         // hide season headers with no episodes under them
         $('tr.seasonheader').each(function(){
-            var numRows = 0
-            var seasonNo = $(this).attr('id')
+            var numRows = 0;
+            var seasonNo = $(this).attr('id');
             $('tr.'+seasonNo+' :visible').each(function(){
-                numRows++
-            })
+                numRows++;
+            });
             if (numRows == 0) {
-                $(this).hide()
-                $('#'+seasonNo+'-cols').hide()
+                $(this).hide();
+                $('#' + seasonNo + '-cols').hide();
             } else {
-                $(this).show()
-                $('#'+seasonNo+'-cols').show()
+                $(this).show();
+                $('#' + seasonNo + '-cols').show();
             }
 
          });
-    }
+    };
 
 });

@@ -1,10 +1,11 @@
-if (sbHttpsEnabled != "False" && sbHttpsEnabled != 0) 
+if (sbHttpsEnabled != "False" && sbHttpsEnabled != 0) {
 	var sb_base_url = 'https://'+sbHost+':'+sbHttpPort+sbRoot;
-else
+} else {
     var sb_base_url = 'http://'+sbHost+':'+sbHttpPort+sbRoot;
+}
 
 var base_url = window.location.protocol+'//'+window.location.host+sbRoot;
-var is_alive_url = sbRoot+'/home/is_alive';
+var is_alive_url = sbRoot + '/home/is_alive/';
 var timeout_id;
 var current_pid = '';
 var num_restart_waits = 0;
@@ -30,14 +31,13 @@ function is_alive() {
                 $('#restart_loading').hide();
                 $('#restart_success').show();
                 $('#refresh_message').show();
-                window.location = sb_base_url+'/home';
+                window.location = sb_base_url + '/home/';
             }
         }
     }, 'jsonp');
 }
 
-$(document).ready(function() 
-{ 
+$(document).ready(function() {
 
     is_alive();
     
@@ -47,7 +47,7 @@ $(document).ready(function()
         $('#shut_down_loading').hide();
         $('#shut_down_success').show();
         $('#restart_message').show();
-        is_alive_url = sb_base_url+'/home/is_alive';
+        is_alive_url = sb_base_url + '/home/is_alive/';
 
         // if https is enabled or you are currently on https and the port or protocol changed just wait 5 seconds then redirect. 
         // This is because the ajax will fail if the cert is untrusted or the the http ajax requst from https will fail because of mixed content error.
@@ -59,7 +59,7 @@ $(document).ready(function()
                     $('#restart_success').show();
                     $('#refresh_message').show();
                 }, 3000);
-                setTimeout("window.location = sb_base_url+'/home'", 5000);
+                setTimeout("window.location = sb_base_url + '/home/'", 5000);
             }
         }
 
@@ -71,8 +71,9 @@ $(document).ready(function()
             return;
         }
 
-        if (timeout_id == 0)
+        if (timeout_id == 0) {
             timeout_id = setTimeout('is_alive()', 1000);
+        }
     });
 
 });

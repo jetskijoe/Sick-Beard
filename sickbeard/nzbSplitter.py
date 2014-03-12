@@ -16,6 +16,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Sick Beard.  If not, see <http://www.gnu.org/licenses/>.
 
+from __future__ import with_statement
 import urllib2
 
 import xml.etree.cElementTree as etree
@@ -26,6 +27,8 @@ from name_parser.parser import NameParser, InvalidNameException
 
 from sickbeard import logger, classes, helpers
 from sickbeard.common import Quality
+from sickbeard import encodingKludge as ek
+from sickbeard.exceptions import ex
 
 def getSeasonNZBs(name, urlData, season):
 
@@ -86,9 +89,12 @@ def createNZBString(fileElements, xmlns):
 
 def saveNZB(nzbName, nzbString):
 
-    nzb_fh = open(nzbName+".nzb", 'w')
-    nzb_fh.write(nzbString)
-    nzb_fh.close()
+    try:
+        with ek.ek(open, nzbName + ".nzb", 'w') as nzb_fh:
+            nzb_fh.write(nzbString)
+
+    except EnvironmentError, e:
+        logger.log(u"Unable to save NZB: " + ex(e), logger.ERROR)
 
 def stripNS(element, ns):
     element.tag = element.tag.replace("{"+ns+"}", "")

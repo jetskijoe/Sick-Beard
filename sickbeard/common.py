@@ -146,7 +146,7 @@ class Quality:
             if regex_match:
                 return x
 
-        checkName = lambda list, func: func([re.search(x, name, re.I) for x in list])
+        checkName = lambda namelist, func: func([re.search(x, name, re.I) for x in namelist])
         if checkName(["TrollHD"], all):
             return Quality.FULLHDBLURAY
         elif checkName(["480p"], all):

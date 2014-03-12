@@ -42,9 +42,9 @@ from sickbeard.providers.generic import GenericProvider
 def _downloadResult(result):
     """
     Downloads a result to the appropriate black hole folder.
-    
+
     Returns a bool representing success.
-    
+
     result: SearchResult instance to download.
     """
 
@@ -72,11 +72,11 @@ def _downloadResult(result):
 
         # save the data to disk
         try:
-            fileOut = open(fileName, "w")
-            fileOut.write(result.extraInfo[0])
-            fileOut.close()
+            with ek.ek(open, fileName, 'w') as fileOut:
+                fileOut.write(result.extraInfo[0])
+
             helpers.chmodAsParent(fileName)
-        except IOError, e:
+        except EnvironmentError, e:
             logger.log(u"Error trying to save NZB to black hole: "+ex(e), logger.ERROR)
             newResult = False
 
@@ -93,9 +93,9 @@ def snatchEpisode(result, endStatus=SNATCHED):
     """
     Contains the internal logic necessary to actually "snatch" a result that
     has been found.
-    
+
     Returns a bool representing success.
-    
+
     result: SearchResult instance to be snatched.
     endStatus: the episode status that should be used for the episode object once it's snatched.
     """
@@ -205,16 +205,12 @@ def pickBestResult(results, quality_list=None):
     # find the best result for the current episode
     bestResult = None
     for cur_result in results:
-        logger.log("Quality of "+cur_result.name+" is "+Quality.qualityStrings[cur_result.quality])
+        logger.log(u"Quality of " + cur_result.name + " is " + Quality.qualityStrings[cur_result.quality])
         
         if quality_list and cur_result.quality not in quality_list:
             logger.log(cur_result.name+" is a quality we know we don't want, rejecting it", logger.DEBUG)
             continue
 
-        if cur_result.provider.providerType != GenericProvider.TORRENT:
-            if failed_history.hasFailed(cur_result.name, cur_result.size):
-                logger.log(cur_result.name + u" has previously failed, rejecting it")
-                continue
         
         if not bestResult or bestResult.quality < cur_result.quality and cur_result.quality != Quality.UNKNOWN:
             bestResult = cur_result
@@ -234,7 +230,7 @@ def pickBestResult(results, quality_list=None):
 def isFinalResult(result):
     """
     Checks if the given result is good enough quality that we can stop searching for other ones.
-    
+
     If the result is the highest quality in both the any/best quality lists then this function
     returns True, if not then it's False
 
@@ -449,9 +445,6 @@ def findSeason(show, season):
         for multiResult in foundResults[MULTI_EP_RESULT]:
 
             logger.log(u"Seeing if we want to bother with multi-episode result "+multiResult.name, logger.DEBUG)
-            if failed_history.hasFailed(multiResult.name, multiResult.size):
-                logger.log(multiResult.name + u" has previously failed, rejecting this multi-ep result")
-                continue
 
             # see how many of the eps that this result covers aren't covered by single results
             neededEps = []

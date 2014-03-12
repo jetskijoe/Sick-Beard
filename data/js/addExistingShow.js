@@ -21,8 +21,9 @@ $(document).ready(function() {
 
         });  
 
-        if (dirArr.length == 0)
+        if (dirArr.length == 0) {
             return false;
+        }
 
         url = sbRoot+'/home/addShows/addExistingShows?promptForSettings='+ ($('#promptForSettings').prop('checked') ? 'on' : 'off');
 
@@ -36,14 +37,15 @@ $(document).ready(function() {
         var url = '';
         $('.dir_check').each(function(i,w){
             if ($(w).is(':checked')) {
-                if (url.length)
-                    url += '&'
+                if (url.length) {
+                    url += '&';
+                }
                 url += 'rootDir=' + encodeURIComponent($(w).attr('id'));
             }
         });
 
         $('#tableDiv').html('<img id="searchingAnim" src="'+sbRoot+'/images/loading32.gif" height="32" width="32" /> loading folders...');
-        $.get(sbRoot+'/home/addShows/massAddTable', url, function(data) {
+        $.get(sbRoot + '/home/addShows/massAddTable/', url, function(data) {
             $('#tableDiv').html(data);
             $("#addRootDirTable").tablesorter({
                 //sortList: [[1,0]],
@@ -58,13 +60,14 @@ $(document).ready(function() {
 
     var last_txt = '';
     $('#rootDirText').change(function() {
-        if (last_txt == $('#rootDirText').val())
+        if (last_txt == $('#rootDirText').val()) {
             return false;
-        else
+        } else {
             last_txt = $('#rootDirText').val();
+        }
         $('#rootDirStaticList').html('');           
         $('#rootDirs option').each(function(i, w) {
-            $('#rootDirStaticList').append('<li class="ui-state-default ui-corner-all"><input type="checkbox" class="cb dir_check" id="'+$(w).val()+'" checked=checked> <label for="'+$(w).val()+'"><b>'+$(w).val()+'</b></label></li>')
+            $('#rootDirStaticList').append('<li class="ui-state-default ui-corner-all"><input type="checkbox" class="cb dir_check" id="' + $(w).val() + '" checked=checked> <label for="' + $(w).val() + '"><b>' + $(w).val() + '</b></label></li>');
         });
         loadContent();
     });

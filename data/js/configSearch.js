@@ -2,12 +2,12 @@ $(document).ready(function(){
     var loading = '<img src="'+sbRoot+'/images/loading16.gif" height="16" width="16" />';
     
 	function toggle_torrent_title(){
-		if ($('#use_torrents').prop('checked'))
+        if ($('#use_torrents').prop('checked')) {
 			$('#no-torrents').show();
-		else
+        } else {
 			$('#no-torrents').hide();
 	}
-	
+    }
     $.fn.nzb_method_handler = function() {
         
         var selectedProvider = $('#nzb_method :selected').val();
@@ -32,7 +32,7 @@ $(document).ready(function(){
             $('#nzbget_settings').hide();
         }
 
-    }
+    };
 
     $('#nzb_method').change($(this).nzb_method_handler);
 

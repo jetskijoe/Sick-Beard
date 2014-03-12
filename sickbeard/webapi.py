@@ -44,7 +44,10 @@ try:
 except ImportError:
     from lib import simplejson as json
 
-import xml.etree.cElementTree as etree
+try:
+    import xml.etree.cElementTree as etree
+except ImportError:
+    import xml.etree.ElementTree as etree
 
 dateFormat = "%Y-%m-%d"
 dateTimeFormat = "%Y-%m-%d %H:%M"
@@ -135,7 +138,7 @@ class Api:
                 x = x[4:]
             return x
 
-        t.sortedShowList = sorted(sickbeard.showList, lambda x, y: cmp(titler(x.name), titler(y.name)))
+        t.sortedShowList = sorted(sickbeard.showList, lambda x, y: cmp(titler(x.name), titler(y.name)))[0:100]
 
         myDB = db.DBConnection(row_type="dict")
         seasonSQLResults = {}
@@ -1133,9 +1136,8 @@ class CMD_Logs(ApiCall):
 
         data = []
         if os.path.isfile(logger.sb_log_instance.log_file_path):
-            f = ek.ek(open, logger.sb_log_instance.log_file_path)
-            data = f.readlines()
-            f.close()
+            with ek.ek(open, logger.sb_log_instance.log_file_path) as f:
+                data = f.readlines()
 
         regex = "^(\d\d\d\d)\-(\d\d)\-(\d\d)\s*(\d\d)\:(\d\d):(\d\d)\s*([A-Z]+)\s*(.+?)\s*\:\:\s*(.*)$"
 
@@ -1942,7 +1944,7 @@ class CMD_ShowDelete(ApiCall):
             return _responds(RESULT_FAILURE, msg="Show can not be deleted while being added or updated")
 
         showObj.deleteShow()
-        return _responds(RESULT_SUCCESS, msg=str(showObj.name) + " has been deleted")
+        return _responds(RESULT_SUCCESS, msg=u"" + showObj.name + " has been deleted")
 
 
 class CMD_ShowGetQuality(ApiCall):
@@ -2029,12 +2031,12 @@ class CMD_ShowPause(ApiCall):
 
         if self.pause == True:
             showObj.paused = 1
-            return _responds(RESULT_SUCCESS, msg=str(showObj.name) + " has been paused")
+            return _responds(RESULT_SUCCESS, msg=u"" + showObj.name + " has been paused")
         else:
             showObj.paused = 0
-            return _responds(RESULT_SUCCESS, msg=str(showObj.name) + " has been unpaused")
+            return _responds(RESULT_SUCCESS, msg=u"" + showObj.name + " has been unpaused")
 
-        return _responds(RESULT_FAILURE, msg=str(showObj.name) + " was unable to be paused")
+        return _responds(RESULT_FAILURE, msg=u"" + showObj.name + " was unable to be paused")
 
 
 class CMD_ShowRefresh(ApiCall):
@@ -2058,10 +2060,10 @@ class CMD_ShowRefresh(ApiCall):
 
         try:
             sickbeard.showQueueScheduler.action.refreshShow(showObj) #@UndefinedVariable
-            return _responds(RESULT_SUCCESS, msg=str(showObj.name) + " has queued to be refreshed")
-        except exceptions.CantRefreshException:
-            # TODO: log the excption
-            return _responds(RESULT_FAILURE, msg="Unable to refresh " + str(showObj.name))
+            return _responds(RESULT_SUCCESS, msg=u"" + showObj.name + " has queued to be refreshed")
+        except exceptions.CantRefreshException, e:
+            logger.log(u"API:: Unable to refresh " + showObj.name + ". " + str(ex(e)), logger.ERROR)
+            return _responds(RESULT_FAILURE, msg=u"Unable to refresh " + showObj.name)
 
 
 class CMD_ShowSeasonList(ApiCall):
@@ -2341,10 +2343,10 @@ class CMD_ShowUpdate(ApiCall):
 
         try:
             sickbeard.showQueueScheduler.action.updateShow(showObj, True) #@UndefinedVariable
-            return _responds(RESULT_SUCCESS, msg=str(showObj.name) + " has queued to be updated")
+            return _responds(RESULT_SUCCESS, msg=u"" + showObj.name + " has queued to be updated")
         except exceptions.CantUpdateException, e:
-            logger.log(u"API:: Unable to update " + str(showObj.name) + ". " + str(ex(e)), logger.ERROR)
-            return _responds(RESULT_FAILURE, msg="Unable to update " + str(showObj.name))
+            logger.log(u"API:: Unable to update " + showObj.name + ". " + str(ex(e)), logger.ERROR)
+            return _responds(RESULT_FAILURE, msg=u"Unable to update " + showObj.name)
 
 
 class CMD_Shows(ApiCall):
@@ -2389,10 +2391,8 @@ class CMD_Shows(ApiCall):
             if not showDict["network"]:
                 showDict["network"] = ""
             if self.sort == "name":
-                showDict["tvdbid"] = curShow.tvdbid
                 shows[curShow.name] = showDict
             else:
-                showDict["show_name"] = curShow.name
                 shows[curShow.tvdbid] = showDict
         return _responds(RESULT_SUCCESS, shows)
 

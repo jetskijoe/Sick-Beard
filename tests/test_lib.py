@@ -17,16 +17,18 @@
 # You should have received a copy of the GNU General Public License
 # along with Sick Beard.  If not, see <http://www.gnu.org/licenses/>.
 
+from __future__ import with_statement
 import unittest
 
 import sqlite3
 
-import sys, os.path
+import sys
+import os.path
 sys.path.append(os.path.abspath('..'))
 sys.path.append(os.path.abspath('../lib'))
 
 import sickbeard
-import shutil, time
+import shutil
 from sickbeard import encodingKludge as ek, providers, tvcache
 from sickbeard import db
 from sickbeard.databases import mainDB
@@ -75,7 +77,7 @@ sickbeard.NAMING_MULTI_EP = 1
 
 
 sickbeard.PROVIDER_ORDER = ["sick_beard_index"]
-sickbeard.newznabProviderList = providers.getNewznabProviderList("Sick Beard Index|http://momo.sickbeard.com/||1!!!NZBs.org|http://nzbs.org/||0")
+sickbeard.newznabProviderList = providers.getNewznabProviderList("Sick Beard Index|http://lolo.sickbeard.com/|0|5030,5040|0!!!NZBs.org|http://nzbs.org/||5030,5040,5070,5090|0!!!Usenet-Crawler|http://www.usenet-crawler.com/||5030,5040|0")
 sickbeard.providerList = providers.makeProviderList()
 
 sickbeard.PROG_DIR = os.path.abspath('..')
@@ -183,9 +185,12 @@ def setUp_test_episode_file():
     if not os.path.exists(FILEDIR):
         os.makedirs(FILEDIR)
 
-    f = open(FILEPATH, "w")
-    f.write("foo bar")
-    f.close()
+    try:
+        with open(FILEPATH, 'w') as f:
+            f.write("foo bar")
+    except EnvironmentError:
+        print "Unable to set up test episode"
+        raise
 
 
 def tearDown_test_episode_file():

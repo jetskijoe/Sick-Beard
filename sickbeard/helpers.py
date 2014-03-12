@@ -16,6 +16,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Sick Beard.  If not, see <http://www.gnu.org/licenses/>.
 
+from __future__ import with_statement
 import gzip
 import os
 import re
@@ -194,6 +195,16 @@ def getURL(url, post_data=None, headers=[]):
     return result
 
 
+def is_hidden_folder(folder):
+    """
+    Returns True if folder is hidden.
+    On Linux based systems hidden folders start with . (dot)
+    folder: Full path of folder to check
+    """
+    if ek.ek(os.path.isdir, folder):
+        if ek.ek(os.path.basename, folder).startswith('.'):
+            return True
+    return False
 def findCertainShow(showList, tvdbid):
     results = filter(lambda x: x.tvdbid == tvdbid, showList)
     if len(results) == 0:
@@ -228,146 +239,6 @@ def makeDir(path):
         except OSError:
             return False
     return True
-
-
-def makeShowNFO(showID, showDir):
-
-    logger.log(u"Making NFO for show " + str(showID) + " in dir " + showDir, logger.DEBUG)
-
-    if not makeDir(showDir):
-        logger.log(u"Unable to create show dir, can't make NFO", logger.ERROR)
-        return False
-
-    showObj = findCertainShow(sickbeard.showList, showID)
-    if not showObj:
-        logger.log(u"This should never have happened, post a bug about this!", logger.ERROR)
-        raise Exception("BAD STUFF HAPPENED")
-
-    tvdb_lang = showObj.lang
-    # There's gotta be a better way of doing this but we don't wanna
-    # change the language value elsewhere
-    ltvdb_api_parms = sickbeard.TVDB_API_PARMS.copy()
-
-    if tvdb_lang and not tvdb_lang == 'en':
-        ltvdb_api_parms['language'] = tvdb_lang
-
-    t = tvdb_api.Tvdb(actors=True, **ltvdb_api_parms)
-
-    try:
-        myShow = t[int(showID)]
-    except tvdb_exceptions.tvdb_shownotfound:
-        logger.log(u"Unable to find show with id " + str(showID) + " on tvdb, skipping it", logger.ERROR)
-        raise
-
-    except tvdb_exceptions.tvdb_error:
-        logger.log(u"TVDB is down, can't use its data to add this show", logger.ERROR)
-        raise
-
-    # check for title and id
-    try:
-        if myShow["seriesname"] == None or myShow["seriesname"] == "" or myShow["id"] == None or myShow["id"] == "":
-            logger.log(u"Incomplete info for show with id " + str(showID) + " on tvdb, skipping it", logger.ERROR)
-
-            return False
-    except tvdb_exceptions.tvdb_attributenotfound:
-        logger.log(u"Incomplete info for show with id " + str(showID) + " on tvdb, skipping it", logger.ERROR)
-
-        return False
-
-    tvNode = buildNFOXML(myShow)
-    # Make it purdy
-    indentXML(tvNode)
-    nfo = etree.ElementTree(tvNode)
-
-    logger.log(u"Writing NFO to " + os.path.join(showDir, "tvshow.nfo"), logger.DEBUG)
-    nfo_filename = os.path.join(showDir, "tvshow.nfo").encode('utf-8')
-    nfo_fh = open(nfo_filename, 'w')
-    nfo.write(nfo_fh, encoding="utf-8")
-
-    return True
-
-
-def buildNFOXML(myShow):
-    '''
-    Build an etree.Element of the root node of an NFO file with the
-    data from `myShow`, a TVDB show object.
-
-    >>> from collections import defaultdict
-    >>> from xml.etree.cElementTree import tostring
-    >>> show = defaultdict(lambda: None, _actors=[])
-    >>> tostring(buildNFOXML(show))
-    '<tvshow xsd="http://www.w3.org/2001/XMLSchema" xsi="http://www.w3.org/2001/XMLSchema-instance"><title /><rating /><plot /><episodeguide><url /></episodeguide><mpaa /><id /><genre /><premiered /><studio /></tvshow>'
-    >>> show['seriesname'] = 'Peaches'
-    >>> tostring(buildNFOXML(show))
-    '<tvshow xsd="http://www.w3.org/2001/XMLSchema" xsi="http://www.w3.org/2001/XMLSchema-instance"><title>Peaches</title><rating /><plot /><episodeguide><url /></episodeguide><mpaa /><id /><genre /><premiered /><studio /></tvshow>'
-    >>> show['contentrating'] = 'PG'
-    >>> tostring(buildNFOXML(show))
-    '<tvshow xsd="http://www.w3.org/2001/XMLSchema" xsi="http://www.w3.org/2001/XMLSchema-instance"><title>Peaches</title><rating /><plot /><episodeguide><url /></episodeguide><mpaa>PG</mpaa><id /><genre /><premiered /><studio /></tvshow>'
-    >>> show['genre'] = 'Fruit|Edibles'
-    >>> tostring(buildNFOXML(show))
-    '<tvshow xsd="http://www.w3.org/2001/XMLSchema" xsi="http://www.w3.org/2001/XMLSchema-instance"><title>Peaches</title><rating /><plot /><episodeguide><url /></episodeguide><mpaa>PG</mpaa><id /><genre>Fruit / Edibles</genre><premiered /><studio /></tvshow>'
-    '''
-    tvNode = etree.Element("tvshow")
-    for ns in XML_NSMAP.keys():
-        tvNode.set(ns, XML_NSMAP[ns])
-
-    title = etree.SubElement(tvNode, "title")
-    if myShow["seriesname"] != None:
-        title.text = myShow["seriesname"]
-
-    rating = etree.SubElement(tvNode, "rating")
-    if myShow["rating"] != None:
-        rating.text = myShow["rating"]
-
-    plot = etree.SubElement(tvNode, "plot")
-    if myShow["overview"] != None:
-        plot.text = myShow["overview"]
-
-    episodeguide = etree.SubElement(tvNode, "episodeguide")
-    episodeguideurl = etree.SubElement(episodeguide, "url")
-    if myShow["id"] != None:
-        showurl = sickbeard.TVDB_BASE_URL + '/series/' + myShow["id"] + '/all/en.zip'
-        episodeguideurl.text = showurl
-
-    mpaa = etree.SubElement(tvNode, "mpaa")
-    if myShow["contentrating"] != None:
-        mpaa.text = myShow["contentrating"]
-
-    tvdbid = etree.SubElement(tvNode, "id")
-    if myShow["id"] != None:
-        tvdbid.text = myShow["id"]
-
-    genre = etree.SubElement(tvNode, "genre")
-    if myShow["genre"] != None:
-        genre.text = " / ".join([x for x in myShow["genre"].split('|') if x != ''])
-
-    premiered = etree.SubElement(tvNode, "premiered")
-    if myShow["firstaired"] != None:
-        premiered.text = myShow["firstaired"]
-
-    studio = etree.SubElement(tvNode, "studio")
-    if myShow["network"] != None:
-        studio.text = myShow["network"]
-
-    for actor in myShow['_actors']:
-
-        cur_actor = etree.SubElement(tvNode, "actor")
-
-        cur_actor_name = etree.SubElement(cur_actor, "name")
-        cur_actor_name.text = actor['name']
-        cur_actor_role = etree.SubElement(cur_actor, "role")
-        cur_actor_role_text = actor['role']
-
-        if cur_actor_role_text != None:
-            cur_actor_role.text = cur_actor_role_text
-
-        cur_actor_thumb = etree.SubElement(cur_actor, "thumb")
-        cur_actor_thumb_text = actor['image']
-
-        if cur_actor_thumb_text != None:
-            cur_actor_thumb.text = cur_actor_thumb_text
-
-    return tvNode
 
 
 def searchDBForShow(regShowName):
@@ -651,6 +522,11 @@ def fixSetGroupID(childPath):
             logger.log(u"Failed to respect the set-group-ID bit on the parent directory for %s (setting group ID %i)" % (childPath, parentGID), logger.ERROR)
 
 
+def real_path(path):
+    """
+    Returns: the canonicalized absolute pathname. The resulting path will have no symbolic link, '/./' or '/../' components.
+    """
+    return ek.ek(os.path.normpath, ek.ek(os.path.normcase, ek.ek(os.path.realpath, path)))
 def sanitizeSceneName(name, ezrss=False):
     """
     Takes a show name and returns the "scenified" version of it.
@@ -727,8 +603,8 @@ def parse_json(data):
 
     try:
         parsedJSON = json.loads(data)
-    except ValueError:
-        logger.log(u"Error trying to decode json data:" + data, logger.ERROR)
+    except ValueError, e:
+        logger.log(u"Error trying to decode json data. Error: " + ex(e), logger.DEBUG)
         return None
 
     return parsedJSON
@@ -750,7 +626,7 @@ def parse_xml(data, del_xmlns=False):
     try:
         parsedXML = etree.fromstring(data)
     except Exception, e:
-        logger.log(u"Error trying to parse xml data: " + data + " to Elementtree, Error: " + ex(e), logger.DEBUG)
+        logger.log(u"Error trying to parse xml data. Error: " + ex(e), logger.DEBUG)
         parsedXML = None
 
     return parsedXML

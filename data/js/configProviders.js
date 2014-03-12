@@ -5,25 +5,29 @@ $(document).ready(function(){
             var providerName = $(this).attr('id');
             var selectedProvider = $('#editAProvider :selected').val();
 
-            if (selectedProvider+'Div' == providerName)
+            if (selectedProvider + 'Div' == providerName) {
                 $(this).show();
-            else
+            } else {
                 $(this).hide();
+            }
 
         });
-    }
+    };
 
     $.fn.addProvider = function (id, name, url, key, isDefault) {
 
         url = $.trim(url);
-        if (!url)
+        if (!url) {
             return;
+        }
 
-        if (!/^https?:\/\//i.test(url))
+        if (!/^https?:\/\//i.test(url)) {
             url = "http://" + url;
+        }
 
-        if (url.match('/$') == null)
+        if (url.match('/$') == null) {
             url = url + '/';
+        }
 
         var newData = [isDefault, [name, url, key]];
         newznabProviders[id] = newData;
@@ -42,7 +46,7 @@ $(document).ready(function(){
 
         $(this).makeNewznabProviderString();
 
-    }
+    };
 
     $.fn.updateProvider = function (id, url, key) {
 
@@ -53,7 +57,7 @@ $(document).ready(function(){
 
         $(this).makeNewznabProviderString();
 
-    }
+    };
 
     $.fn.deleteProvider = function (id) {
 
@@ -65,7 +69,7 @@ $(document).ready(function(){
 
         $(this).makeNewznabProviderString();
 
-    }
+    };
 
     $.fn.populateNewznabSection = function() {
 
@@ -103,7 +107,7 @@ $(document).ready(function(){
             }
         }
 
-    }
+    };
 
     $.fn.makeNewznabProviderString = function() {
 
@@ -115,7 +119,7 @@ $(document).ready(function(){
 
         $('#newznab_string').val(provStrings.join('!!!'));
 
-    }
+    };
 
     $.fn.refreshProviderList = function() {
             var idArr = $("#providerOrderList").sortable('toArray');
@@ -126,7 +130,7 @@ $(document).ready(function(){
             });
 
             $("#provider_order").val(finalArr.join(' '));
-    }
+    };
 
     var newznabProviders = new Array();
 
@@ -146,8 +150,9 @@ $(document).ready(function(){
 
         var selectedProvider = $('#editANewznabProvider :selected').val();
 
-        if (selectedProvider == "addNewznab")
+        if (selectedProvider == "addNewznab") {
             return;
+        }
 
         var url = $('#newznab_url').val();
         var key = $('#newznab_key').val();
@@ -177,14 +182,10 @@ $(document).ready(function(){
         var url = $.trim($('#newznab_url').val());
         var key = $.trim($('#newznab_key').val());
 
-        if (!name)
+        if (!name || !url || !key) {
             return;
+        }
 
-        if (!url)
-            return;
-
-        if (!key)
-            return;
 
         var params = {name: name};
 
