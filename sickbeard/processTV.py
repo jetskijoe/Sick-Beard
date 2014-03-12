@@ -106,7 +106,7 @@ def processDir(dirName, nzbName=None, method=None, recurse=False, pp_options={},
                 returnStr += logHelper(u"You're trying to post process an episode that's already been moved to its show dir", logger.ERROR)
                 return returnStr
 
-        returnStr += _processNormal(dirName, nzbName)
+        returnStr += _processNormal(dirName, nzbName, method)
     return returnStr
 def _processFailed(dirName, nzbName):
 
@@ -139,7 +139,7 @@ def _processFailed(dirName, nzbName):
     return returnStr
 
 
-def _processNormal(dirName, nzbName=None, recurse=False):
+def _processNormal(dirName, nzbName=None, method=None, recurse=False):
     """Process a download that completed without issue"""
 
     returnStr = u""
@@ -164,7 +164,7 @@ def _processNormal(dirName, nzbName=None, recurse=False):
             returnStr += logHelper(u"Ignoring hidden folder: " + cur_folder, logger.DEBUG)
         else:
             returnStr += logHelper(u"Recursively processing a folder: " + cur_folder, logger.DEBUG)
-            returnStr += _processNormal(cur_folder, nzbName=parent_nzbName, recurse=True)
+            returnStr += _processNormal(cur_folder, nzbName=parent_nzbName, method, recurse=True)
 
     remainingFolders = filter(lambda x: ek.ek(os.path.isdir, ek.ek(os.path.join, dirName, x)), fileList)
 
