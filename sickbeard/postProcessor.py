@@ -501,7 +501,7 @@ class PostProcessor(object):
                 tvdb_id = cur_tvdb_id
             if cur_quality and not (self.in_history and quality):
                 quality = cur_quality
-            if cur_season:
+            if cur_season is not None:
                 season = cur_season
             if cur_episodes:
                 episodes = cur_episodes
@@ -639,19 +639,22 @@ class PostProcessor(object):
         for curScriptName in sickbeard.EXTRA_SCRIPTS:
 
             # generate a safe command line string to execute the script and provide all the parameters
-            script_cmd = [piece for piece in re.split("( |\\\".*?\\\"|'.*?')", curScriptName) if piece.strip()]
-            script_cmd[0] = ek.ek(os.path.abspath, script_cmd[0])
-            self._log(u"Absolute path to script: " + script_cmd[0], logger.DEBUG)
-            script_cmd = script_cmd + [ep_obj.location, self.file_path, str(ep_obj.show.tvdbid), str(ep_obj.season), str(ep_obj.episode), str(ep_obj.airdate)]
 
             # use subprocess to run the command and capture output
-            self._log(u"Executing command " + str(script_cmd))
             try:
+                script_cmd = [piece for piece in re.split("( |\\\".*?\\\"|'.*?')", curScriptName) if piece.strip()]
+                script_cmd = script_cmd + [ep_obj.location.encode(sickbeard.SYS_ENCODING),
+                                           self.file_path.encode(sickbeard.SYS_ENCODING),
+                                           str(ep_obj.show.tvdbid),
+                                           str(ep_obj.season),
+                                           str(ep_obj.episode),
+                                           str(ep_obj.airdate)
+                                           ]
+                self._log(u"Executing command " + str(script_cmd))
                 p = subprocess.Popen(script_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=sickbeard.PROG_DIR)
                 out, err = p.communicate() #@UnusedVariable
                 self._log(u"Script result: " + str(out), logger.DEBUG)
-            except OSError, e:
-                self._log(u"Unable to run extra_script: " + ex(e))
+
             except Exception, e:
                 self._log(u"Unable to run extra_script: " + ex(e))
 
@@ -764,7 +767,7 @@ class PostProcessor(object):
                 if cur_ep.location:
                     helpers.delete_empty_folders(ek.ek(os.path.dirname, cur_ep.location), keep_dir=ep_obj.show._location)
             except (OSError, IOError):
-                raise exceptions.PostProcessingFailed("Unable to delete the existing files")
+                raise exceptions.PostProcessingFailed(u"Unable to delete the existing files")
 
         # if the show directory doesn't exist then make it if allowed
         if not ek.ek(os.path.isdir, ep_obj.show._location) and sickbeard.CREATE_MISSING_SHOW_DIRS:
@@ -775,7 +778,7 @@ class PostProcessor(object):
                 notifiers.synoindex_notifier.addFolder(ep_obj.show._location)
 
             except (OSError, IOError):
-                raise exceptions.PostProcessingFailed("Unable to create the show directory: " + ep_obj.show._location)
+                raise exceptions.PostProcessingFailed(u"Unable to create the show directory: " + ep_obj.show._location)
 
             # get metadata for the show (but not episode because it hasn't been fully processed)
             ep_obj.show.writeMetadata(True)
@@ -826,7 +829,8 @@ class PostProcessor(object):
         self._log(u"Destination folder for this episode: " + dest_path, logger.DEBUG)
 
         # create any folders we need
-        helpers.make_dirs(dest_path)
+        if not helpers.make_dirs(dest_path):
+            raise exceptions.PostProcessingFailed(u"Unable to create destination folder: " + dest_path)
 
         # figure out the base name of the resulting episode file
         if sickbeard.RENAME_EPISODES:
@@ -846,7 +850,7 @@ class PostProcessor(object):
             else:
                 self._move(self.file_path, dest_path, new_base_name, sickbeard.MOVE_ASSOCIATED_FILES)
         except (OSError, IOError):
-            raise exceptions.PostProcessingFailed("Unable to move the files to their new home")
+            raise exceptions.PostProcessingFailed(u"Unable to move the files to destination folder: " + dest_path)
 
         # put the new location in the database
         for cur_ep in [ep_obj] + ep_obj.relatedEps:

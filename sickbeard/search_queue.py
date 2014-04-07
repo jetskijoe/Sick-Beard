@@ -211,8 +211,9 @@ class BacklogQueueItem(generic_queue.QueueItem):
 
         # download whatever we find
         for curResult in results:
-            search.snatchEpisode(curResult)
-            time.sleep(5)
+            if curResult:
+                search.snatchEpisode(curResult)
+                time.sleep(5)
 
         self.finish()
 
