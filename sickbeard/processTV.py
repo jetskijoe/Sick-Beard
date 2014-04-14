@@ -74,7 +74,7 @@ def processDir(dirName, nzbName=None, method=None, recurse=False, failed=False):
     recurse: Boolean for whether we should descend into subfolders or not
     failed: Boolean for whether or not the download failed
     """
-    returnStr = ''
+    returnStr = u""
     returnStr += logHelper(u"Processing folder: " + dirName, logger.DEBUG)
     if ek.ek(os.path.isdir, dirName):
         dirName = ek.ek(os.path.realpath, dirName)

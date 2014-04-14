@@ -227,6 +227,9 @@ def pickBestResult(results, show, quality_list=None):
             logger.log(cur_result.name+" is a quality we know we don't want, rejecting it", logger.DEBUG)
             continue
 
+        if failed_history.hasFailed(cur_result.name, cur_result.size):
+            logger.log(cur_result.name + u" has previously failed, rejecting it")
+            continue
         if show.rls_ignore_words and filter_release_name(cur_result.name, show.rls_ignore_words):
             logger.log(u"Ignoring " + cur_result.name + " based on ignored words filter: " + show.rls_ignore_words, logger.MESSAGE)
             continue
