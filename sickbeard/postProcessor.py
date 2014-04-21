@@ -692,7 +692,7 @@ class PostProcessor(object):
         if new_ep_quality > old_ep_quality and new_ep_quality != common.Quality.UNKNOWN:
             self._log(u"Existing episode status is not snatched but new file appears to be better quality than existing episode, marking it safe to replace")
             return True
-        if new_ep_quality in (common.Quality.SDDVD):
+        if new_ep_quality == common.Quality.SDDVD:
             self._log(u"Existing episode status is not snatched but new file appears to be better quality than existing episode, marking it safe to replace")
             return True			
         if new_ep_quality == old_ep_quality:
@@ -707,7 +707,7 @@ class PostProcessor(object):
                 return True
             elif existing_file_status != PostProcessor.DOESNT_EXIST:
                 self._log(u"Unknown existing file status. This should never happen, please log this as a bug.", logger.ERROR)
-                return True
+                return false
         if new_ep_quality < old_ep_quality and old_ep_quality != common.Quality.UNKNOWN:
             self._log(u"File already exists and new file has lower quality, marking it unsafe to replace")
             return False
