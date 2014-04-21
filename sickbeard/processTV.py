@@ -148,7 +148,7 @@ def _processNormal(dirName, nzbName=None, recurse=False):
 
     # split the list into video files and folders
     folders = filter(lambda x: ek.ek(os.path.isdir, ek.ek(os.path.join, dirName, x)), fileList)
-    videoFiles = sorted(filter(helpers.isMediaFile, fileList), key=lambda x: os.path.getsize(ek.ek(os.path.join, dirName, x)), reverse=True)
+    videoFiles = sorted(filter(helpers.isMediaFile, fileList), key=lambda x: ek.ek(os.path.getsize, ek.ek(os.path.join, dirName, x)), reverse=True)
     remaining_video_files = list(videoFiles)
 
     num_videoFiles = len(videoFiles)

@@ -171,8 +171,12 @@ class Quality:
             return Quality.FULLHDWEBDL
         elif checkName(["720p", "bluray|hddvd", "x264"], all):
             return Quality.HDBLURAY
-        elif checkName(["1080p", "bluray|hddvd", "x264"], all):
+        elif checkName(["1080p", "bluray|hddvd|b[r|d]rip", "x264"], all):
             return Quality.FULLHDBLURAY
+        elif checkName(["dvdrip"],all):
+            return Quality.SDDVD
+        elif checkName(["tvrip"],all):
+            return Quality.SDTV
         else:
             return Quality.UNKNOWN
 

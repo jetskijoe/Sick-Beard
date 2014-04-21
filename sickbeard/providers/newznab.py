@@ -304,7 +304,7 @@ class NewznabCache(tvcache.TVCache):
                   "cat": self.provider.catIDs}
 
 
-        if self.provider.key:
+        if self.provider.needs_auth and self.provider.key:
             params['apikey'] = self.provider.key
 
         rss_url = self.provider.url + 'api?' + urllib.urlencode(params)

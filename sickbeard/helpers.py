@@ -24,7 +24,7 @@ import shutil
 import socket
 import stat
 import StringIO
-import sys
+
 import time
 import traceback
 import urllib

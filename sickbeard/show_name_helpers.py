@@ -249,6 +249,12 @@ def allPossibleShowNames(show):
             elif curName.endswith(' (' + curCountry + ')'):
                 newShowNames.append(curName.replace(' (' + curCountry + ')', ' (' + country_list[curCountry] + ')'))
 
+    # If show name contains quote, also add the strings without quotes in list
+    for curName in set(showNames):
+        if not curName:
+            continue
+        if "'" in curName:
+            newShowNames.append(curName.replace("'", ""))
     showNames += newShowNames
 
     return showNames

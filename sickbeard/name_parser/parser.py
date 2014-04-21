@@ -202,6 +202,8 @@ class NameParser(object):
         final_result = ParseResult(name)
         
         # try parsing the file name
+        for i in range(1985,2020):
+            base_file_name=base_file_name.replace(str(i),"",2)
         file_name_result = self._parse_string(base_file_name)
         
         # parse the dirname for extra info if needed
