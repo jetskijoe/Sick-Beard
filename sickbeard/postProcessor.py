@@ -700,7 +700,7 @@ class PostProcessor(object):
             self._log(u"Checking existing file size")
             existing_file_status = self._checkForExistingFile(ep_obj.location)
             if existing_file_status in (PostProcessor.EXISTS_LARGER, PostProcessor.EXISTS_SAME):
-                self._log(u"File already exists and new file is same/smaller, marking it unsafe to replace")
+                self._log(u"File already exists and new file is same/smaller, marking replacing it")
                 return True
             elif existing_file_status == PostProcessor.EXISTS_SMALLER:
                 self._log(u"File already exists and new file is larger, marking it safe to replace")
