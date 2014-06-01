@@ -25,26 +25,28 @@ import regexes
 import sickbeard
 
 from sickbeard import logger
+from sickbeard import encodingKludge as ek
+from sickbeard import helpers
 
 class NameParser(object):
-    def __init__(self, file_name=True):
+    def __init__(self, is_file_name=True):
 
-        self.file_name = file_name
+        self.is_file_name = is_file_name
         self.compiled_regexes = []
         self._compile_regexes()
 
     def clean_series_name(self, series_name):
         """Cleans up series name by removing any . and _
         characters, along with any trailing hyphens.
-    
+
         Is basically equivalent to replacing all _ and . with a
         space, but handles decimal numbers in string, for example:
-    
+
         >>> cleanRegexedSeriesName("an.example.1.0.test")
         'an example 1.0 test'
         >>> cleanRegexedSeriesName("an_example_1.0_test")
         'an example 1.0 test'
-        
+
         Stolen from dbr's tvnamer
         """
         
@@ -121,7 +123,7 @@ class NameParser(object):
                 if tmp_extra_info:
                     result.is_proper = re.search('(^|[\. _-])(proper|repack)([\. _-]|$)', tmp_extra_info, re.I) is not None
                 # Show.S04.Special is almost certainly not every episode in the season
-                if tmp_extra_info and cur_regex_name == 'season_only' and re.match(r'([. _-]|^)(special|extra)\w*([. _-]|$)', tmp_extra_info, re.I):
+                if tmp_extra_info and cur_regex_name == 'season_only' and re.search(r'([. _-]|^)(special|extra)s?\w*([. _-]|$)', tmp_extra_info, re.I):
                     continue
                 result.extra_info = tmp_extra_info
             
@@ -160,24 +162,34 @@ class NameParser(object):
                 obj = unicode(obj, encoding)
         return obj
 
-    def _convert_number(self, number):
+    def _convert_number(self, org_number):
+        """
+        Convert org_number into an integer
+        org_number: integer or representation of a number: string or unicode
+        Try force converting to int first, on error try converting from Roman numerals
+        returns integer or 0
+        """
         try:
-            return int(number)
+            if org_number:
+                number = int(org_number)
+            else:
+                number = 0
         except:
-            numeral_map = zip(
-                (1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1),
-                ('M', 'CM', 'D', 'CD', 'C', 'XC', 'L', 'XL', 'X', 'IX', 'V', 'IV', 'I')
-            )
-                
-            n = unicode(number).upper()    
-            i = result = 0
-            for integer, numeral in numeral_map:
-                while n[i:i + len(numeral)] == numeral:
-                    result += integer
-                    i += len(numeral)
+            # on error try converting from Roman numerals
+            roman_to_int_map = (('M', 1000), ('CM', 900), ('D', 500), ('CD', 400), ('C', 100),
+                                ('XC', 90), ('L', 50), ('XL', 40), ('X', 10),
+                                ('IX', 9), ('V', 5), ('IV', 4), ('I', 1)
+                               )
+            roman_numeral = str(org_number).upper()
+            number = 0
+            index = 0
+            for numeral, integer in roman_to_int_map:
+                while roman_numeral[index:index + len(numeral)] == numeral:
+                    number += integer
+                    index += len(numeral)
             
 
-            return result
+        return number
 
     def parse(self, name):
         
@@ -188,22 +200,20 @@ class NameParser(object):
             return cached
 
         # break it into parts if there are any (dirname, file name, extension)
-        dir_name, file_name = os.path.split(name)
-        ext_match = re.match('(.*)\.\w{3,4}$', file_name)
-        if ext_match and self.file_name:
-            base_file_name = ext_match.group(1)
+        dir_name, file_name = ek.ek(os.path.split, name)
+
+        if self.is_file_name:
+            base_file_name = helpers.remove_extension(file_name)
         else:
             base_file_name = file_name
         
         # use only the direct parent dir
-        dir_name = os.path.basename(dir_name)
+        dir_name = ek.ek(os.path.basename, dir_name)
         
         # set up a result to use
         final_result = ParseResult(name)
         
         # try parsing the file name
-        for i in range(1985,2020):
-            base_file_name=base_file_name.replace(str(i),"",2)
         file_name_result = self._parse_string(base_file_name)
         
         # parse the dirname for extra info if needed

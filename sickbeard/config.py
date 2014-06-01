@@ -632,3 +632,6 @@ class ConfigMigrator():
         sickbeard.METADATA_WDTV = _migrate_metadata(metadata_wdtv, 'WDTV', use_banner)
         sickbeard.METADATA_TIVO = _migrate_metadata(metadata_tivo, 'TIVO', use_banner)
         sickbeard.METADATA_MEDE8ER = _migrate_metadata(metadata_mede8er, 'Mede8er', use_banner)
+    def _migrate_v6(self):
+        """ Updates Synology notifier to reflect that their now is an update library option instead misusing the enable option """
+        sickbeard.SYNOINDEX_UPDATE_LIBRARY = bool(check_setting_int(self.config_obj, 'Synology', 'use_synoindex', 0))

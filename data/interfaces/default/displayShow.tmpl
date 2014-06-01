@@ -130,7 +130,7 @@ Change selected episodes to
 #for $epResult in $sqlResults:
 
     #if int($epResult["season"]) != $curSeason:
-  <tr><td colspan="9"><a name="season-$epResult["season"]"></a></td></tr>
+  <tr class="seasonheader"><td colspan="9"><a name="season-$epResult["season"]"></a></td></tr>
   <tr class="seasonheader" id="season-$epResult["season"]">
     <td colspan="9">
         <h2>#if int($epResult["season"]) == 0 then "Specials" else "Season "+str($epResult["season"])#</h2>

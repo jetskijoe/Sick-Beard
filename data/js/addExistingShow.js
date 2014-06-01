@@ -1,6 +1,6 @@
 $(document).ready(function() { 
 
-    $('#checkAll').live('click', function(){
+    $('#tableDiv').on('click', '#checkAll', function() {
     
         var seasCheck = this;
 
@@ -72,10 +72,12 @@ $(document).ready(function() {
         loadContent();
     });
     
-    $('.dir_check').live('click', loadContent);
+    $('#rootDirStaticList').on('click', '.dir_check', loadContent);
    
-    $('.showManage').live('click', function() {
-      $( "#tabs" ).tabs( 'select', 0 );
+    $('#tableDiv').on('click', '.showManage', function(event) {
+        event.preventDefault();
+        $("#tabs").tabs('option', 'active', 0);
+        $('html,body').animate({scrollTop:0}, 1000);
     });
     
 });

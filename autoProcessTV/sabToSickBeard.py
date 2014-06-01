@@ -20,7 +20,11 @@
 
 
 import sys
-import autoProcessTV
+try:
+    import autoProcessTV
+except:
+    print ("Can't import autoProcessTV.py, make sure it's in the same folder as " + sys.argv[0])
+    sys.exit(1)
 
 if len(sys.argv) < 3:
     print "Not enough arguments received from SABnzbd. Please update it."

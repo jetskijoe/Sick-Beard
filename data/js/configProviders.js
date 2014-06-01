@@ -92,18 +92,18 @@ $(document).ready(function(){
         $('#newznab_key').val(data[2]);
 
         if (selectedProvider == 'addNewznab') {
-            $('#newznab_name').removeAttr("disabled");
-            $('#newznab_url').removeAttr("disabled");
+            $('#newznab_name').prop("disabled", false);
+            $('#newznab_url').prop("disabled", false);
         } else {
 
-            $('#newznab_name').attr("disabled", "disabled");
+            $('#newznab_name').prop("disabled", true);
 
             if (isDefault) {
-                $('#newznab_url').attr("disabled", "disabled");
-                $('#newznab_delete').attr("disabled", "disabled");
+                $('#newznab_url').prop("disabled", true);
+                $('#newznab_delete').prop("disabled", true);
             } else {
-                $('#newznab_url').removeAttr("disabled");
-                $('#newznab_delete').removeAttr("disabled");
+                $('#newznab_url').prop("disabled", false);
+                $('#newznab_delete').prop("disabled", false);
             }
         }
 
@@ -169,7 +169,7 @@ $(document).ready(function(){
         $(this).populateNewznabSection();
     });
 
-    $('.provider_enabler').live('click', function(){
+    $('#providerOrderList').on('click', '.provider_enabler', function() {
         $(this).refreshProviderList();
     });
 

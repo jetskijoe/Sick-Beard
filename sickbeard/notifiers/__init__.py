@@ -36,13 +36,15 @@ import tweet
 import trakt
 
 from sickbeard.common import *
+from sickbeard import logger
+from sickbeard.exceptions import ex
 
 # home theater
 xbmc_notifier = xbmc.XBMCNotifier()
 plex_notifier = plex.PLEXNotifier()
 nmj_notifier = nmj.NMJNotifier()
-synoindex_notifier = synoindex.synoIndexNotifier()
 nmjv2_notifier = nmjv2.NMJv2Notifier()
+synoindex_notifier = synoindex.synoIndexNotifier()
 pytivo_notifier = pytivo.pyTivoNotifier()
 # devices
 growl_notifier = growl.GrowlNotifier()
@@ -75,12 +77,21 @@ notifiers = [
 
 def notify_download(ep_name):
     for n in notifiers:
-        n.notify_download(ep_name)
+        try:
+            n.notify_download(ep_name)
+        except Exception, e:
+            logger.log(n.__class__.__name__ + ": " + ex(e), logger.ERROR)
 
 
 def notify_snatch(ep_name):
     for n in notifiers:
-        n.notify_snatch(ep_name)
+        try:
+            n.notify_snatch(ep_name)
+        except Exception, e:
+            logger.log(n.__class__.__name__ + ": " + ex(e), logger.ERROR)
 def update_library(ep_obj):
     for n in notifiers:
-        n.update_library(ep_obj)
+        try:
+            n.update_library(ep_obj=ep_obj)
+        except Exception, e:
+            logger.log(n.__class__.__name__ + ": " + ex(e), logger.ERROR)
