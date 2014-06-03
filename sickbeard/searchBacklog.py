@@ -1,20 +1,20 @@
 # Author: Nic Wolfe <nic@wolfeden.ca>
 # URL: http://code.google.com/p/sickbeard/
 #
-# This file is part of Sick Beard.
+# This file is part of SickRage.
 #
-# Sick Beard is free software: you can redistribute it and/or modify
+# SickRage is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# Sick Beard is distributed in the hope that it will be useful,
+# SickRage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with Sick Beard.  If not, see <http://www.gnu.org/licenses/>.
+# along with SickRage.  If not, see <http://www.gnu.org/licenses/>.
 
 from __future__ import with_statement
 
@@ -27,10 +27,9 @@ from sickbeard import db, scheduler
 from sickbeard import search_queue
 from sickbeard import logger
 from sickbeard import ui
-#from sickbeard.common import *
+from sickbeard import common
 
 class BacklogSearchScheduler(scheduler.Scheduler):
-
     def forceSearch(self):
         self.action._set_lastBacklog(1)
         self.lastRun = datetime.datetime.fromordinal(1)
@@ -41,8 +40,8 @@ class BacklogSearchScheduler(scheduler.Scheduler):
         else:
             return datetime.date.fromordinal(self.action._lastBacklog + self.action.cycleTime)
 
-class BacklogSearcher:
 
+class BacklogSearcher:
     def __init__(self):
 
         self._lastBacklog = self._get_lastBacklog()
@@ -65,7 +64,7 @@ class BacklogSearcher:
             return None
 
     def am_running(self):
-        logger.log(u"amWaiting: "+str(self.amWaiting)+", amActive: "+str(self.amActive), logger.DEBUG)
+        logger.log(u"amWaiting: " + str(self.amWaiting) + ", amActive: " + str(self.amActive), logger.DEBUG)
         return (not self.amWaiting) and self.amActive
 
     def searchBacklog(self, which_shows=None):
@@ -75,7 +74,7 @@ class BacklogSearcher:
         else:
             show_list = sickbeard.showList
 
-        if self.amActive == True:
+        if self.amActive:
             logger.log(u"Backlog is still running, not starting it again", logger.DEBUG)
             return
 
@@ -91,44 +90,20 @@ class BacklogSearcher:
         self.amActive = True
         self.amPaused = False
 
-        #myDB = db.DBConnection()
-        #numSeasonResults = myDB.select("SELECT DISTINCT(season), showid FROM tv_episodes ep, tv_shows show WHERE season != 0 AND ep.showid = show.tvdb_id AND show.paused = 0 AND ep.airdate > ?", [fromDate.toordinal()])
-
-        # get separate lists of the season/date shows
-        #season_shows = [x for x in show_list if not x.air_by_date]
-        air_by_date_shows = [x for x in show_list if x.air_by_date]
-
-        # figure out how many segments of air by date shows we're going to do
-        air_by_date_segments = []
-        for cur_id in [x.tvdbid for x in air_by_date_shows]:
-            air_by_date_segments += self._get_air_by_date_segments(cur_id, fromDate) 
-
-        logger.log(u"Air-by-date segments: "+str(air_by_date_segments), logger.DEBUG)
-
-        #totalSeasons = float(len(numSeasonResults) + len(air_by_date_segments))
-        #numSeasonsDone = 0.0
-
         # go through non air-by-date shows and see if they need any episodes
         for curShow in show_list:
 
             if curShow.paused:
                 continue
 
-            if curShow.air_by_date:
-                segments = [x[1] for x in self._get_air_by_date_segments(curShow.tvdbid, fromDate)]
+            segments = self._get_segments(curShow, fromDate)
+
+            if len(segments):
+                backlog_queue_item = search_queue.BacklogQueueItem(curShow, segments)
+                sickbeard.searchQueueScheduler.action.add_item(backlog_queue_item)  #@UndefinedVariable
             else:
-                segments = self._get_season_segments(curShow.tvdbid, fromDate)
-
-            for cur_segment in segments:
-
-                self.currentSearchInfo = {'title': curShow.name + " Season "+str(cur_segment)}
-
-                backlog_queue_item = search_queue.BacklogQueueItem(curShow, cur_segment)
-
-                if not backlog_queue_item.wantSeason:
-                    logger.log(u"Nothing in season "+str(cur_segment)+" needs to be downloaded, skipping this season", logger.DEBUG)
-                else:
-                    sickbeard.searchQueueScheduler.action.add_item(backlog_queue_item)  #@UndefinedVariable
+                logger.log(u"Nothing needs to be downloaded for " + str(curShow.name) + ", skipping this season",
+                           logger.DEBUG)
 
         # don't consider this an actual backlog search if we only did recent eps
         # or if we only did certain shows
@@ -157,29 +132,44 @@ class BacklogSearcher:
         self._lastBacklog = lastBacklog
         return self._lastBacklog
 
-    def _get_season_segments(self, tvdb_id, fromDate):
-        myDB = db.DBConnection()
-        sqlResults = myDB.select("SELECT DISTINCT(season) as season FROM tv_episodes WHERE showid = ? AND season > 0 and airdate > ?", [tvdb_id, fromDate.toordinal()])
-        return [int(x["season"]) for x in sqlResults]
+    def _get_segments(self, show, fromDate):
+        anyQualities, bestQualities = common.Quality.splitQuality(show.quality)  #@UnusedVariable
 
-    def _get_air_by_date_segments(self, tvdb_id, fromDate):
-        # query the DB for all dates for this show
-        myDB = db.DBConnection()
-        num_air_by_date_results = myDB.select("SELECT airdate, showid FROM tv_episodes ep, tv_shows show WHERE season != 0 AND ep.showid = show.tvdb_id AND show.paused = 0 ANd ep.airdate > ? AND ep.showid = ?",
-                                 [fromDate.toordinal(), tvdb_id])
+        logger.log(u"Seeing if we need anything from " + show.name)
 
-        # break them apart into month/year strings
-        air_by_date_segments = []
-        for cur_result in num_air_by_date_results:
-            cur_date = datetime.date.fromordinal(int(cur_result["airdate"]))
-            cur_date_str = str(cur_date)[:7]
-            cur_tvdb_id = int(cur_result["showid"])
-            
-            cur_result_tuple = (cur_tvdb_id, cur_date_str)
-            if cur_result_tuple not in air_by_date_segments:
-                air_by_date_segments.append(cur_result_tuple)
-        
-        return air_by_date_segments
+        myDB = db.DBConnection()
+        if show.air_by_date:
+            sqlResults = myDB.select(
+                "SELECT ep.status, ep.season, ep.episode FROM tv_episodes ep, tv_shows show WHERE season != 0 AND ep.showid = show.indexer_id AND show.paused = 0 ANd ep.airdate > ? AND ep.showid = ? AND show.air_by_date = 1",
+                [fromDate.toordinal(), show.indexerid])
+        else:
+            sqlResults = myDB.select(
+                "SELECT status, season, episode FROM tv_episodes WHERE showid = ? AND season > 0 and airdate > ?",
+                [show.indexerid, fromDate.toordinal()])
+
+        # check through the list of statuses to see if we want any
+        wanted = {}
+        for result in sqlResults:
+            curCompositeStatus = int(result["status"])
+            curStatus, curQuality = common.Quality.splitCompositeStatus(curCompositeStatus)
+
+            if bestQualities:
+                highestBestQuality = max(bestQualities)
+            else:
+                highestBestQuality = 0
+
+            # if we need a better one then say yes
+            if (curStatus in (common.DOWNLOADED, common.SNATCHED, common.SNATCHED_PROPER,
+                              common.SNATCHED_BEST) and curQuality < highestBestQuality) or curStatus == common.WANTED:
+
+                epObj = show.getEpisode(int(result["season"]), int(result["episode"]))
+
+                if epObj.season in wanted:
+                    wanted[epObj.season].append(epObj)
+                else:
+                    wanted[epObj.season] = [epObj]
+
+        return wanted
 
     def _set_lastBacklog(self, when):
 
@@ -189,12 +179,12 @@ class BacklogSearcher:
         sqlResults = myDB.select("SELECT * FROM info")
 
         if len(sqlResults) == 0:
-            myDB.action("INSERT INTO info (last_backlog, last_TVDB) VALUES (?,?)", [str(when), 0])
+            myDB.action("INSERT INTO info (last_backlog, last_indexer) VALUES (?,?)", [str(when), 0])
         else:
             myDB.action("UPDATE info SET last_backlog=" + str(when))
 
 
-    def run(self):
+    def run(self, force=False):
         try:
             self.searchBacklog()
         except:

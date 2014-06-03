@@ -1,20 +1,20 @@
 # Author: Nic Wolfe <nic@wolfeden.ca>
 # URL: http://code.google.com/p/sickbeard/
 #
-# This file is part of Sick Beard.
+# This file is part of SickRage.
 #
-# Sick Beard is free software: you can redistribute it and/or modify
+# SickRage is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# Sick Beard is distributed in the hope that it will be useful,
+# SickRage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#  GNU General Public License for more details.
+# GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with Sick Beard.  If not, see <http://www.gnu.org/licenses/>.
+# along with SickRage.  If not, see <http://www.gnu.org/licenses/>.
 
 import datetime
 import time
@@ -24,11 +24,15 @@ import traceback
 from sickbeard import logger
 from sickbeard.exceptions import ex
 
+
 class Scheduler:
+    def __init__(self, action, cycleTime=datetime.timedelta(minutes=10), runImmediately=True,
+                 threadName="ScheduledThread", silent=False):
 
-    def __init__(self, action, cycleTime=datetime.timedelta(minutes=10), run_delay=datetime.timedelta(minutes=0), threadName="ScheduledThread", silent=False):
-
-        self.lastRun = datetime.datetime.now() + run_delay - cycleTime
+        if runImmediately:
+            self.lastRun = datetime.datetime.fromordinal(1)
+        else:
+            self.lastRun = datetime.datetime.now()
 
         self.action = action
         self.cycleTime = cycleTime
@@ -40,6 +44,7 @@ class Scheduler:
         self.initThread()
 
         self.abort = False
+        self.force = False
 
     def initThread(self):
         if self.thread == None or not self.thread.isAlive():
@@ -51,6 +56,7 @@ class Scheduler:
     def forceRun(self):
         if not self.action.amActive:
             self.lastRun = datetime.datetime.fromordinal(1)
+            self.force = True
             return True
         return False
 
@@ -60,19 +66,23 @@ class Scheduler:
 
             currentTime = datetime.datetime.now()
 
-            if currentTime - self.lastRun >= self.cycleTime:
+            if currentTime - self.lastRun > self.cycleTime:
                 self.lastRun = currentTime
                 try:
                     if not self.silent:
-                        logger.log(u"Starting new thread: "+self.threadName, logger.DEBUG)
-                    self.action.run()
+                        logger.log(u"Starting new thread: " + self.threadName, logger.DEBUG)
+
+                    self.action.run(self.force)
                 except Exception, e:
-                    logger.log(u"Exception generated in thread "+self.threadName+": " + ex(e), logger.ERROR)
+                    logger.log(u"Exception generated in thread " + self.threadName + ": " + ex(e), logger.ERROR)
                     logger.log(repr(traceback.format_exc()), logger.DEBUG)
 
             if self.abort:
                 self.abort = False
                 self.thread = None
                 return
+
+            if self.force:
+                self.force = False
 
             time.sleep(1)

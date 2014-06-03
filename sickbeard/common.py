@@ -21,10 +21,14 @@ import os.path
 import operator
 import platform
 import re
+import uuid
 
 from sickbeard import version
 
-USER_AGENT = 'Sick Beard/alpha2-' + version.SICKBEARD_VERSION.replace(' ', '-') + ' (' + platform.system() + ' ' + platform.release() + ')'
+INSTANCE_ID = str(uuid.uuid1())
+USER_AGENT = ('SickRage/' + version.SICKBEARD_VERSION.replace(' ', '-') +
+              ' (' + platform.system() + '; ' + platform.release() +
+              '; ' + INSTANCE_ID + ')')
 
 mediaExtensions = ['avi', 'mkv', 'mpg', 'mpeg', 'wmv',
                    'ogm', 'mp4', 'iso', 'img', 'divx',
@@ -32,6 +36,11 @@ mediaExtensions = ['avi', 'mkv', 'mpg', 'mpeg', 'wmv',
                    'mov', 'rmvb', 'vob', 'dvr-ms', 'wtv',
                    'ogv', '3gp', 'webm']
 
+subtitleExtensions = ['srt', 'sub', 'ass', 'idx', 'ssa']
+cpu_presets = {'HIGH': 0.1,
+               'NORMAL': 0.05,
+               'LOW': 0.01
+}
 ### Other constants
 MULTI_EP_RESULT = -1
 SEASON_RESULT = -2
@@ -39,10 +48,12 @@ SEASON_RESULT = -2
 ### Notification Types
 NOTIFY_SNATCH = 1
 NOTIFY_DOWNLOAD = 2
+NOTIFY_SUBTITLE_DOWNLOAD = 3
 
 notifyStrings = {}
 notifyStrings[NOTIFY_SNATCH] = "Started Download"
 notifyStrings[NOTIFY_DOWNLOAD] = "Download Finished"
+notifyStrings[NOTIFY_SUBTITLE_DOWNLOAD] = "Subtitle Download Finished"
 
 ### Episode statuses
 UNKNOWN = -1         # should never happen
@@ -54,6 +65,9 @@ SKIPPED = 5          # episodes we don't want
 ARCHIVED = 6         # episodes that you don't have locally (counts toward download completion stats)
 IGNORED = 7          # episodes that you don't want included in your download stats
 SNATCHED_PROPER = 9  # qualified with quality
+SUBTITLED = 10  # qualified with quality
+FAILED = 11  #episode downloaded or snatched we don't want
+SNATCHED_BEST = 12  # episode redownloaded using best quality
 
 NAMING_REPEAT = 1
 NAMING_EXTEND = 2
@@ -101,13 +115,17 @@ class Quality:
                       FULLHDBLURAY: "1080p BluRay"}
 
     statusPrefixes = {DOWNLOADED: "Downloaded",
-                      SNATCHED: "Snatched"}
+                      SNATCHED: "Snatched",
+                      SNATCHED_PROPER: "Snatched (Proper)",
+                      FAILED: "Failed",
+                      SNATCHED_BEST: "Snatched (Best)"}
 
     @staticmethod
     def _getStatusStrings(status):
         toReturn = {}
         for x in Quality.qualityStrings.keys():
-            toReturn[Quality.compositeStatus(status, x)] = Quality.statusPrefixes[status] + " (" + Quality.qualityStrings[x] + ")"
+            toReturn[Quality.compositeStatus(status, x)] = Quality.statusPrefixes[status] + " (" + \
+                                                           Quality.qualityStrings[x] + ")"
         return toReturn
 
     @staticmethod
@@ -133,20 +151,50 @@ class Quality:
         return (sorted(anyQualities), sorted(bestQualities))
 
     @staticmethod
-    def nameQuality(name):
+    def nameQuality(name, anime=False):
+        """
+        Return The quality from an episode File renamed by SickRage
+        If no quality is achieved it will try sceneQuality regex
+        """
         name = os.path.basename(name)
 
         # if we have our exact text then assume we put it there
-        for x in sorted(Quality.qualityStrings, reverse=True):
+        for x in sorted(Quality.qualityStrings.keys(), reverse=True):
             if x == Quality.UNKNOWN:
                 continue
 
+            if x == Quality.NONE:  #Last chance
+                return Quality.sceneQuality(name, anime)
             regex = '\W' + Quality.qualityStrings[x].replace(' ', '\W') + '\W'
             regex_match = re.search(regex, name, re.I)
             if regex_match:
                 return x
 
-        checkName = lambda namelist, func: func([re.search(x, name, re.I) for x in namelist])
+    @staticmethod
+    def sceneQuality(name, anime=False):
+        """
+        Return The quality from the scene episode File 
+        """
+        name = os.path.basename(name)
+        checkName = lambda list, func: func([re.search(x, name, re.I) for x in list])
+        if anime:
+            blueRayOptions = checkName(["bluray", "blu-ray"], any)
+            hdOptions = checkName(["720p", "1280x720", "960x720"], any)
+            fullHD = checkName(["1080p", "1920x1080"], any)
+            if checkName(["360p", "XviD"], any):
+                return Quality.SDTV
+            elif checkName(["dvd", "480p", "848x480"], any):
+                return Quality.SDDVD
+            elif hdOptions and not blueRayOptions and not fullHD:
+                return Quality.HDTV
+            elif hdOptions and not blueRayOptions and not fullHD:
+                return Quality.HDWEBDL
+            elif blueRayOptions and hdOptions and not fullHD:
+                return Quality.HDBLURAY
+            elif fullHD:
+                return Quality.FULLHDBLURAY
+            else:
+                return Quality.UNKNOWN
         if checkName(["TrollHD"], all):
             return Quality.FULLHDBLURAY
         elif checkName(["480p"], all):
@@ -185,8 +233,8 @@ class Quality:
 
         if name.lower().endswith(".avi"):
             return Quality.SDTV
-        elif name.lower().endswith(".mkv"):
-            return Quality.HDTV
+ #       elif name.lower().endswith(".mkv"):
+ #           return Quality.HDTV
         elif name.lower().endswith(".mp4"):
             return Quality.SD264
         elif name.lower().endswith(".ts"):
@@ -224,16 +272,24 @@ class Quality:
     DOWNLOADED = None
     SNATCHED = None
     SNATCHED_PROPER = None
+    FAILED = None
+    SNATCHED_BEST = None
 
 Quality.DOWNLOADED = [Quality.compositeStatus(DOWNLOADED, x) for x in Quality.qualityStrings.keys()]
 Quality.SNATCHED = [Quality.compositeStatus(SNATCHED, x) for x in Quality.qualityStrings.keys()]
 Quality.SNATCHED_PROPER = [Quality.compositeStatus(SNATCHED_PROPER, x) for x in Quality.qualityStrings.keys()]
+Quality.FAILED = [Quality.compositeStatus(FAILED, x) for x in Quality.qualityStrings.keys()]
+Quality.SNATCHED_BEST = [Quality.compositeStatus(SNATCHED_BEST, x) for x in Quality.qualityStrings.keys()]
 
 SD = Quality.combineQualities([Quality.SDTV, Quality.SDDVD], [])
-HD = Quality.combineQualities([Quality.HDTV, Quality.FULLHDTV, Quality.HDWEBDL, Quality.FULLHDWEBDL, Quality.HDBLURAY, Quality.FULLHDBLURAY], []) # HD720p + HD1080p
+HD = Quality.combineQualities(
+    [Quality.HDTV, Quality.FULLHDTV, Quality.HDWEBDL, Quality.FULLHDWEBDL, Quality.HDBLURAY, Quality.FULLHDBLURAY],
+    [])  # HD720p + HD1080p
 HD720p = Quality.combineQualities([Quality.HDTV, Quality.HDWEBDL, Quality.HDBLURAY], [])
 HD1080p = Quality.combineQualities([Quality.FULLHDTV, Quality.FULLHDWEBDL, Quality.FULLHDBLURAY], [])
-ANY = Quality.combineQualities([Quality.SDTV, Quality.SDDVD, Quality.HDTV, Quality.FULLHDTV, Quality.HDWEBDL, Quality.FULLHDWEBDL, Quality.HDBLURAY, Quality.FULLHDBLURAY, Quality.UNKNOWN], []) # SD + HD
+ANY = Quality.combineQualities(
+    [Quality.SDTV, Quality.SDDVD, Quality.HDTV, Quality.FULLHDTV, Quality.HDWEBDL, Quality.FULLHDWEBDL,
+     Quality.HDBLURAY, Quality.FULLHDBLURAY, Quality.UNKNOWN], [])  # SD + HD
 BEST = Quality.combineQualities([Quality.SDTV, Quality.HDTV, Quality.HDWEBDL], [Quality.HDTV])
 
 qualityPresets = (SD, HD, HD720p, HD1080p, ANY)
@@ -254,20 +310,23 @@ class StatusStrings:
                               SNATCHED_PROPER: "Snatched (Proper)",
                               WANTED: "Wanted",
                               ARCHIVED: "Archived",
-                              IGNORED: "Ignored"}
+                              IGNORED: "Ignored",
+                              SUBTITLED: "Subtitled",
+                              FAILED: "Failed",
+                              SNATCHED_BEST: "Snatched (Best)"}
 
     def __getitem__(self, name):
-        if name in Quality.DOWNLOADED + Quality.SNATCHED + Quality.SNATCHED_PROPER:
+        if name in Quality.DOWNLOADED + Quality.SNATCHED + Quality.SNATCHED_PROPER + Quality.SNATCHED_BEST:
             status, quality = Quality.splitCompositeStatus(name)
             if quality == Quality.NONE:
                 return self.statusStrings[status]
             else:
                 return self.statusStrings[status]+" ("+Quality.qualityStrings[quality]+")"
         else:
-            return self.statusStrings[name]
+            return self.statusStrings[name] if self.statusStrings.has_key(name) else ''
 
     def has_key(self, name):
-        return name in self.statusStrings or name in Quality.DOWNLOADED or name in Quality.SNATCHED or name in Quality.SNATCHED_PROPER
+        return name in self.statusStrings or name in Quality.DOWNLOADED or name in Quality.SNATCHED or name in Quality.SNATCHED_PROPER or name in Quality.SNATCHED_BEST
 
 statusStrings = StatusStrings()
 
@@ -278,7 +337,7 @@ class Overview:
     GOOD = 4
     SKIPPED = SKIPPED # 5
 
-    SNATCHED = SNATCHED_PROPER # 9
+    SNATCHED = SNATCHED_PROPER = SNATCHED_BEST  # 9
     overviewStrings = {SKIPPED: "skipped",
                        WANTED: "wanted",
                        QUAL: "qual",
@@ -294,5 +353,5 @@ XML_NSMAP = {'xsi': 'http://www.w3.org/2001/XMLSchema-instance',
 countryList = {'Australia': 'AU',
                'Canada': 'CA',
                'USA': 'US'
-               }
+}
 

@@ -1,20 +1,20 @@
 # Author: Tyler Fenby <tylerfenby@gmail.com>
 # URL: http://code.google.com/p/sickbeard/
 #
-# This file is part of Sick Beard.
+# This file is part of SickRage.
 #
-# Sick Beard is free software: you can redistribute it and/or modify
+# SickRage is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# Sick Beard is distributed in the hope that it will be useful,
+# SickRage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with Sick Beard.  If not, see <http://www.gnu.org/licenses/>.
+# along with SickRage.  If not, see <http://www.gnu.org/licenses/>.
 
 from sickbeard import db
 from sickbeard.common import Quality
@@ -49,6 +49,7 @@ class SizeAndProvider(InitialSchema):
 
 class History(SizeAndProvider):
     """Snatch history that can't be modified by the user"""
+
     def test(self):
         return self.hasTable('history')
 
@@ -59,11 +60,12 @@ class History(SizeAndProvider):
 
 class HistoryStatus(History):
     """Store episode status before snatch to revert to if necessary"""
+
     def test(self):
         return self.hasColumn('history', 'old_status')
 
     def execute(self):
         self.addColumn('history', 'old_status', 'NUMERIC', Quality.NONE)
-        self.addColumn('history', 'showtvdbid', 'NUMERIC', '-1')
+        self.addColumn('history', 'showid', 'NUMERIC', '-1')
         self.addColumn('history', 'season', 'NUMERIC', '-1')
         self.addColumn('history', 'episode', 'NUMERIC', '-1')

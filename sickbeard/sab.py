@@ -1,20 +1,20 @@
 # Author: Nic Wolfe <nic@wolfeden.ca>
 # URL: http://code.google.com/p/sickbeard/
 #
-# This file is part of Sick Beard.
+# This file is part of SickRage.
 #
-# Sick Beard is free software: you can redistribute it and/or modify
+# SickRage is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# Sick Beard is distributed in the hope that it will be useful,
+# SickRage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with Sick Beard.  If not, see <http://www.gnu.org/licenses/>.
+# along with SickRage.  If not, see <http://www.gnu.org/licenses/>.
 
 
 
@@ -25,6 +25,7 @@ import sickbeard
 
 from lib import MultipartPostHandler
 import urllib2, cookielib
+
 try:
     import json
 except ImportError:
@@ -33,6 +34,7 @@ except ImportError:
 from sickbeard.common import USER_AGENT
 from sickbeard import logger
 from sickbeard.exceptions import ex
+
 
 def sendNZB(nzb):
     """
@@ -52,15 +54,23 @@ def sendNZB(nzb):
     if sickbeard.SAB_CATEGORY != None:
         params['cat'] = sickbeard.SAB_CATEGORY
 
-    # if it aired recently make it high priority
-    for curEp in nzb.episodes:
-        if datetime.date.today() - curEp.airdate <= datetime.timedelta(days=7):
-            params['priority'] = 1
+    # use high priority if specified (recently aired episode)
+    if nzb.priority == 1:
+        params['priority'] = 1
 
     # if it's a normal result we just pass SAB the URL
     if nzb.resultType == "nzb":
-        params['mode'] = 'addurl'
-        params['name'] = nzb.url
+        # for newzbin results send the ID to sab specifically
+        if nzb.provider.getID() == 'newzbin':
+            id = nzb.provider.getIDFromURL(nzb.url)
+            if not id:
+                logger.log("Unable to send NZB to sab, can't find ID in URL " + str(nzb.url), logger.ERROR)
+                return False
+            params['mode'] = 'addid'
+            params['name'] = id
+        else:
+            params['mode'] = 'addurl'
+            params['name'] = nzb.url
 
     # if we get a raw data result we want to upload it to SAB
     elif nzb.resultType == "nzbdata":
@@ -76,7 +86,7 @@ def sendNZB(nzb):
         # if we have the URL to an NZB then we've built up the SAB API URL already so just call it 
         if nzb.resultType == "nzb":
             f = urllib.urlopen(url)
-        
+
         # if we are uploading the NZB data to SAB then we need to build a little POST form and send it
         elif nzb.resultType == "nzbdata":
             cookies = cookielib.CookieJar()
@@ -129,6 +139,7 @@ def sendNZB(nzb):
         logger.log(u"Unknown failure sending NZB to sab. Return text is: " + sabText, logger.ERROR)
         return False
 
+
 def _checkSabResponse(f):
     try:
         result = f.readlines()
@@ -156,6 +167,7 @@ def _checkSabResponse(f):
     else:
         return True, sabText
 
+
 def _sabURLOpenSimple(url):
     try:
         f = urllib.urlopen(url)
@@ -171,9 +183,10 @@ def _sabURLOpenSimple(url):
     else:
         return True, f
 
+
 def getSabAccesMethod(host=None, username=None, password=None, apikey=None):
     url = host + "api?mode=auth"
-    
+
     result, f = _sabURLOpenSimple(url)
     if not result:
         return False, f
@@ -183,6 +196,7 @@ def getSabAccesMethod(host=None, username=None, password=None, apikey=None):
         return False, sabText
 
     return True, sabText
+
 
 def testAuthentication(host=None, username=None, password=None, apikey=None):
     """
@@ -195,7 +209,7 @@ def testAuthentication(host=None, username=None, password=None, apikey=None):
     
     Returns: A tuple containing the success boolean and a message
     """
-    
+
     # build up the URL parameters
     params = {}
     params['mode'] = 'queue'
@@ -204,7 +218,7 @@ def testAuthentication(host=None, username=None, password=None, apikey=None):
     params['ma_password'] = password
     params['apikey'] = apikey
     url = host + "api?" + urllib.urlencode(params)
-    
+
     # send the test request
     logger.log(u"SABnzbd test URL: " + url, logger.DEBUG)
     result, f = _sabURLOpenSimple(url)
@@ -215,6 +229,6 @@ def testAuthentication(host=None, username=None, password=None, apikey=None):
     result, sabText = _checkSabResponse(f)
     if not result:
         return False, sabText
-    
+
     return True, "Success"
     

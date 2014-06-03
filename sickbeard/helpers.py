@@ -1,64 +1,67 @@
 # Author: Nic Wolfe <nic@wolfeden.ca>
 # URL: http://code.google.com/p/sickbeard/
 #
-# This file is part of Sick Beard.
+# This file is part of SickRage.
 #
-# Sick Beard is free software: you can redistribute it and/or modify
+# SickRage is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# Sick Beard is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# SickRage is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty    of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with Sick Beard.  If not, see <http://www.gnu.org/licenses/>.
+# along with SickRage.  If not, see <http://www.gnu.org/licenses/>.
 
 from __future__ import with_statement
-import gzip
+
 import os
 import re
 import shutil
 import socket
 import stat
-import StringIO
-
 import time
 import traceback
 import urllib
-import urllib2
-import zlib
+import hashlib
+import httplib
+import urlparse
+import uuid
+import base64
+import string
 
-from httplib import BadStatusLine
+from lib import requests
+from lib.requests import exceptions
+from itertools import izip, cycle
 
 try:
     import json
 except ImportError:
     from lib import simplejson as json
 
-from xml.dom.minidom import Node
-
 try:
     import xml.etree.cElementTree as etree
 except ImportError:
     import elementtree.ElementTree as etree
 
+from xml.dom.minidom import Node
+
 import sickbeard
-
-from sickbeard.exceptions import MultipleShowObjectsException, ex
+from sickbeard.exceptions import MultipleShowObjectsException, EpisodeNotFoundByAbsoluteNumberException, ex
 from sickbeard import logger, classes
-from sickbeard.common import USER_AGENT, mediaExtensions, XML_NSMAP
-from sickbeard.common import mediaExtensions
-
+from sickbeard.common import USER_AGENT, mediaExtensions, subtitleExtensions, XML_NSMAP
 from sickbeard import db
 from sickbeard import encodingKludge as ek
 from sickbeard import notifiers
-
-from lib.tvdb_api import tvdb_api, tvdb_exceptions
+from lib import subliminal
+from lib import adba
 
 urllib._urlopener = classes.SickBeardURLopener()
+
+session = requests.Session()
 
 
 def indentXML(elem, level=0):
@@ -81,24 +84,6 @@ def indentXML(elem, level=0):
             elem.text = elem.text.replace('\n', ' ')
         if level and (not elem.tail or not elem.tail.strip()):
             elem.tail = i
-def remove_extension(name):
-    """
-    Remove download or media extension from name (if any)
-    """
-    if name and "." in name:
-        base_name, sep, extension = name.rpartition('.')  # @UnusedVariable
-        if base_name and extension.lower() in ['nzb', 'torrent'] + mediaExtensions:
-            name = base_name
-    return name
-def remove_non_release_groups(name):
-    """
-    Remove non release groups from name
-    """
-    if name and "-" in name:
-        name_group = name.rsplit('-', 1)
-        if name_group[-1].upper() in ["RP", "NZBGEEK"]:
-            name = name_group[0]
-    return name
 
 
 def replaceExtension(filename, newExt):
@@ -123,7 +108,7 @@ def replaceExtension(filename, newExt):
 
 def isMediaFile(filename):
     # ignore samples
-    if re.search('(^|[\W_])sample\d*[\W_]', filename.lower()):
+    if re.search('(^|[\W_])(sample\d*)[\W_]', filename, re.I):
         return False
 
     # ignore MAC OS's retarded "resource fork" files
@@ -131,10 +116,32 @@ def isMediaFile(filename):
         return False
 
     sepFile = filename.rpartition(".")
+
+    if re.search('extras?$', sepFile[0], re.I):
+        return False
+
     if sepFile[2].lower() in mediaExtensions:
         return True
     else:
         return False
+
+
+def isRarFile(filename):
+    archive_regex = '(?P<file>^(?P<base>(?:(?!\.part\d+\.rar$).)*)\.(?:(?:part0*1\.)?rar)$)'
+
+    if re.search(archive_regex, filename):
+        return True
+
+    return False
+
+
+def isBeingWritten(filepath):
+    # Return True if file was modified within 60 seconds. it might still be being written to.
+    ctime = max(ek.ek(os.path.getctime, filepath), ek.ek(os.path.getmtime, filepath))
+    if ctime > time.time() - 60:
+        return True
+
+    return False
 
 
 def sanitizeFileName(name):
@@ -159,87 +166,105 @@ def sanitizeFileName(name):
     return name
 
 
-def getURL(url, post_data=None, headers=[]):
+def getURL(url, post_data=None, headers=None, params=None, timeout=30, json=False, use_proxy=False):
     """
     Returns a byte-string retrieved from the url provider.
     """
 
-    opener = urllib2.build_opener()
-    opener.addheaders = [('User-Agent', USER_AGENT), ('Accept-Encoding', 'gzip,deflate')]
-    for cur_header in headers:
-        opener.addheaders.append(cur_header)
+    global session
+    if not session:
+        session = requests.Session()
+
+    req_headers = ['User-Agent', USER_AGENT, 'Accept-Encoding', 'gzip,deflate']
+    if headers:
+        for cur_header in headers:
+            req_headers.append(cur_header)
 
     try:
-        usock = opener.open(url, post_data)
-        url = usock.geturl()
-        encoding = usock.info().get("Content-Encoding")
+        # Remove double-slashes from url
+        parsed = list(urlparse.urlparse(url))
+        parsed[2] = re.sub("/{2,}", "/", parsed[2])  # replace two or more / with one
+        url = urlparse.urlunparse(parsed)
 
-        if encoding in ('gzip', 'x-gzip', 'deflate'):
-            content = usock.read()
-            if encoding == 'deflate':
-                data = StringIO.StringIO(zlib.decompress(content))
-            else:
-                data = gzip.GzipFile('', 'rb', 9, StringIO.StringIO(content))
-            result = data.read()
+        it = iter(req_headers)
 
+        if use_proxy and sickbeard.PROXY_SETTING:
+            logger.log("Using proxy for url: " + url, logger.DEBUG)
+            proxies = {
+                "http": sickbeard.PROXY_SETTING,
+                "https": sickbeard.PROXY_SETTING,
+            }
+
+            r = session.get(url, params=params, data=post_data, headers=dict(zip(it, it)), proxies=proxies,
+                            timeout=timeout, verify=False)
         else:
-            result = usock.read()
-
-        usock.close()
-
-    except urllib2.HTTPError, e:
-        logger.log(u"HTTP error " + str(e.code) + " while loading URL " + url, logger.WARNING)
+            r = session.get(url, params=params, data=post_data, headers=dict(zip(it, it)), timeout=timeout,
+                            verify=False)
+    except requests.HTTPError, e:
+        logger.log(u"HTTP error " + str(e.errno) + " while loading URL " + url, logger.WARNING)
         return None
 
-    except urllib2.URLError, e:
-        logger.log(u"URL error " + str(e.reason) + " while loading URL " + url, logger.WARNING)
+    except requests.ConnectionError, e:
+        logger.log(u"Connection error " + str(e.message) + " while loading URL " + url, logger.WARNING)
         return None
 
-    except BadStatusLine:
-        logger.log(u"BadStatusLine error while loading URL " + url, logger.WARNING)
+    except requests.Timeout, e:
+        logger.log(u"Connection timed out " + str(e.message) + " while loading URL " + url, logger.WARNING)
         return None
 
-    except socket.timeout:
-        logger.log(u"Timed out while loading URL " + url, logger.WARNING)
-        return None
+    if r.ok:
+        if json:
+            return r.json()
 
-    except ValueError:
-        logger.log(u"Unknown error while loading URL " + url, logger.WARNING)
-        return None
+        return r.content
+
+
+def _remove_file_failed(file):
+    try:
+        ek.ek(os.remove, file)
+    except:
+        pass
+
+
+def download_file(url, filename):
+    global session
+    if not session:
+        session = requests.Session()
+
+    try:
+        r = session.get(url, stream=True, verify=False)
+        with open(filename, 'wb') as fp:
+            for chunk in r.iter_content(chunk_size=1024):
+                if chunk:
+                    fp.write(chunk)
+                    fp.flush()
+
+    except requests.HTTPError, e:
+        _remove_file_failed(filename)
+        logger.log(u"HTTP error " + str(e.errno) + " while loading URL " + url, logger.WARNING)
+        return False
+
+    except requests.ConnectionError, e:
+        logger.log(u"Connection error " + str(e.message) + " while loading URL " + url, logger.WARNING)
+        return False
+
+    except requests.Timeout, e:
+        logger.log(u"Connection timed out " + str(e.message) + " while loading URL " + url, logger.WARNING)
+        return False
 
     except Exception:
+        _remove_file_failed(filename)
         logger.log(u"Unknown exception while loading URL " + url + ": " + traceback.format_exc(), logger.WARNING)
-        return None
+        return False
 
-    return result
+    return True
 
 
-def is_hidden_folder(folder):
-    """
-    Returns True if folder is hidden.
-    On Linux based systems hidden folders start with . (dot)
-    folder: Full path of folder to check
-    """
-    if ek.ek(os.path.isdir, folder):
-        if ek.ek(os.path.basename, folder).startswith('.'):
-            return True
-    return False
-def findCertainShow(showList, tvdbid):
-    results = filter(lambda x: x.tvdbid == tvdbid, showList)
-    if len(results) == 0:
-        return None
-    elif len(results) > 1:
-        raise MultipleShowObjectsException()
+def findCertainShow(showList, indexerid=None):
+    if indexerid:
+        results = filter(lambda x: x.indexerid == indexerid, showList)
     else:
-        return results[0]
-
-
-def findCertainTVRageShow(showList, tvrid):
-
-    if tvrid == 0:
-        return None
-
-    results = filter(lambda x: x.tvrid == tvrid, showList)
+        results = filter(lambda x: x.indexerid == indexerid, showList)
 
     if len(results) == 0:
         return None
@@ -260,8 +285,7 @@ def makeDir(path):
     return True
 
 
-def searchDBForShow(regShowName):
-
+def searchDBForShow(regShowName, log=False):
     showNames = [re.sub('[. -]', ' ', regShowName)]
 
     myDB = db.DBConnection()
@@ -270,29 +294,78 @@ def searchDBForShow(regShowName):
 
     for showName in showNames:
 
-        sqlResults = myDB.select("SELECT * FROM tv_shows WHERE show_name LIKE ? OR tvr_name LIKE ?", [showName, showName])
+        sqlResults = myDB.select("SELECT * FROM tv_shows WHERE show_name LIKE ?",
+                                 [showName])
 
         if len(sqlResults) == 1:
-            return (int(sqlResults[0]["tvdb_id"]), sqlResults[0]["show_name"])
+            return (int(sqlResults[0]["indexer_id"]), sqlResults[0]["show_name"])
 
         else:
-
             # if we didn't get exactly one result then try again with the year stripped off if possible
             match = re.match(yearRegex, showName)
             if match and match.group(1):
-                logger.log(u"Unable to match original name but trying to manually strip and specify show year", logger.DEBUG)
-                sqlResults = myDB.select("SELECT * FROM tv_shows WHERE (show_name LIKE ? OR tvr_name LIKE ?) AND startyear = ?", [match.group(1) + '%', match.group(1) + '%', match.group(3)])
+                if log:
+                    logger.log(u"Unable to match original name but trying to manually strip and specify show year",
+                               logger.DEBUG)
+                sqlResults = myDB.select(
+                    "SELECT * FROM tv_shows WHERE (show_name LIKE ?) AND startyear = ?",
+                    [match.group(1) + '%', match.group(3)])
 
             if len(sqlResults) == 0:
-                logger.log(u"Unable to match a record in the DB for " + showName, logger.DEBUG)
+                if log:
+                    logger.log(u"Unable to match a record in the DB for " + showName, logger.DEBUG)
                 continue
             elif len(sqlResults) > 1:
-                logger.log(u"Multiple results for " + showName + " in the DB, unable to match show name", logger.DEBUG)
+                if log:
+                    logger.log(u"Multiple results for " + showName + " in the DB, unable to match show name",
+                               logger.DEBUG)
                 continue
             else:
-                return (int(sqlResults[0]["tvdb_id"]), sqlResults[0]["show_name"])
+                return (int(sqlResults[0]["indexer_id"]), sqlResults[0]["show_name"])
 
-    return None
+    return
+
+
+def searchIndexerForShowID(regShowName, indexer=None, indexer_id=None, ui=None):
+    showNames = [re.sub('[. -]', ' ', regShowName)]
+
+    # Query Indexers for each search term and build the list of results
+    for i in sickbeard.indexerApi().indexers if not indexer else int(indexer or []):
+        # Query Indexers for each search term and build the list of results
+        lINDEXER_API_PARMS = sickbeard.indexerApi(i).api_params.copy()
+        if ui is not None: lINDEXER_API_PARMS['custom_ui'] = ui
+        t = sickbeard.indexerApi(i).indexer(**lINDEXER_API_PARMS)
+
+        for name in showNames:
+            logger.log(u"Trying to find " + name + " on " + sickbeard.indexerApi(i).name, logger.DEBUG)
+
+            try:
+                search = t[indexer_id] if indexer_id else t[name]
+            except:
+                continue
+
+            try:
+                seriesname = search.seriesname
+            except:
+                seriesname = None
+
+            try:
+                series_id = search.id
+            except:
+                series_id = None
+
+            if not (seriesname and series_id):
+                continue
+
+            if str(name).lower() == str(seriesname).lower and not indexer_id:
+                return (seriesname, int(sickbeard.indexerApi(i).config['id']), int(series_id))
+            elif int(indexer_id) == int(series_id):
+                return (seriesname, int(sickbeard.indexerApi(i).config['id']), int(indexer_id))
+
+        if indexer:
+            break
+
+    return (None, None, None)
 
 
 def sizeof_fmt(num):
@@ -315,8 +388,7 @@ def sizeof_fmt(num):
 
 
 def listMediaFiles(path):
-
-    if not path or not ek.ek(os.path.isdir, path):
+    if not dir or not ek.ek(os.path.isdir, path):
         return []
 
     files = []
@@ -348,6 +420,45 @@ def moveFile(srcFile, destFile):
     except OSError:
         copyFile(srcFile, destFile)
         ek.ek(os.unlink, srcFile)
+
+
+def link(src, dst):
+    if os.name == 'nt':
+        import ctypes
+
+        if ctypes.windll.kernel32.CreateHardLinkW(unicode(dst), unicode(src), 0) == 0: raise ctypes.WinError()
+    else:
+        os.link(src, dst)
+
+
+def hardlinkFile(srcFile, destFile):
+    try:
+        ek.ek(link, srcFile, destFile)
+        fixSetGroupID(destFile)
+    except:
+        logger.log(u"Failed to create hardlink of " + srcFile + " at " + destFile + ". Copying instead", logger.ERROR)
+        copyFile(srcFile, destFile)
+
+
+def symlink(src, dst):
+    if os.name == 'nt':
+        import ctypes
+
+        if ctypes.windll.kernel32.CreateSymbolicLinkW(unicode(dst), unicode(src), 1 if os.path.isdir(src) else 0) in [0,
+                                                                                                                      1280]:
+            raise ctypes.WinError()
+        else:
+            os.symlink(src, dst)
+
+
+def moveAndSymlinkFile(srcFile, destFile):
+    try:
+        ek.ek(os.rename, srcFile, destFile)
+        fixSetGroupID(destFile)
+        ek.ek(symlink, destFile, srcFile)
+    except:
+        logger.log(u"Failed to create symlink of " + srcFile + " at " + destFile + ". Copying instead", logger.ERROR)
+        copyFile(srcFile, destFile)
 
 
 def make_dirs(path):
@@ -406,12 +517,25 @@ def rename_ep_file(cur_path, new_path, old_path_length=0):
     """
 
     new_dest_dir, new_dest_name = os.path.split(new_path)  # @UnusedVariable
+
     if old_path_length == 0 or old_path_length > len(cur_path):
         # approach from the right
         cur_file_name, cur_file_ext = os.path.splitext(cur_path)  # @UnusedVariable
     else:
         # approach from the left
         cur_file_ext = cur_path[old_path_length:]
+        cur_file_name = cur_path[:old_path_length]
+
+    if cur_file_ext[1:] in subtitleExtensions:
+        # Extract subtitle language from filename
+        sublang = os.path.splitext(cur_file_name)[1][1:]
+
+        #Check if the language extracted from filename is a valid language
+        try:
+            language = subliminal.language.Language(sublang, strict=True)
+            cur_file_ext = '.' + sublang + cur_file_ext
+        except ValueError:
+            pass
 
     # put the extension on the incoming file
     new_path += cur_file_ext
@@ -447,10 +571,10 @@ def delete_empty_folders(check_empty_dir, keep_dir=None):
 
     # as long as the folder exists and doesn't contain any files, delete it
     while ek.ek(os.path.isdir, check_empty_dir) and check_empty_dir != keep_dir:
-
         check_files = ek.ek(os.listdir, check_empty_dir)
 
-        if not check_files or (len(check_files) <= len(ignore_items) and all([check_file in ignore_items for check_file in check_files])):
+        if not check_files or (len(check_files) <= len(ignore_items) and all(
+                [check_file in ignore_items for check_file in check_files])):
             # directory is empty or contains only ignore_items
             try:
                 logger.log(u"Deleting empty folder: " + check_empty_dir)
@@ -491,7 +615,7 @@ def chmodAsParent(childPath):
         return
 
     childPath_owner = childPathStat.st_uid
-    user_id = os.geteuid()  #only available on UNIX
+    user_id = os.geteuid()  # @UndefinedVariable - only available on UNIX
 
     if user_id != 0 and user_id != childPath_owner:
         logger.log(u"Not running as root or owner of " + childPath + ", not trying to set permissions", logger.DEBUG)
@@ -499,7 +623,8 @@ def chmodAsParent(childPath):
 
     try:
         ek.ek(os.chmod, childPath, childMode)
-        logger.log(u"Setting permissions for %s to %o as parent directory has %o" % (childPath, childMode, parentMode), logger.DEBUG)
+        logger.log(u"Setting permissions for %s to %o as parent directory has %o" % (childPath, childMode, parentMode),
+                   logger.DEBUG)
     except OSError:
         logger.log(u"Failed to set permission for %s to %o" % (childPath, childMode), logger.ERROR)
 
@@ -517,7 +642,7 @@ def fixSetGroupID(childPath):
         return
 
     parentPath = ek.ek(os.path.dirname, childPath)
-    parentStat = os.stat(parentPath)
+    parentStat = ek.ek(os.stat, parentPath)
     parentMode = stat.S_IMODE(parentStat[stat.ST_MODE])
 
     if parentMode & stat.S_ISGID:
@@ -529,51 +654,104 @@ def fixSetGroupID(childPath):
             return
 
         childPath_owner = childStat.st_uid
-        user_id = os.geteuid()  #only available on UNIX
+        user_id = os.geteuid()  # @UndefinedVariable - only available on UNIX
 
         if user_id != 0 and user_id != childPath_owner:
-            logger.log(u"Not running as root or owner of " + childPath + ", not trying to set the set-group-ID", logger.DEBUG)
+            logger.log(u"Not running as root or owner of " + childPath + ", not trying to set the set-group-ID",
+                       logger.DEBUG)
             return
 
         try:
-            ek.ek(os.chown, childPath, -1, parentGID)  #@UndefinedVariable - only available on UNIX
+            ek.ek(os.chown, childPath, -1, parentGID)  # @UndefinedVariable - only available on UNIX
             logger.log(u"Respecting the set-group-ID bit on the parent directory for %s" % (childPath), logger.DEBUG)
         except OSError:
-            logger.log(u"Failed to respect the set-group-ID bit on the parent directory for %s (setting group ID %i)" % (childPath, parentGID), logger.ERROR)
+            logger.log(
+                u"Failed to respect the set-group-ID bit on the parent directory for %s (setting group ID %i)" % (
+                    childPath, parentGID), logger.ERROR)
 
 
-def real_path(path):
-    """
-    Returns: the canonicalized absolute pathname. The resulting path will have no symbolic link, '/./' or '/../' components.
-    """
-    return ek.ek(os.path.normpath, ek.ek(os.path.normcase, ek.ek(os.path.realpath, path)))
+def is_anime_in_show_list():
+    for show in sickbeard.showList:
+        if show.is_anime:
+            return True
+    return False
+
+
+def update_anime_support():
+    sickbeard.ANIMESUPPORT = is_anime_in_show_list()
+
+def get_absolute_number_from_season_and_episode(show, season, episode):
+    myDB = db.DBConnection()
+    sql = "SELECT * FROM tv_episodes WHERE showid = ? and season = ? and episode = ?"
+    sqlResults = myDB.select(sql, [show.indexerid, season, episode])
+
+    if len(sqlResults) == 1:
+        absolute_number = int(sqlResults[0]["absolute_number"])
+        logger.log(
+            "Found absolute_number:" + str(absolute_number) + " by " + str(season) + "x" + str(episode), logger.DEBUG)
+
+        return absolute_number
+    else:
+        logger.log(
+            "No entries for absolute number in show: " + show.name + " found using " + str(season) + "x" + str(episode),logger.DEBUG)
+
+    return None
+
+def get_all_episodes_from_absolute_number(show, indexer_id, absolute_numbers):
+    if len(absolute_numbers) == 0:
+        raise EpisodeNotFoundByAbsoluteNumberException()
+
+    episodes = []
+    season = None
+
+    if not show and not indexer_id:
+        return (season, episodes)
+
+    if not show and indexer_id:
+        show = findCertainShow(sickbeard.showList, indexer_id)
+
+    for absolute_number in absolute_numbers:
+        ep = show.getEpisode(None, None, absolute_number=absolute_number)
+        if ep:
+            episodes.append(ep.episode)
+        else:
+            raise EpisodeNotFoundByAbsoluteNumberException()
+        season = ep.season  # this will always take the last found seson so eps that cross the season border are not handeled well
+
+    return (season, episodes)
+
+
 def sanitizeSceneName(name, ezrss=False):
     """
     Takes a show name and returns the "scenified" version of it.
-
+    
     ezrss: If true the scenified version will follow EZRSS's cracksmoker rules as best as possible
-
+    
     Returns: A string containing the scene version of the show name given.
     """
 
-    if not ezrss:
-        bad_chars = u",:()'!?\u2019"
-    # ezrss leaves : and ! in their show names as far as I can tell
+    if name:
+
+        if not ezrss:
+            bad_chars = u",:()'!?\u2019"
+        # ezrss leaves : and ! in their show names as far as I can tell
+        else:
+            bad_chars = u",()'?\u2019"
+
+        # strip out any bad chars
+        for x in bad_chars:
+            name = name.replace(x, "")
+
+        # tidy up stuff that doesn't belong in scene names
+        name = name.replace("- ", ".").replace(" ", ".").replace("&", "and").replace('/', '.')
+        name = re.sub("\.\.*", ".", name)
+
+        if name.endswith('.'):
+            name = name[:-1]
+
+        return name
     else:
-        bad_chars = u",()'?\u2019"
-
-    # strip out any bad chars
-    for x in bad_chars:
-        name = name.replace(x, "")
-
-    # tidy up stuff that doesn't belong in scene names
-    name = name.replace("- ", ".").replace(" ", ".").replace("&", "and").replace('/', '.')
-    name = re.sub("\.\.*", ".", name)
-
-    if name.endswith('.'):
-        name = name[:-1]
-
-    return name
+        return ''
 
 
 def create_https_certificates(ssl_cert, ssl_key):
@@ -581,8 +759,9 @@ def create_https_certificates(ssl_cert, ssl_key):
     Create self-signed HTTPS certificares and store in paths 'ssl_cert' and 'ssl_key'
     """
     try:
-        from OpenSSL import crypto  #@UnresolvedImport
-        from lib.certgen import createKeyPair, createCertRequest, createCertificate, TYPE_RSA, serial  #@UnresolvedImport
+        from lib.OpenSSL import crypto  # @UnresolvedImport
+        from lib.certgen import createKeyPair, createCertRequest, createCertificate, TYPE_RSA, \
+            serial  # @UnresolvedImport
     except:
         logger.log(u"pyopenssl module missing, please install for https access", logger.WARNING)
         return False
@@ -592,7 +771,7 @@ def create_https_certificates(ssl_cert, ssl_key):
     careq = createCertRequest(cakey, CN='Certificate Authority')
     cacert = createCertificate(careq, (careq, cakey), serial, (0, 60 * 60 * 24 * 365 * 10))  # ten years
 
-    cname = 'SickBeard'
+    cname = 'SickRage'
     pkey = createKeyPair(TYPE_RSA, 1024)
     req = createCertRequest(pkey, CN=cname)
     cert = createCertificate(req, (cacert, cakey), serial, (0, 60 * 60 * 24 * 365 * 10))  # ten years
@@ -607,8 +786,10 @@ def create_https_certificates(ssl_cert, ssl_key):
 
     return True
 
+
 if __name__ == '__main__':
     import doctest
+
     doctest.testmod()
 
 
@@ -679,7 +860,6 @@ def get_xml_text(element, mini_dom=False):
 
 
 def backupVersionedFile(old_file, version):
-
     numTries = 0
 
     new_file = old_file + '.' + 'v' + str(version)
@@ -705,3 +885,226 @@ def backupVersionedFile(old_file, version):
             return False
 
     return True
+
+
+# try to convert to int, if it fails the default will be returned
+def tryInt(s, s_default=0):
+    try:
+        return int(s)
+    except:
+        return s_default
+
+
+# generates a md5 hash of a file
+def md5_for_file(filename, block_size=2 ** 16):
+    try:
+        with open(filename, 'rb') as f:
+            md5 = hashlib.md5()
+            while True:
+                data = f.read(block_size)
+                if not data:
+                    break
+                md5.update(data)
+            f.close()
+            return md5.hexdigest()
+    except Exception:
+        return None
+
+
+def get_lan_ip():
+    """
+    Simple function to get LAN localhost_ip 
+    http://stackoverflow.com/questions/11735821/python-get-localhost-ip
+    """
+
+    if os.name != "nt":
+        import fcntl
+        import struct
+
+        def get_interface_ip(ifname):
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            return socket.inet_ntoa(fcntl.ioctl(s.fileno(), 0x8915, struct.pack('256s',
+                                                                                ifname[:15]))[20:24])
+
+    ip = socket.gethostbyname(socket.gethostname())
+    if ip.startswith("127.") and os.name != "nt":
+        interfaces = [
+            "eth0",
+            "eth1",
+            "eth2",
+            "wlan0",
+            "wlan1",
+            "wifi0",
+            "ath0",
+            "ath1",
+            "ppp0",
+        ]
+        for ifname in interfaces:
+            try:
+                ip = get_interface_ip(ifname)
+                print ifname, ip
+                break
+            except IOError:
+                pass
+    return ip
+
+
+def check_url(url):
+    """
+    Check if a URL exists without downloading the whole file.
+    We only check the URL header.
+    """
+    # see also http://stackoverflow.com/questions/2924422
+    # http://stackoverflow.com/questions/1140661
+    good_codes = [httplib.OK, httplib.FOUND, httplib.MOVED_PERMANENTLY]
+
+    host, path = urlparse.urlparse(url)[1:3]  # elems [1] and [2]
+    try:
+        conn = httplib.HTTPConnection(host)
+        conn.request('HEAD', path)
+        return conn.getresponse().status in good_codes
+    except StandardError:
+        return None
+
+
+"""
+Encryption
+==========
+By Pedro Jose Pereira Vieito <pvieito@gmail.com> (@pvieito)
+
+* If encryption_version==0 then return data without encryption
+* The keys should be unique for each device
+
+To add a new encryption_version:
+  1) Code your new encryption_version        
+  2) Update the last encryption_version available in webserve.py
+  3) Remember to maintain old encryption versions and key generators for retrocompatibility
+"""
+
+# Key Generators
+unique_key1 = hex(uuid.getnode() ** 2)  # Used in encryption v1
+
+# Encryption Functions
+def encrypt(data, encryption_version=0, decrypt=False):
+    # Version 1: Simple XOR encryption (this is not very secure, but works)
+    if encryption_version == 1:
+        if decrypt:
+            return ''.join(chr(ord(x) ^ ord(y)) for (x, y) in izip(base64.decodestring(data), cycle(unique_key1)))
+        else:
+            return base64.encodestring(
+                ''.join(chr(ord(x) ^ ord(y)) for (x, y) in izip(data, cycle(unique_key1)))).strip()
+    # Version 0: Plain text
+    else:
+        return data
+
+
+def decrypt(data, encryption_version=0):
+    return encrypt(data, encryption_version, decrypt=True)
+
+
+def full_sanitizeSceneName(name):
+    return re.sub('[. -]', ' ', sanitizeSceneName(name)).lower().lstrip()
+
+
+def _check_against_names(nameInQuestion, show, season=-1):
+
+    showNames = []
+    if season in [-1, 1]:
+        showNames = [show.name]
+
+    showNames.extend(sickbeard.scene_exceptions.get_scene_exceptions(show.indexerid, season=season))
+
+    for showName in showNames:
+        nameFromList = full_sanitizeSceneName(showName)
+        if nameFromList == nameInQuestion:
+            return True
+
+    return False
+
+
+def get_show_by_name(name, useIndexer=False):
+    name = full_sanitizeSceneName(name)
+
+    try:
+        # check cache for show
+        showObj = sickbeard.name_cache.retrieveShowFromCache(name)
+        if showObj:
+            return showObj
+        if not showObj and sickbeard.showList:
+            if name in sickbeard.scene_exceptions.exceptionIndexerCache:
+                showObj = findCertainShow(sickbeard.showList, int(sickbeard.scene_exceptions.exceptionIndexerCache[name]))
+
+            if useIndexer and not showObj:
+                (sn, idx, id) = searchIndexerForShowID(name, ui=classes.ShowListUI)
+                if id:
+                    showObj = findCertainShow(sickbeard.showList, int(id))
+
+        # add show to cache
+        if showObj:
+            sickbeard.name_cache.addNameToCache(name, showObj.indexerid)
+    except:
+        showObj = None
+
+    return showObj
+
+def is_hidden_folder(folder):
+    """
+    Returns True if folder is hidden.
+    On Linux based systems hidden folders start with . (dot)
+    folder: Full path of folder to check
+    """
+    if ek.ek(os.path.isdir, folder):
+        if ek.ek(os.path.basename, folder).startswith('.'):
+            return True
+
+    return False
+
+
+def real_path(path):
+    """
+    Returns: the canonicalized absolute pathname. The resulting path will have no symbolic link, '/./' or '/../' components.
+    """
+    return ek.ek(os.path.normpath, ek.ek(os.path.normcase, ek.ek(os.path.realpath, path)))
+
+
+def validateShow(show, season=None, episode=None):
+    indexer_lang = show.lang
+
+    try:
+        lINDEXER_API_PARMS = sickbeard.indexerApi(show.indexer).api_params.copy()
+
+        if indexer_lang and not indexer_lang == 'en':
+            lINDEXER_API_PARMS['language'] = indexer_lang
+
+        t = sickbeard.indexerApi(show.indexer).indexer(**lINDEXER_API_PARMS)
+        if season is None and episode is None:
+            return t
+
+        return t[show.indexerid][season][episode]
+    except (sickbeard.indexer_episodenotfound, sickbeard.indexer_seasonnotfound):
+        pass
+
+
+def set_up_anidb_connection():
+    if not sickbeard.USE_ANIDB:
+        logger.log(u"Usage of anidb disabled. Skiping", logger.DEBUG)
+        return False
+
+    if not sickbeard.ANIDB_USERNAME and not sickbeard.ANIDB_PASSWORD:
+        logger.log(u"anidb username and/or password are not set. Aborting anidb lookup.", logger.DEBUG)
+        return False
+
+    if not sickbeard.ADBA_CONNECTION:
+        anidb_logger = lambda x: logger.log("ANIDB: " + str(x), logger.DEBUG)
+        sickbeard.ADBA_CONNECTION = adba.Connection(keepAlive=True, log=anidb_logger)
+
+    if not sickbeard.ADBA_CONNECTION.authed():
+        try:
+            sickbeard.ADBA_CONNECTION.auth(sickbeard.ANIDB_USERNAME, sickbeard.ANIDB_PASSWORD)
+        except Exception, e:
+            logger.log(u"exception msg: " + str(e))
+            return False
+    else:
+        return True
+
+    return sickbeard.ADBA_CONNECTION.authed()

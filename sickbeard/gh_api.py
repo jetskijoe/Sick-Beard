@@ -1,20 +1,20 @@
 # Author: Nic Wolfe <nic@wolfeden.ca>
 # URL: http://code.google.com/p/sickbeard/
 #
-# This file is part of Sick Beard.
+# This file is part of SickRage.
 #
-# Sick Beard is free software: you can redistribute it and/or modify
+# SickRage is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# Sick Beard is distributed in the hope that it will be useful,
+# SickRage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with Sick Beard.  If not, see <http://www.gnu.org/licenses/>.
+# along with SickRage.  If not, see <http://www.gnu.org/licenses/>.
 
 try:
     import json
@@ -69,17 +69,23 @@ class GitHub(object):
 
         Returns a deserialized json object containing the commit info. See http://developer.github.com/v3/repos/commits/
         """
-        access_API = self._access_API(['repos', self.github_repo_user, self.github_repo, 'commits'], params={'per_page': 100, 'sha': self.branch})
+        access_API = self._access_API(['repos', self.github_repo_user, self.github_repo, 'commits'],
+                                      params={'per_page': 100, 'sha': self.branch})
         return access_API
+
     def compare(self, base, head, per_page=1):
         """
         Uses the API to get a list of compares between base and head.
+
         user: The github username of the person whose repo you're querying
         repo: The repo name to query
         base: Start compare from branch
         head: Current commit sha or branch name to compare
         per_page: number of items per page
+
         Returns a deserialized json object containing the compare info. See http://developer.github.com/v3/repos/commits/
         """
-        access_API = self._access_API(['repos', self.github_repo_user, self.github_repo, 'compare', base + '...' + head], params={'per_page': per_page})
+        access_API = self._access_API(
+            ['repos', self.github_repo_user, self.github_repo, 'compare', base + '...' + head],
+            params={'per_page': per_page})
         return access_API

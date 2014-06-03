@@ -2,22 +2,23 @@
 # Author: Dennis Lutter <lad1337@gmail.com>
 # URL: http://code.google.com/p/sickbeard/
 #
-# This file is part of Sick Beard.
+# This file is part of SickRage.
 #
-# Sick Beard is free software: you can redistribute it and/or modify
+# SickRage is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# Sick Beard is distributed in the hope that it will be useful,
+# SickRage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with Sick Beard.  If not, see <http://www.gnu.org/licenses/>.
+# along with SickRage.  If not, see <http://www.gnu.org/licenses/>.
 
 from __future__ import with_statement
+
 import unittest
 
 import sqlite3
@@ -29,6 +30,7 @@ sys.path.append(os.path.abspath('../lib'))
 
 import sickbeard
 import shutil
+
 from sickbeard import encodingKludge as ek, providers, tvcache
 from sickbeard import db
 from sickbeard.databases import mainDB
@@ -49,10 +51,11 @@ FILENAME = u"show name - s0" + str(SEASON) + "e0" + str(EPISODE) + ".mkv"
 FILEDIR = os.path.join(TESTDIR, SHOWNAME)
 FILEPATH = os.path.join(FILEDIR, FILENAME)
 
-SHOWDIR = os.path.join(TESTDIR, SHOWNAME +" final")
+SHOWDIR = os.path.join(TESTDIR, SHOWNAME + " final")
 
 #sickbeard.logger.sb_log_instance = sickbeard.logger.SBRotatingLogHandler(os.path.join(TESTDIR, 'sickbeard.log'), sickbeard.logger.NUM_LOGS, sickbeard.logger.LOG_SIZE)
 sickbeard.logger.SBRotatingLogHandler.log_file = os.path.join(os.path.join(TESTDIR, 'Logs'), 'test_sickbeard.log')
+
 
 #=================
 # prepare env functions
@@ -61,23 +64,24 @@ def createTestLogFolder():
     if not os.path.isdir(sickbeard.LOG_DIR):
         os.mkdir(sickbeard.LOG_DIR)
 
-# call env functions at apropriate time durin sickbeard var setup
+# call env functions at appropriate time during sickbeard var setup
 
 #=================
 # sickbeard globals
 #=================
 sickbeard.SYS_ENCODING = 'UTF-8'
 sickbeard.showList = []
-sickbeard.QUALITY_DEFAULT = 4 #hdtv
+sickbeard.QUALITY_DEFAULT = 4  # hdtv
 sickbeard.FLATTEN_FOLDERS_DEFAULT = 0
 
 sickbeard.NAMING_PATTERN = ''
 sickbeard.NAMING_ABD_PATTERN = ''
+sickbeard.NAMING_SPORTS_PATTERN = ''
 sickbeard.NAMING_MULTI_EP = 1
 
 
 sickbeard.PROVIDER_ORDER = ["sick_beard_index"]
-sickbeard.newznabProviderList = providers.getNewznabProviderList("Sick Beard Index|http://lolo.sickbeard.com/|0|5030,5040|0!!!NZBs.org|http://nzbs.org/||5030,5040,5070,5090|0!!!Usenet-Crawler|http://www.usenet-crawler.com/||5030,5040|0")
+sickbeard.newznabProviderList = providers.getNewznabProviderList("'Sick Beard Index|http://lolo.sickbeard.com/|0|5030,5040,5060|0|eponly|0!!!NZBs.org|https://nzbs.org/||5030,5040,5060,5070,5090|0|eponly|0!!!Usenet-Crawler|https://www.usenet-crawler.com/||5030,5040,5060|0|eponly|0'")
 sickbeard.providerList = providers.makeProviderList()
 
 sickbeard.PROG_DIR = os.path.abspath('..')
@@ -85,6 +89,7 @@ sickbeard.DATA_DIR = sickbeard.PROG_DIR
 sickbeard.LOG_DIR = os.path.join(TESTDIR, 'Logs')
 createTestLogFolder()
 sickbeard.logger.sb_log_instance.initLogging(False)
+
 
 #=================
 # dummy functions
@@ -94,6 +99,7 @@ def _dummy_saveConfig():
 # this overrides the sickbeard save_config which gets called during a db upgrade
 # this might be considered a hack
 mainDB.sickbeard.save_config = _dummy_saveConfig
+
 
 # the real one tries to contact tvdb just stop it from getting more info on the ep
 def _fake_specifyEP(self, season, episode):
@@ -133,7 +139,7 @@ class TestCacheDBConnection(TestDBConnection, object):
 
         # Create the table if it's not already there
         try:
-            sql = "CREATE TABLE " + providerName + " (name TEXT, season NUMERIC, episodes TEXT, tvrid NUMERIC, tvdbid NUMERIC, url TEXT, time NUMERIC, quality TEXT);"
+            sql = "CREATE TABLE " + providerName + " (name TEXT, season NUMERIC, episodes TEXT, indexerid NUMERIC, url TEXT, time NUMERIC, quality TEXT);"
             self.connection.execute(sql)
             self.connection.commit()
         except sqlite3.OperationalError, e:
@@ -173,8 +179,8 @@ def tearDown_test_db():
     """Deletes the test db
         although this seams not to work on my system it leaves me with an zero kb file
     """
-    # uncomment next line so leave the db intact beween test and at the end
-    #return False
+    # uncomment next line so leave the db intact between test and at the end
+    return False
     if os.path.exists(os.path.join(TESTDIR, TESTDBNAME)):
         os.remove(os.path.join(TESTDIR, TESTDBNAME))
     if os.path.exists(os.path.join(TESTDIR, TESTCACHEDBNAME)):

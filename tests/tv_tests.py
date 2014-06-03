@@ -2,27 +2,26 @@
 # Author: Dennis Lutter <lad1337@gmail.com>
 # URL: http://code.google.com/p/sickbeard/
 #
-# This file is part of Sick Beard.
+# This file is part of SickRage.
 #
-# Sick Beard is free software: you can redistribute it and/or modify
+# SickRage is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# Sick Beard is distributed in the hope that it will be useful,
+# SickRage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with Sick Beard.  If not, see <http://www.gnu.org/licenses/>.
+# along with SickRage.  If not, see <http://www.gnu.org/licenses/>.
 
 import unittest
 import test_lib as test
 
 import sickbeard
 from sickbeard.tv import TVEpisode, TVShow
-
 
 class TVShowTests(test.SickbeardTestDBCase):
 
@@ -31,11 +30,11 @@ class TVShowTests(test.SickbeardTestDBCase):
         sickbeard.showList = []
 
     def test_init_tvdbid(self):
-        show = TVShow(0001, "en")
+        show = TVShow(1, 0001, "en")
         self.assertEqual(show.tvdbid, 0001)
 
     def test_change_tvdbid(self):
-        show = TVShow(0001, "en")
+        show = TVShow(1, 0001, "en")
         show.name = "show name"
         show.tvrname = "show name"
         show.network = "cbs"
@@ -55,7 +54,7 @@ class TVShowTests(test.SickbeardTestDBCase):
         self.assertEqual(show.tvdbid, 0002)
 
     def test_set_name(self):
-        show = TVShow(0001, "en")
+        show = TVShow(1, 0001, "en")
         show.name = "newName"
         show.saveToDB()
         show.loadFromDB(skipNFO=True)
@@ -69,7 +68,7 @@ class TVEpisodeTests(test.SickbeardTestDBCase):
         sickbeard.showList = []
 
     def test_init_empty_db(self):
-        show = TVShow(0001, "en")
+        show = TVShow(1, 0001, "en")
         ep = TVEpisode(show, 1, 1)
         ep.name = "asdasdasdajkaj"
         ep.saveToDB()
@@ -84,7 +83,7 @@ class TVTests(test.SickbeardTestDBCase):
         sickbeard.showList = []
 
     def test_getEpisode(self):
-        show = TVShow(0001, "en")
+        show = TVShow(1, 0001, "en")
         show.name = "show name"
         show.tvrname = "show name"
         show.network = "cbs"

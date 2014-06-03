@@ -5,10 +5,10 @@ cache.db*
 config.ini*
 Logs/*
 sickbeard.db*
+failed.db*
 autoProcessTV/autoProcessTV.cfg
 server.crt
 server.key
-failed.db*
 
 #  SB Test Related   #
 ######################
@@ -31,6 +31,8 @@ tests/cache.db
 *.tmproj
 *.tmproject
 *.sw?
+Session.vim
+.ropeproject/*
 
 # OS generated files #
 ######################
@@ -42,3 +44,5 @@ ehthumbs.db
 Thumbs.db
 .directory
 *~
+/.idea/
+*.torrent

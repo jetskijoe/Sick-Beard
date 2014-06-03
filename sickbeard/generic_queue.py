@@ -1,20 +1,20 @@
 # Author: Nic Wolfe <nic@wolfeden.ca>
 # URL: http://code.google.com/p/sickbeard/
 #
-# This file is part of Sick Beard.
+# This file is part of SickRage.
 #
-# Sick Beard is free software: you can redistribute it and/or modify
+# SickRage is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# Sick Beard is distributed in the hope that it will be useful,
+# SickRage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with Sick Beard.  If not, see <http://www.gnu.org/licenses/>.
+# along with SickRage.  If not, see <http://www.gnu.org/licenses/>.
 
 import datetime
 import threading
@@ -41,6 +41,8 @@ class GenericQueue(object):
         
         self.currentItem = None
 
+        self.lock = threading.Lock()
+
     def pause(self):
         logger.log(u"Pausing queue")
         self.min_priority = 999999999999
@@ -55,7 +57,7 @@ class GenericQueue(object):
         
         return item
 
-    def run(self):
+    def run(self, force=False):
 
         # only start a new task if one isn't already going
         if self.thread == None or self.thread.isAlive() == False:
@@ -83,7 +85,8 @@ class GenericQueue(object):
                     else:
                         return y.priority-x.priority
 
-                self.queue.sort(cmp=sorter)
+                with self.lock:
+                    self.queue.sort(cmp=sorter)
                 
                 queueItem = self.queue[0]
 
@@ -130,5 +133,3 @@ class QueueItem:
         """Implementing Classes should call this"""
 
         self.inProgress = False
-
-

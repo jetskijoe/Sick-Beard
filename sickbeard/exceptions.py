@@ -1,20 +1,20 @@
 # Author: Nic Wolfe <nic@wolfeden.ca>
 # URL: http://code.google.com/p/sickbeard/
 #
-# This file is part of Sick Beard.
+# This file is part of SickRage.
 #
-# Sick Beard is free software: you can redistribute it and/or modify
+# SickRage is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# Sick Beard is distributed in the hope that it will be useful,
+# SickRage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with Sick Beard.  If not, see <http://www.gnu.org/licenses/>.
+# along with SickRage.  If not, see <http://www.gnu.org/licenses/>.
 
 from sickbeard.encodingKludge import fixStupidEncodings
 
@@ -53,7 +53,7 @@ def ex(e):
 
 
 class SickBeardException(Exception):
-    "Generic SickBeard Exception - should never be thrown, only subclassed"
+    "Generic SickRage Exception - should never be thrown, only subclassed"
 
 
 class ConfigErrorException(SickBeardException):
@@ -93,19 +93,15 @@ class WrongShowException(SickBeardException):
 
 
 class ShowNotFoundException(SickBeardException):
-    "The show wasn't found on theTVDB"
+    "The show wasn't found on the Indexer"
 
 
 class EpisodeNotFoundException(SickBeardException):
-    "The episode wasn't found on theTVDB"
+    "The episode wasn't found on the Indexer"
 
 
 class NewzbinAPIThrottled(SickBeardException):
     "Newzbin has throttled us, deal with it"
-
-
-class TVRageException(SickBeardException):
-    "TVRage API did something bad"
 
 
 class ShowDirNotFoundException(SickBeardException):
@@ -130,3 +126,19 @@ class CantUpdateException(SickBeardException):
 
 class PostProcessingFailed(SickBeardException):
     "Post-processing the episode failed"
+
+
+class FailedProcessingFailed(SickBeardException):
+    "Post-processing the failed release failed"
+
+
+class FailedHistoryMultiSnatchException(SickBeardException):
+    "Episode was snatched again before the first one was done"
+
+
+class FailedHistoryNotFoundException(SickBeardException):
+    "The release was not found in the failed download history tracker"
+
+
+class EpisodeNotFoundByAbsoluteNumberException(SickBeardException):
+    "The show wasn't found in the DB while looking at Absolute Numbers"

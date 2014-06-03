@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 #encoding:utf-8
 #author:dbr/Ben
 #project:tvdb_api
@@ -129,7 +129,7 @@ class CacheHandler(urllib2.BaseHandler):
     def default_open(self, request):
         """Handles GET requests, if the response is cached it returns it
         """
-        if request.get_method() is not "GET":
+        if request.get_method() != "GET":
             return None # let the next handler try to handle the request
 
         if exists_in_cache(

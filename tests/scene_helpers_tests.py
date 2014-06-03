@@ -22,10 +22,9 @@ class SceneTests(test.SickbeardTestDBCase):
         dot_expected = [x.replace(' ', '.') for x in expected]
         self.assertTrue(len(set(dot_expected).intersection(set(dot_result))) == len(dot_expected))
 
-    def _test_allPossibleShowNames(self, name, tvdbid=0, tvrname=None, expected=[]):
+    def _test_allPossibleShowNames(self, name, tvdbid=0, expected=[]):
         s = Show(tvdbid)
         s.name = name
-        s.tvrname = tvrname
 
         result = show_name_helpers.allPossibleShowNames(s)
         self.assertTrue(len(set(expected).intersection(set(result))) == len(expected))
@@ -70,17 +69,15 @@ class SceneTests(test.SickbeardTestDBCase):
     def test_allPossibleShowNames(self):
         #common.sceneExceptions[-1] = ['Exception Test']
         myDB = db.DBConnection("cache.db")
-        myDB.action("INSERT INTO scene_exceptions (tvdb_id, show_name) VALUES (?,?)", [-1, 'Exception Test'])
+        myDB.action("INSERT INTO scene_exceptions (indexer_id, show_name) VALUES (?,?)", [-1, 'Exception Test'])
         common.countryList['Full Country Name'] = 'FCN'
 
         self._test_allPossibleShowNames('Show Name', expected=['Show Name'])
         self._test_allPossibleShowNames('Show Name', -1, expected=['Show Name', 'Exception Test'])
-        self._test_allPossibleShowNames('Show Name', tvrname='TVRage Name', expected=['Show Name', 'TVRage Name'])
         self._test_allPossibleShowNames('Show Name FCN', expected=['Show Name FCN', 'Show Name (Full Country Name)'])
         self._test_allPossibleShowNames('Show Name (FCN)', expected=['Show Name (FCN)', 'Show Name (Full Country Name)'])
         self._test_allPossibleShowNames('Show Name Full Country Name', expected=['Show Name Full Country Name', 'Show Name (FCN)'])
         self._test_allPossibleShowNames('Show Name (Full Country Name)', expected=['Show Name (Full Country Name)', 'Show Name (FCN)'])
-        self._test_allPossibleShowNames('Show Name (FCN)', -1, 'TVRage Name', expected=['Show Name (FCN)', 'Show Name (Full Country Name)', 'Exception Test', 'TVRage Name'])
 
     def test_filterBadReleases(self):
         self._test_filterBadReleases('Show.S02.German.Stuff-Grp', False)

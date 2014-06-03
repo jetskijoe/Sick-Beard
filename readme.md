@@ -1,56 +1,48 @@
-Sick Beard
+SickRage
 =====
 
-*Sick Beard is currently an alpha release. There may be severe bugs in it and at any given time it may not work at all.*
+*SickRage  is currently in beta release stage. There may be severe bugs in it and at any given time it may not work at all.*
 
-Sick Beard is a PVR for newsgroup users (with limited torrent support). It watches for new episodes of your favorite shows and when they are posted it downloads them, sorts and renames them, and optionally generates metadata for them. It currently supports NZBs.org, NZBMatrix, Bin-Req, NZBs'R'Us, EZTV.it, and any Newznab installation and retrieves show information from theTVDB.com and TVRage.com.
+There are currently a lot of changes that we're working on, which affect the very core of how SickRage works. We're doing this to lay the groundwork
+for making SickRage seriously more awesome, scalable and resource-friendly than it already is. We know it will be a bumpy ride, but we also know
+that SickRage deserves to grow from a USENET grabber into a media independant grabber of anything TV show related. And beyond.
+ 
+While we're doing this, please expect SickRage do strange things, or maybe even not work at all. In any case, we need your help. If you see SickRage behaving weird, check if someone has reported it, and if not, open a new issue. There is little to no use to report "software should be stable". We will focus on that later, not now.
 
-Features include:
+SickRage is a PVR for torrent and newsgroup users. It watches for new episodes of your favorite shows and when they are posted it downloads them, sorts and renames them, and optionally generates metadata for them. It retrieves show information from theTVDB.com and TVRage.com.
 
-* automatically retrieves new episode torrent or nzb files
-* can scan your existing library and then download any old seasons or episodes you're missing
-* can watch for better versions and upgrade your existing episodes (to from TV DVD/BluRay for example)
-* XBMC library updates, poster/fanart downloads, and NFO/TBN generation
-* configurable episode renaming
-* sends NZBs directly to SABnzbd, prioritizes and categorizes them properly
-* available for any platform, uses simple HTTP interface
-* can notify XBMC, Growl, or Twitter when new episodes are downloaded
-* specials and double episode support
+!!! Please before using this with your existing database (sickbeard.db) please make a backup copy of it and delete any other database files such as cache.db and failed.db if present, we HIGHLY recommend starting out with no database files at all to make this a fresh start but the choice is at your own risk !!!
 
-
-Sick Beard makes use of the following projects:
-
-* [cherrypy][cherrypy]
-* [Cheetah][cheetah]
-* [simplejson][simplejson]
-* [tvdb_api][tvdb_api]
-* [ConfigObj][configobj]
-* [SABnzbd+][sabnzbd]
-* [jQuery][jquery]
-* [Python GNTP][pythongntp]
-* [SocksiPy][socks]
-* [python-dateutil][dateutil]
-* [jsonrpclib][jsonrpclib]
+FEATURES:
+- automatically retrieves new episode torrent or nzb files
+- can scan your existing library and then download any old seasons or episodes you're missing
+- can watch for better versions and upgrade your existing episodes (to from TV DVD/BluRay for example)
+- XBMC library updates, poster/fanart downloads, and NFO/TBN generation
+- configurable episode renaming
+- sends NZBs directly to SABnzbd, prioritizes and categorizes them properly
+- available for any platform, uses simple HTTP interface
+- can notify XBMC, Growl, or Twitter when new episodes are downloaded
+- specials and double episode support
+- Automatic XEM Scene Numbering/Naming for seasons/episodes
+- Failed handling now attempts to snatch a different release and excludes failed releases from future snatch attempts.
+- Episode Status Manager now allows for mass failing seasons/episodes to force retrying to download new releases.
+- DVD Order numbering for returning the results in DVD order instead of Air-By-Date order.
+- Improved Failed handling code for both NZB and Torrent downloads.
+- DupeKey/DupeScore for NZBGet 12+
+- Searches both TheTVDB.com, TVRage.com and AniDB.net for shows, seasons, episodes
+- Importing of existing video files now allows you to choose which indexer you wish to have SickBeard download its show info from.
+- Your tvshow.nfo files are now tagged with a indexer key so that SickBeard can easily tell if the shows info comes from TheTVDB or TVRage.
+- Failed download handling has been improved now for both NZB and Torrents.
+- Sports shows are now able to be searched for and downloaded by both NZB and Torrent providers.
 
 ## Dependencies
 
-To run Sick Beard from source you will need Python 2.5+ and Cheetah 2.1.0+. The [binary releases][googledownloads] are standalone.
+To run SickRage from source you will need Python 2.6+ and Cheetah 2.1.0+.
 
-## Bugs
+## Forums
 
-If you find a bug please report it or it'll never get fixed. Verify that it hasn't [already been submitted][googleissues] and then [log a new bug][googlenewissue]. Be sure to provide as much information as possible.
-
-[cherrypy]: http://www.cherrypy.org
-[cheetah]: http://www.cheetahtemplate.org/
-[simplejson]: http://code.google.com/p/simplejson/ 
-[tvdb_api]: http://github.com/dbr/tvdb_api
-[configobj]: http://www.voidspace.org.uk/python/configobj.html
-[sabnzbd]: http://www.sabnzbd.org/
-[jquery]: http://jquery.com
-[pythongntp]: http://github.com/kfdm/gntp
-[socks]: http://code.google.com/p/socksipy-branch/
-[dateutil]: http://labix.org/python-dateutil
-[googledownloads]: http://code.google.com/p/sickbeard/downloads/list
-[googleissues]: http://code.google.com/p/sickbeard/issues/list
-[googlenewissue]: http://code.google.com/p/sickbeard/issues/entry
-[jsonrpclib]: https://github.com/joshmarshall/jsonrpclib
+Any questions or setup info your looking for can be found at out forums http://www.sickrage.tv
+<br>
+If you find a bug please report at our forums http://sickrage.tv/forums/forum/help-support/bug-issue-reports
+<br>
+Be sure to provide a sickrage log in debug mode where is the error evidence or it'll never get fixed.

@@ -1,14 +1,14 @@
 # Author: Tyler Fenby <tylerfenby@gmail.com>
 # URL: http://code.google.com/p/sickbeard/
 #
-# This file is part of Sick Beard.
+# This file is part of SickRage.
 #
-# Sick Beard is free software: you can redistribute it and/or modify
+# SickRage is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# Sick Beard is distributed in the hope that it will be useful,
+# SickRage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
@@ -52,8 +52,9 @@ class FailedProcessor(object):
             self._log(u"Warning: unable to find a valid release name.", logger.WARNING)
             raise exceptions.FailedProcessingFailed()
 
-        parser = NameParser(False)
+
         try:
+            parser = NameParser(False, convert=True)
             parsed = parser.parse(releaseName)
         except InvalidNameException:
             self._log(u"Error: release name is invalid: " + releaseName, logger.WARNING)
@@ -66,27 +67,22 @@ class FailedProcessor(object):
         logger.log(u" - " + str(parsed.extra_info), logger.DEBUG)
         logger.log(u" - " + str(parsed.release_group), logger.DEBUG)
         logger.log(u" - " + str(parsed.air_date), logger.DEBUG)
+        logger.log(u" - " + str(parsed.sports_event_date), logger.DEBUG)
 
-        show_id = self._get_show_id(parsed.series_name)
-        if show_id is None:
-            self._log(u"Warning: couldn't find show ID", logger.WARNING)
+        if parsed.show is None:
+            self._log(
+                u"Could not create show object. Either the show hasn't been added to SickRage, or it's still loading (if SB was restarted recently)",
+                logger.WARNING)
             raise exceptions.FailedProcessingFailed()
 
-        self._log(u"Found show_id: " + str(show_id), logger.DEBUG)
+        segment = {parsed.season_number:[]}
 
-        self._show_obj = helpers.findCertainShow(sickbeard.showList, show_id)
-        if self._show_obj is None:
-            self._log(u"Could not create show object. Either the show hasn't been added to SickBeard, or it's still loading (if SB was restarted recently)", logger.WARNING)
-            raise exceptions.FailedProcessingFailed()
+        for episode in parsed.episode_numbers:
+            epObj = parsed.show.getEpisode(parsed.season_number, episode)
+            segment[parsed.season_number].append(epObj)
 
-        self._log(u"Reverting episodes...")
-        self.log += failed_history.revertEpisodes(self._show_obj, parsed.season_number, parsed.episode_numbers)
-        self._log(u"Marking release as bad: " + releaseName)
-        self.log += failed_history.logFailed(releaseName)
-
-
-        cur_backlog_queue_item = search_queue.BacklogQueueItem(self._show_obj, parsed.season_number)
-        sickbeard.searchQueueScheduler.action.add_item(cur_backlog_queue_item)
+        cur_failed_queue_item = search_queue.FailedQueueItem(parsed.show, segment)
+        sickbeard.searchQueueScheduler.action.add_item(cur_failed_queue_item)
 
         return True
 
@@ -94,22 +90,3 @@ class FailedProcessor(object):
         """Log to regular logfile and save for return for PP script log"""
         logger.log(message, level)
         self.log += message + "\n"
-
-    def _get_show_id(self, series_name):
-        """Find and return show ID by searching exceptions, then DB"""
-
-        show_names = show_name_helpers.sceneToNormalShowNames(series_name)
-
-        logger.log(u"show_names: " + str(show_names), logger.DEBUG)
-
-        for show_name in show_names:
-            exception = scene_exceptions.get_scene_exception_by_name(show_name)
-            if exception is not None:
-                return exception
-
-        for show_name in show_names:
-            found_info = helpers.searchDBForShow(show_name)
-            if found_info is not None:
-                return(found_info[0])
-
-        return None

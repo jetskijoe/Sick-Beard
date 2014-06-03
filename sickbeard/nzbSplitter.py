@@ -1,24 +1,24 @@
 # Author: Nic Wolfe <nic@wolfeden.ca>
 # URL: http://code.google.com/p/sickbeard/
 #
-# This file is part of Sick Beard.
+# This file is part of SickRage.
 #
-# Sick Beard is free software: you can redistribute it and/or modify
+# SickRage is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# Sick Beard is distributed in the hope that it will be useful,
+# SickRage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with Sick Beard.  If not, see <http://www.gnu.org/licenses/>.
+# along with SickRage.  If not, see <http://www.gnu.org/licenses/>.
 
 from __future__ import with_statement
-import urllib2
 
+import urllib2
 import xml.etree.cElementTree as etree
 import xml.etree
 import re
@@ -30,13 +30,13 @@ from sickbeard.common import Quality
 from sickbeard import encodingKludge as ek
 from sickbeard.exceptions import ex
 
-def getSeasonNZBs(name, urlData, season):
 
+def getSeasonNZBs(name, urlData, season):
     try:
         showXML = etree.ElementTree(etree.XML(urlData))
     except SyntaxError:
-        logger.log(u"Unable to parse the XML of "+name+", not splitting it", logger.ERROR)
-        return ({},'')
+        logger.log(u"Unable to parse the XML of " + name + ", not splitting it", logger.ERROR)
+        return ({}, '')
 
     filename = name.replace(".nzb", "")
 
@@ -46,10 +46,10 @@ def getSeasonNZBs(name, urlData, season):
 
     sceneNameMatch = re.search(regex, filename, re.I)
     if sceneNameMatch:
-        showName, qualitySection, groupName = sceneNameMatch.groups() #@UnusedVariable
+        showName, qualitySection, groupName = sceneNameMatch.groups()  # @UnusedVariable
     else:
-        logger.log(u"Unable to parse "+name+" into a scene name. If it's a valid one log a bug.", logger.ERROR)
-        return ({},'')
+        logger.log(u"Unable to parse " + name + " into a scene name. If it's a valid one log a bug.", logger.ERROR)
+        return ({}, '')
 
     regex = '(' + re.escape(showName) + '\.S%02d(?:[E0-9]+)\.[\w\._]+\-\w+' % season + ')'
     regex = regex.replace(' ', '.')
@@ -75,8 +75,8 @@ def getSeasonNZBs(name, urlData, season):
 
     return (epFiles, xmlns)
 
-def createNZBString(fileElements, xmlns):
 
+def createNZBString(fileElements, xmlns):
     rootElement = etree.Element("nzb")
     if xmlns:
         rootElement.set("xmlns", xmlns)
@@ -88,7 +88,6 @@ def createNZBString(fileElements, xmlns):
 
 
 def saveNZB(nzbName, nzbString):
-
     try:
         with ek.ek(open, nzbName + ".nzb", 'w') as nzb_fh:
             nzb_fh.write(nzbString)
@@ -96,8 +95,9 @@ def saveNZB(nzbName, nzbString):
     except EnvironmentError, e:
         logger.log(u"Unable to save NZB: " + ex(e), logger.ERROR)
 
+
 def stripNS(element, ns):
-    element.tag = element.tag.replace("{"+ns+"}", "")
+    element.tag = element.tag.replace("{" + ns + "}", "")
     for curChild in element.getchildren():
         stripNS(curChild, ns)
 
@@ -105,11 +105,10 @@ def stripNS(element, ns):
 
 
 def splitResult(result):
-
     urlData = helpers.getURL(result.url)
 
     if urlData is None:
-        logger.log(u"Unable to load url "+result.url+", can't download season NZB", logger.ERROR)
+        logger.log(u"Unable to load url " + result.url + ", can't download season NZB", logger.ERROR)
         return False
 
     # parse the season ep name
@@ -117,7 +116,7 @@ def splitResult(result):
         np = NameParser(False)
         parse_result = np.parse(result.name)
     except InvalidNameException:
-        logger.log(u"Unable to parse the filename "+result.name+" into a valid episode", logger.WARNING)
+        logger.log(u"Unable to parse the filename " + result.name + " into a valid episode", logger.WARNING)
         return False
 
     # bust it up
@@ -129,28 +128,34 @@ def splitResult(result):
 
     for newNZB in separateNZBs:
 
-        logger.log(u"Split out "+newNZB+" from "+result.name, logger.DEBUG)
+        logger.log(u"Split out " + newNZB + " from " + result.name, logger.DEBUG)
 
         # parse the name
         try:
             np = NameParser(False)
             parse_result = np.parse(newNZB)
         except InvalidNameException:
-            logger.log(u"Unable to parse the filename "+newNZB+" into a valid episode", logger.WARNING)
+            logger.log(u"Unable to parse the filename " + newNZB + " into a valid episode", logger.WARNING)
             return False
 
         # make sure the result is sane
-        if (parse_result.season_number != None and parse_result.season_number != season) or (parse_result.season_number == None and season != 1):
-            logger.log(u"Found "+newNZB+" inside "+result.name+" but it doesn't seem to belong to the same season, ignoring it", logger.WARNING)
+        if (parse_result.season_number != None and parse_result.season_number != season) or (
+                parse_result.season_number == None and season != 1):
+            logger.log(
+                u"Found " + newNZB + " inside " + result.name + " but it doesn't seem to belong to the same season, ignoring it",
+                logger.WARNING)
             continue
         elif len(parse_result.episode_numbers) == 0:
-            logger.log(u"Found "+newNZB+" inside "+result.name+" but it doesn't seem to be a valid episode NZB, ignoring it", logger.WARNING)
+            logger.log(
+                u"Found " + newNZB + " inside " + result.name + " but it doesn't seem to be a valid episode NZB, ignoring it",
+                logger.WARNING)
             continue
 
         wantEp = True
         for epNo in parse_result.episode_numbers:
             if not result.extraInfo[0].wantEpisode(season, epNo, result.quality):
-                logger.log(u"Ignoring result "+newNZB+" because we don't want an episode that is "+Quality.qualityStrings[result.quality], logger.DEBUG)
+                logger.log(u"Ignoring result " + newNZB + " because we don't want an episode that is " +
+                           Quality.qualityStrings[result.quality], logger.DEBUG)
                 wantEp = False
                 break
         if not wantEp:

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 #encoding:utf-8
 #author:dbr/Ben
 #project:tvdb_api
@@ -103,6 +103,7 @@ class test_tvdb_basic(unittest.TestCase):
         show = self.t['Katekyo Hitman Reborn']
         print tvdb_api
         print show[1][1]
+
 
 class test_tvdb_errors(unittest.TestCase):
     # Used to store the cached instance of Tvdb()

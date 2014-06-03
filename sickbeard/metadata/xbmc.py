@@ -1,21 +1,22 @@
 # Author: Nic Wolfe <nic@wolfeden.ca>
 # URL: http://code.google.com/p/sickbeard/
 #
-# This file is part of Sick Beard.
+# This file is part of SickRage.
 #
-# Sick Beard is free software: you can redistribute it and/or modify
+# SickRage is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# Sick Beard is distributed in the hope that it will be useful,
+# SickRage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with Sick Beard.  If not, see <http://www.gnu.org/licenses/>.
+# along with SickRage.  If not, see <http://www.gnu.org/licenses/>.
 
+import generic
 import xbmc_12plus
 
 import os
@@ -53,7 +54,7 @@ class XBMCMetadata(xbmc_12plus.XBMC_12PlusMetadata):
                  season_all_poster=False,
                  season_all_banner=False):
 
-        xbmc_12plus.XBMC_12PlusMetadata.__init__(self,
+        generic.GenericMetadata.__init__(self,
                                          show_metadata,
                                          episode_metadata,
                                          fanart,
@@ -71,9 +72,9 @@ class XBMCMetadata(xbmc_12plus.XBMC_12PlusMetadata):
         self.season_all_poster_name = "season-all.tbn"
 
         # web-ui metadata template
-        # self.eg_show_metadata = "tvshow.nfo"
-        # self.eg_episode_metadata = "Season##\\<i>filename</i>.nfo"
-        # self.eg_fanart = "fanart.jpg"
+        self.eg_show_metadata = "tvshow.nfo"
+        self.eg_episode_metadata = "Season##\\<i>filename</i>.nfo"
+        self.eg_fanart = "fanart.jpg"
         self.eg_poster = "folder.jpg"
         self.eg_banner = "folder.jpg"
         self.eg_episode_thumbnails = "Season##\\<i>filename</i>.tbn"

@@ -1,24 +1,25 @@
 # Author: Nic Wolfe <nic@wolfeden.ca>
 # URL: http://code.google.com/p/sickbeard/
 #
-# This file is part of Sick Beard.
+# This file is part of SickRage.
 #
-# Sick Beard is free software: you can redistribute it and/or modify
+# SickRage is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# Sick Beard is distributed in the hope that it will be useful,
+# SickRage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with Sick Beard.  If not, see <http://www.gnu.org/licenses/>.
+# along with SickRage.  If not, see <http://www.gnu.org/licenses/>.
 
 import os
 import string
 import cherrypy
+import time
 
 from sickbeard import encodingKludge as ek
 
@@ -38,7 +39,7 @@ def getWinDrives():
     assert os.name == 'nt'
 
     drives = []
-    bitmask = windll.kernel32.GetLogicalDrives() #@UndefinedVariable
+    bitmask = windll.kernel32.GetLogicalDrives()  #@UndefinedVariable
     for letter in string.uppercase:
         if bitmask & 1:
             drives.append(letter)
@@ -79,26 +80,27 @@ def foldersAtPath(path, includeParent=False):
     if path == parentPath and os.name == 'nt':
         parentPath = ""
 
-    fileList = [{ 'name': filename, 'path': ek.ek(os.path.join, path, filename) } for filename in ek.ek(os.listdir, path)]
+    fileList = [{'name': filename, 'path': ek.ek(os.path.join, path, filename)} for filename in ek.ek(os.listdir, path)]
     fileList = filter(lambda entry: ek.ek(os.path.isdir, entry['path']), fileList)
 
     # prune out directories to proect the user from doing stupid things (already lower case the dir to reduce calls)
-    hideList = ["boot", "bootmgr", "cache", "msocache", "recovery", "$recycle.bin", "recycler", "system volume information", "temporary internet files"] # windows specific
-    hideList += [".fseventd", ".spotlight", ".trashes", ".vol", "cachedmessages", "caches", "trash"] # osx specific
+    hideList = ["boot", "bootmgr", "cache", "msocache", "recovery", "$recycle.bin", "recycler",
+                "system volume information", "temporary internet files"]  # windows specific
+    hideList += [".fseventd", ".spotlight", ".trashes", ".vol", "cachedmessages", "caches", "trash"]  # osx specific
     fileList = filter(lambda entry: entry['name'].lower() not in hideList, fileList)
 
-    fileList = sorted(fileList, lambda x, y: cmp(os.path.basename(x['name']).lower(), os.path.basename(y['path']).lower()))
+    fileList = sorted(fileList,
+                      lambda x, y: cmp(os.path.basename(x['name']).lower(), os.path.basename(y['path']).lower()))
 
     entries = [{'current_path': path}]
     if includeParent and parentPath != path:
-        entries.append({ 'name': "..", 'path': parentPath })
+        entries.append({'name': "..", 'path': parentPath})
     entries.extend(fileList)
 
     return entries
 
 
 class WebFileBrowser:
-
     @cherrypy.expose
     def index(self, path=''):
         cherrypy.response.headers['Content-Type'] = "application/json"
@@ -108,4 +110,4 @@ class WebFileBrowser:
     def complete(self, term):
         cherrypy.response.headers['Content-Type'] = "application/json"
         paths = [entry['path'] for entry in foldersAtPath(os.path.dirname(term)) if 'path' in entry]
-        return json.dumps( paths )
+        return json.dumps(paths)

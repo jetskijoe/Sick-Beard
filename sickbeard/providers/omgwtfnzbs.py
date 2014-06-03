@@ -1,20 +1,20 @@
 # Author: Jordon Smith <smith@jordon.me.uk>
 # URL: http://code.google.com/p/sickbeard/
 #
-# This file is part of Sick Beard.
+# This file is part of SickRage.
 #
-# Sick Beard is free software: you can redistribute it and/or modify
+# SickRage is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# Sick Beard is distributed in the hope that it will be useful,
+# SickRage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with Sick Beard. If not, see <http://www.gnu.org/licenses/>.
+# along with SickRage. If not, see <http://www.gnu.org/licenses/>.
 
 import urllib
 import generic
@@ -40,19 +40,21 @@ except ImportError:
 
 
 class OmgwtfnzbsProvider(generic.NZBProvider):
-
     def __init__(self):
         generic.NZBProvider.__init__(self, "omgwtfnzbs")
+        self.enabled = False
+        self.username = None
+        self.api_key = None
         self.cache = OmgwtfnzbsCache(self)
         self.url = 'https://omgwtfnzbs.org/'
         self.supportsBacklog = True
 
     def isEnabled(self):
-        return sickbeard.OMGWTFNZBS
+        return self.enabled
 
     def _checkAuth(self):
 
-        if not sickbeard.OMGWTFNZBS_USERNAME  or not sickbeard.OMGWTFNZBS_APIKEY:
+        if not self.username or not self.api_key:
             raise AuthException("Your authentication credentials for " + self.name + " are missing, check your config.")
 
         return True
@@ -65,7 +67,6 @@ class OmgwtfnzbsProvider(generic.NZBProvider):
         if is_XML:
             # provider doesn't return xml on error
             return True
-
         else:
             parsedJSON = parsed_data
 
@@ -73,8 +74,10 @@ class OmgwtfnzbsProvider(generic.NZBProvider):
                 description_text = parsedJSON.get('notice')
 
                 if 'information is incorrect' in parsedJSON.get('notice'):
-                    logger.log(u"Incorrect authentication credentials for " + self.name + " : " + str(description_text), logger.DEBUG)
-                    raise AuthException("Your authentication credentials for " + self.name + " are incorrect, check your config.")
+                    logger.log(u"Incorrect authentication credentials for " + self.name + " : " + str(description_text),
+                               logger.DEBUG)
+                    raise AuthException(
+                        "Your authentication credentials for " + self.name + " are incorrect, check your config.")
 
                 elif '0 results matched your terms' in parsedJSON.get('notice'):
                     return True
@@ -85,21 +88,21 @@ class OmgwtfnzbsProvider(generic.NZBProvider):
 
             return True
 
-    def _get_season_search_strings(self, show, season):
-        return [x for x in show_name_helpers.makeSceneSeasonSearchString(show, season)]
+    def _get_season_search_strings(self, ep_obj):
+        return [x for x in show_name_helpers.makeSceneSeasonSearchString(self.show, ep_obj)]
 
-    def _get_episode_search_strings(self, ep_obj):
-        return [x for x in show_name_helpers.makeSceneSearchString(ep_obj)]
+    def _get_episode_search_strings(self, ep_obj, add_string=''):
+        return [x for x in show_name_helpers.makeSceneSearchString(self.show, ep_obj)]
 
     def _get_title_and_url(self, item):
         return (item['release'], item['getnzb'])
 
-    def _doSearch(self, search, show=None, retention=0):
+    def _doSearch(self, search, epcount=0, retention=0):
 
         self._checkAuth()
 
-        params = {'user': sickbeard.OMGWTFNZBS_USERNAME,
-                  'api': sickbeard.OMGWTFNZBS_APIKEY,
+        params = {'user': self.username,
+                  'api': self.api_key,
                   'eng': 1,
                   'catid': '19,20',  # SD,HD
                   'retention': sickbeard.USENET_RETENTION,
@@ -111,23 +114,17 @@ class OmgwtfnzbsProvider(generic.NZBProvider):
         search_url = 'https://api.omgwtfnzbs.org/json/?' + urllib.urlencode(params)
         logger.log(u"Search url: " + search_url, logger.DEBUG)
 
-        data = self.getURL(search_url)
+        data = self.getURL(search_url, json=True)
 
         if not data:
             logger.log(u"No data returned from " + search_url, logger.ERROR)
             return []
 
-        parsedJSON = helpers.parse_json(data)
-
-        if parsedJSON is None:
-            logger.log(u"Error trying to load " + self.name + " JSON data", logger.ERROR)
-            return []
-
-        if self._checkAuthFromData(parsedJSON, is_XML=False):
+        if self._checkAuthFromData(data, is_XML=False):
 
             results = []
 
-            for item in parsedJSON:
+            for item in data:
                 if 'release' in item and 'getnzb' in item:
                     results.append(item)
 
@@ -156,14 +153,13 @@ class OmgwtfnzbsProvider(generic.NZBProvider):
 
 
 class OmgwtfnzbsCache(tvcache.TVCache):
-
     def __init__(self, provider):
         tvcache.TVCache.__init__(self, provider)
         self.minTime = 20
 
     def _getRSSData(self):
-        params = {'user': sickbeard.OMGWTFNZBS_USERNAME,
-                  'api': sickbeard.OMGWTFNZBS_APIKEY,
+        params = {'user': provider.username,
+                  'api': provider.api_key,
                   'eng': 1,
                   'catid': '19,20'}  # SD,HD
 
@@ -171,15 +167,9 @@ class OmgwtfnzbsCache(tvcache.TVCache):
 
         logger.log(self.provider.name + u" cache update URL: " + rss_url, logger.DEBUG)
 
-        data = self.provider.getURL(rss_url)
+        return self.getRSSFeed(rss_url)
 
-        if not data:
-            logger.log(u"No data returned from " + rss_url, logger.ERROR)
-            return None
-
-        return data
-
-    def _checkAuth(self, parsedXML):
-            return self.provider._checkAuthFromData(parsedXML)
+    def _checkAuth(self, data):
+        return self.provider._checkAuthFromData(data)
 
 provider = OmgwtfnzbsProvider()

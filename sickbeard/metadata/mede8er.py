@@ -1,20 +1,20 @@
 # Author: Nic Wolfe <nic@wolfeden.ca>
 # URL: http://code.google.com/p/sickbeard/
 #
-# This file is part of Sick Beard.
+# This file is part of SickRage.
 #
-# Sick Beard is free software: you can redistribute it and/or modify
+# SickRage is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# Sick Beard is distributed in the hope that it will be useful,
+# SickRage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with Sick Beard.  If not, see <http://www.gnu.org/licenses/>.
+# along with SickRage.  If not, see <http://www.gnu.org/licenses/>.
 
 import datetime
 
@@ -23,7 +23,6 @@ import sickbeard
 import mediabrowser
 
 from sickbeard import logger, exceptions, helpers
-from lib.tvdb_api import tvdb_api, tvdb_exceptions
 from sickbeard.exceptions import ex
 
 try:
@@ -101,15 +100,18 @@ class Mede8erMetadata(mediabrowser.MediaBrowserMetadata):
         show_obj: a TVShow instance to create the NFO for
         """
 
-        tvdb_lang = show_obj.lang
-        # There's gotta be a better way of doing this but we don't wanna
-        # change the language value elsewhere
-        ltvdb_api_parms = sickbeard.TVDB_API_PARMS.copy()
+        indexer_lang = show_obj.lang
+        lINDEXER_API_PARMS = sickbeard.indexerApi(show_obj.indexer).api_params.copy()
 
-        if tvdb_lang and not tvdb_lang == 'en':
-            ltvdb_api_parms['language'] = tvdb_lang
+        lINDEXER_API_PARMS['actors'] = True
 
-        t = tvdb_api.Tvdb(actors=True, **ltvdb_api_parms)
+        if indexer_lang and not indexer_lang == 'en':
+            lINDEXER_API_PARMS['language'] = indexer_lang
+
+        if show_obj.dvdorder != 0:
+            lINDEXER_API_PARMS['dvdorder'] = True
+
+        t = sickbeard.indexerApi(show_obj.indexer).indexer(**lINDEXER_API_PARMS)
 
         rootNode = etree.Element("details")
         tv_node = etree.SubElement(rootNode, "movie")
@@ -118,22 +120,22 @@ class Mede8erMetadata(mediabrowser.MediaBrowserMetadata):
         tv_node.attrib["isTV"] = "true"
 
         try:
-            myShow = t[int(show_obj.tvdbid)]
-        except tvdb_exceptions.tvdb_shownotfound:
-            logger.log(u"Unable to find show with id " + str(show_obj.tvdbid) + " on tvdb, skipping it", logger.ERROR)
+            myShow = t[int(show_obj.indexerid)]
+        except sickbeard.indexer_shownotfound:
+            logger.log(u"Unable to find show with id " + str(show_obj.indexerid) + " on tvdb, skipping it", logger.ERROR)
             raise
 
-        except tvdb_exceptions.tvdb_error:
+        except sickbeard.indexer_error:
             logger.log(u"TVDB is down, can't use its data to make the NFO", logger.ERROR)
             raise
 
         # check for title and id
         try:
             if myShow['seriesname'] == None or myShow['seriesname'] == "" or myShow['id'] == None or myShow['id'] == "":
-                logger.log(u"Incomplete info for show with id " + str(show_obj.tvdbid) + " on tvdb, skipping it", logger.ERROR)
+                logger.log(u"Incomplete info for show with id " + str(show_obj.indexerid) + " on tvdb, skipping it", logger.ERROR)
                 return False
-        except tvdb_exceptions.tvdb_attributenotfound:
-            logger.log(u"Incomplete info for show with id " + str(show_obj.tvdbid) + " on tvdb, skipping it", logger.ERROR)
+        except sickbeard.indexer_attributenotfound:
+            logger.log(u"Incomplete info for show with id " + str(show_obj.indexerid) + " on tvdb, skipping it", logger.ERROR)
             return False
 
         SeriesName = etree.SubElement(tv_node, "title")
@@ -185,9 +187,9 @@ class Mede8erMetadata(mediabrowser.MediaBrowserMetadata):
             IMDB_ID.attrib["moviedb"] = "imdb"
             IMDB_ID.text = myShow['imdb_id']
 
-        tvdbid = etree.SubElement(tv_node, "tvdbid")
+        indexerid = etree.SubElement(tv_node, "indexerid")
         if myShow['id'] != None:
-            tvdbid.text = myShow['id']
+            indexerid.text = myShow['id']
 
         Runtime = etree.SubElement(tv_node, "runtime")
         if myShow['runtime'] != None:
@@ -219,21 +221,24 @@ class Mede8erMetadata(mediabrowser.MediaBrowserMetadata):
 
         eps_to_write = [ep_obj] + ep_obj.relatedEps
 
-        tvdb_lang = ep_obj.show.lang
+        indexer_lang = ep_obj.show.lang
 
         try:
             # There's gotta be a better way of doing this but we don't wanna
             # change the language value elsewhere
-            ltvdb_api_parms = sickbeard.TVDB_API_PARMS.copy()
+            lINDEXER_API_PARMS = sickbeard.indexerApi(ep_obj.show.indexer).api_params.copy()
 
-            if tvdb_lang and not tvdb_lang == 'en':
-                ltvdb_api_parms['language'] = tvdb_lang
+            if indexer_lang and not indexer_lang == 'en':
+                lINDEXER_API_PARMS['language'] = indexer_lang
 
-            t = tvdb_api.Tvdb(actors=True, **ltvdb_api_parms)
-            myShow = t[ep_obj.show.tvdbid]
-        except tvdb_exceptions.tvdb_shownotfound, e:
+            if ep_obj.show.dvdorder != 0:
+                lINDEXER_API_PARMS['dvdorder'] = True
+
+            t = sickbeard.indexerApi(ep_obj.show.indexer).indexer(**lINDEXER_API_PARMS)
+            myShow = t[ep_obj.show.indexerid]
+        except sickbeard.indexer_shownotfound, e:
             raise exceptions.ShowNotFoundException(e.message)
-        except tvdb_exceptions.tvdb_error, e:
+        except sickbeard.indexer_error, e:
             logger.log(u"Unable to connect to TVDB while creating meta files - skipping - " + ex(e), logger.ERROR)
             return False
 
@@ -249,7 +254,7 @@ class Mede8erMetadata(mediabrowser.MediaBrowserMetadata):
 
             try:
                 myEp = myShow[curEpToWrite.season][curEpToWrite.episode]
-            except (tvdb_exceptions.tvdb_episodenotfound, tvdb_exceptions.tvdb_seasonnotfound):
+            except (sickbeard.indexer_episodenotfound, sickbeard.indexer_seasonnotfound):
                 logger.log(u"Unable to find episode " + str(curEpToWrite.season) + "x" + str(curEpToWrite.episode) + " on tvdb... has it been removed? Should I delete from db?")
                 return None
 

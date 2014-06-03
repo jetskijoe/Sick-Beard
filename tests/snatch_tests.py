@@ -2,20 +2,20 @@
 # Author: Dennis Lutter <lad1337@gmail.com>
 # URL: http://code.google.com/p/sickbeard/
 #
-# This file is part of Sick Beard.
+# This file is part of SickRage.
 #
-# Sick Beard is free software: you can redistribute it and/or modify
+# SickRage is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# Sick Beard is distributed in the hope that it will be useful,
+# SickRage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with Sick Beard.  If not, see <http://www.gnu.org/licenses/>.
+# along with SickRage.  If not, see <http://www.gnu.org/licenses/>.
 
 import random
 import unittest
@@ -69,18 +69,19 @@ def test_generator(tvdbdid, show_name, curData, forceSearch):
     def test(self):
         global searchItems
         searchItems = curData["i"]
-        show = TVShow(tvdbdid)
+        show = TVShow(1, tvdbdid)
         show.name = show_name
         show.quality = curData["q"]
         show.saveToDB()
         sickbeard.showList.append(show)
+        episode = None
 
         for epNumber in curData["e"]:
             episode = TVEpisode(show, curData["s"], epNumber)
             episode.status = c.WANTED
             episode.saveToDB()
 
-        bestResult = search.findEpisode(episode, forceSearch)
+        bestResult = search.searchProviders(show, episode.season, episode.episode, forceSearch)
         if not bestResult:
             self.assertEqual(curData["b"], bestResult)
         self.assertEqual(curData["b"], bestResult.name) #first is expected, second is choosen one
