@@ -29,8 +29,6 @@ import sickbeard
 from sickbeard import encodingKludge as ek
 from sickbeard import logger
 from sickbeard.exceptions import ex
-from sickbeard.common import cpu_presets
-from itertools import ifilter
 
 db_lock = threading.Lock()
 
@@ -52,7 +50,7 @@ class DBConnection:
     def __init__(self, filename="sickbeard.db", suffix=None, row_type=None):
 
         self.filename = filename
-        self.connection = sqlite3.connect(dbFilename(filename), 20)
+        self.connection = sqlite3.connect(dbFilename(filename, suffix), 20)
         if row_type == "dict":
             self.connection.row_factory = self._dict_factory
         else:
@@ -101,7 +99,7 @@ class DBConnection:
                     if "unable to open database file" in e.args[0] or "database is locked" in e.args[0]:
                         logger.log(u"DB error: " + ex(e), logger.WARNING)
                         attempt += 1
-                        time.sleep(cpu_presets[sickbeard.CPU_PRESET])
+                        time.sleep(0.02)
                     else:
                         logger.log(u"DB error: " + ex(e), logger.ERROR)
                         raise
@@ -115,7 +113,7 @@ class DBConnection:
 
         with db_lock:
             # remove None types
-            querylist = [i for i in querylist if i!=None]
+            querylist = [i for i in querylist if i != None]
 
             if querylist == None:
                 return
@@ -140,7 +138,7 @@ class DBConnection:
                                 logger.log(qu[0] + " with args " + str(qu[1]), logger.DEBUG)
                             sqlResult.append(self.connection.execute(qu[0], qu[1]))
 
-                    self.connection.execute('COMMIT')
+                    self.connection.commit()
 
                     logger.log(u"Transaction with " + str(len(querylist)) + u" queries executed", logger.DEBUG)
                     return sqlResult
@@ -151,7 +149,7 @@ class DBConnection:
                     if "unable to open database file" in e.args[0] or "database is locked" in e.args[0]:
                         logger.log(u"DB error: " + ex(e), logger.WARNING)
                         attempt += 1
-                        time.sleep(cpu_presets[sickbeard.CPU_PRESET])
+                        time.sleep(0.02)
                     else:
                         logger.log(u"DB error: " + ex(e), logger.ERROR)
                         raise
@@ -189,7 +187,7 @@ class DBConnection:
                     if "unable to open database file" in e.args[0] or "database is locked" in e.args[0]:
                         logger.log(u"DB error: " + ex(e), logger.WARNING)
                         attempt += 1
-                        time.sleep(cpu_presets[sickbeard.CPU_PRESET])
+                        time.sleep(0.02)
                     else:
                         logger.log(u"DB error: " + ex(e), logger.ERROR)
                         raise
@@ -243,6 +241,9 @@ class DBConnection:
     def hasTable(self, tableName):
         return len(self.action("SELECT 1 FROM sqlite_master WHERE name = ?;", (tableName, )).fetchall()) > 0
 
+    def close(self):
+        self.connection.close()
+
 def sanityCheckDatabase(connection, sanity_check):
     sanity_check(connection).check()
 
@@ -267,6 +268,13 @@ def upgradeDatabase(connection, schema):
 def prettyName(class_name):
     return ' '.join([x.group() for x in re.finditer("([A-Z])([a-z0-9]+)", class_name)])
 
+def restoreDatabase(version):
+    logger.log(u"Restoring database before trying upgrade again")
+    if not sickbeard.helpers.restoreVersionedFile(dbFilename(suffix='v'+ str(version)), version):
+        logger.log_error_and_exit(u"Database restore failed, abort upgrading database")
+        return False
+    else:
+        return True
 
 def _processUpgrade(connection, upgradeClass):
     instance = upgradeClass(connection)
@@ -276,8 +284,23 @@ def _processUpgrade(connection, upgradeClass):
         try:
             instance.execute()
         except sqlite3.DatabaseError, e:
-            print "Error in " + str(upgradeClass.__name__) + ": " + ex(e)
-            raise
+            # attemping to restore previous DB backup and perform upgrade
+            try:
+                instance.execute()
+            except:
+                restored = False
+                result = connection.select("SELECT db_version FROM db_version")
+                if result:
+                    version = int(result[0]["db_version"])
+                    connection.close()
+                    if restoreDatabase(version):
+                        # initialize the main SB database
+                        upgradeDatabase(DBConnection(), sickbeard.mainDB.InitialSchema)
+                        restored = True
+
+                if not restored:
+                    print "Error in " + str(upgradeClass.__name__) + ": " + ex(e)
+                    raise
         logger.log(upgradeClass.__name__ + " upgrade completed", logger.DEBUG)
     else:
         logger.log(upgradeClass.__name__ + " upgrade not required", logger.DEBUG)
