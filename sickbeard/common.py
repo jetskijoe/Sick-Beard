@@ -89,14 +89,14 @@ class Quality:
     NONE = 0
     HDWEBDL = 1
     SDTV = 1<<1 # 2
-    SD264 = 1<<2 # 4
-    HDTV = 1<<3 # 8
-    RAWHDTV = 1 << 4      # 8  -- 720p/1080i mpeg2 (trollhd releases)
-    FULLHDTV = 1 << 5     # 16 -- 1080p HDTV (QCF releases)
-    FULLHDWEBDL = 1 << 6  # 64 -- 1080p web-dl
-    SDDVD = 1<<7 # 16
-    HDBLURAY = 1 << 8     # 128
-    FULLHDBLURAY = 1 << 9 # 256
+    HDTV = 1<<2 # 4
+    SD264 = 1<<3 # 8
+    RAWHDTV = 1 << 4      #   -- 720p/1080i mpeg2 (trollhd releases)
+    FULLHDTV = 1 << 5     #  -- 1080p HDTV (QCF releases)
+    FULLHDWEBDL = 1 << 6  #  -- 1080p web-dl
+    SDDVD = 1<<7 #
+    HDBLURAY = 1 << 8     # 
+    FULLHDBLURAY = 1 << 9 # 
 
     # put these bits at the other end of the spectrum, far enough out that they shouldn't interfere
     UNKNOWN = 1<<15
