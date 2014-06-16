@@ -369,6 +369,7 @@ class NameParser(object):
         if cache_result:
             name_parser_cache.add(name, final_result)
 
+        logger.log(u"Parsed " + name + " into " + str(final_result).decode('utf-8', 'xmlcharrefreplace'), logger.DEBUG)
         return final_result
 
 
@@ -547,6 +548,7 @@ class ParseResult(object):
             self.episode_numbers = new_episode_numbers
             self.season_number = new_season_numbers[0]
 
+        logger.log(u"Converted parsed result " + self.original_name + " into " + str(self).decode('utf-8', 'xmlcharrefreplace'), logger.DEBUG)
         return self
 
     def _is_air_by_date(self):

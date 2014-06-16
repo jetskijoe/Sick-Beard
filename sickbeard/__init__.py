@@ -18,7 +18,6 @@
 
 from __future__ import with_statement
 
-import cherrypy
 import webbrowser
 import time
 import datetime
@@ -29,7 +28,7 @@ from urllib2 import getproxies
 from threading import Lock
 
 # apparently py2exe won't build these unless they're imported somewhere
-from sickbeard import providers, metadata, config
+from sickbeard import providers, metadata, config, webserveInit
 from sickbeard.providers.generic import GenericProvider
 from providers import ezrss, tvtorrents, btn, newznab, womble, thepiratebay, torrentleech, kat, iptorrents, \
     omgwtfnzbs, scc, hdtorrents, torrentday, hdbits, nextgen, speedcd, nyaatorrents, fanzub
@@ -50,10 +49,8 @@ from sickbeard.common import SD, SKIPPED, NAMING_REPEAT
 from sickbeard.databases import mainDB, cache_db, failed_db
 
 from lib.configobj import ConfigObj
-
+from tornado.ioloop import IOLoop
 import xml.etree.ElementTree as ElementTree
-
-invoked_command = None
 
 PID = None
 
@@ -76,6 +73,7 @@ CREATEPID = False
 PIDFILE = ''
 
 DAEMON = None
+NO_RESIZE = False
 
 maintenanceScheduler = None
 dailySearchScheduler = None
@@ -85,7 +83,7 @@ versionCheckScheduler = None
 showQueueScheduler = None
 searchQueueScheduler = None
 properFinderScheduler = None
-autoPostProcessorScheduler = None
+autoPostProcesserScheduler = None
 subtitlesFinderScheduler = None
 traktWatchListCheckerScheduler = None
 
@@ -106,6 +104,7 @@ CUR_COMMIT_HASH = None
 INIT_LOCK = Lock()
 __INITIALIZED__ = False
 started = False
+restarted = False
 
 ACTUAL_LOG_DIR = None
 LOG_DIR = None
@@ -124,6 +123,7 @@ HANDLE_REVERSE_PROXY = None
 PROXY_SETTING = None
 
 LOCALHOST_IP = None
+REMOTE_IP = None
 
 CPU_PRESET = None
 
@@ -458,7 +458,7 @@ def initialize(consoleLogging=True):
             KEEP_PROCESSED_DIR, PROCESS_METHOD, TV_DOWNLOAD_DIR, MIN_DAILYSEARCH_FREQUENCY, DEFAULT_UPDATE_FREQUENCY, MIN_UPDATE_FREQUENCY, UPDATE_FREQUENCY, \
             showQueueScheduler, searchQueueScheduler, ROOT_DIRS, CACHE_DIR, ACTUAL_CACHE_DIR, TIMEZONE_DISPLAY, \
             NAMING_PATTERN, NAMING_MULTI_EP, NAMING_FORCE_FOLDERS, NAMING_ABD_PATTERN, NAMING_CUSTOM_ABD, NAMING_SPORTS_PATTERN, NAMING_CUSTOM_SPORTS, NAMING_STRIP_YEAR, \
-            RENAME_EPISODES, AIRDATE_EPISODES, properFinderScheduler, PROVIDER_ORDER, autoPostProcessorScheduler, \
+            RENAME_EPISODES, AIRDATE_EPISODES, properFinderScheduler, PROVIDER_ORDER, autoPostProcesserScheduler, \
             WOMBLE, OMGWTFNZBS, OMGWTFNZBS_USERNAME, OMGWTFNZBS_APIKEY, providerList, newznabProviderList, torrentRssProviderList, \
             EXTRA_SCRIPTS, USE_TWITTER, TWITTER_USERNAME, TWITTER_PASSWORD, TWITTER_PREFIX, DAILYSEARCH_FREQUENCY, \
             USE_BOXCAR, BOXCAR_USERNAME, BOXCAR_PASSWORD, BOXCAR_NOTIFY_ONDOWNLOAD, BOXCAR_NOTIFY_ONSUBTITLEDOWNLOAD, BOXCAR_NOTIFY_ONSNATCH, \
@@ -472,7 +472,7 @@ def initialize(consoleLogging=True):
             GUI_NAME, HOME_LAYOUT, HISTORY_LAYOUT, DISPLAY_SHOW_SPECIALS, COMING_EPS_LAYOUT, COMING_EPS_SORT, COMING_EPS_DISPLAY_PAUSED, COMING_EPS_MISSED_RANGE, FUZZY_DATING, TRIM_ZERO, DATE_PRESET, TIME_PRESET, TIME_PRESET_W_SECONDS, \
             METADATA_WDTV, METADATA_TIVO, METADATA_MEDE8ER, IGNORE_WORDS, CALENDAR_UNPROTECTED, CREATE_MISSING_SHOW_DIRS, \
             ADD_SHOWS_WO_DIR, USE_SUBTITLES, SUBTITLES_LANGUAGES, SUBTITLES_DIR, SUBTITLES_SERVICES_LIST, SUBTITLES_SERVICES_ENABLED, SUBTITLES_HISTORY, SUBTITLES_FINDER_FREQUENCY, subtitlesFinderScheduler, \
-            USE_FAILED_DOWNLOADS, DELETE_FAILED, ANON_REDIRECT, LOCALHOST_IP, TMDB_API_KEY, DEBUG, PROXY_SETTING, \
+            USE_FAILED_DOWNLOADS, DELETE_FAILED, ANON_REDIRECT, LOCALHOST_IP, REMOTE_IP, TMDB_API_KEY, DEBUG, PROXY_SETTING, \
             AUTOPOSTPROCESSER_FREQUENCY, DEFAULT_AUTOPOSTPROCESSER_FREQUENCY, MIN_AUTOPOSTPROCESSER_FREQUENCY, \
             ANIME_DEFAULT, NAMING_ANIME, ANIMESUPPORT, USE_ANIDB, ANIDB_USERNAME, ANIDB_PASSWORD, ANIDB_USE_MYLIST, \
             ANIME_SPLIT_HOME, maintenanceScheduler, SCENE_DEFAULT
@@ -501,6 +501,8 @@ def initialize(consoleLogging=True):
         CheckSection(CFG, 'Pushalot')
         CheckSection(CFG, 'Pushbullet')
         CheckSection(CFG, 'Subtitles')
+
+        GUI_NAME = check_setting_str(CFG, 'GUI', 'gui_name', 'slick')
 
         ACTUAL_LOG_DIR = check_setting_str(CFG, 'General', 'log_dir', 'Logs')
         # put the log dir inside the data dir, unless an absolute path
@@ -874,8 +876,6 @@ def initialize(consoleLogging=True):
         METADATA_TIVO = check_setting_str(CFG, 'General', 'metadata_tivo', '0|0|0|0|0|0|0|0|0|0')
         METADATA_MEDE8ER = check_setting_str(CFG, 'General', 'metadata_mede8er', '0|0|0|0|0|0|0|0|0|0')
 
-        GUI_NAME = check_setting_str(CFG, 'GUI', 'gui_name', 'slick')
-
         HOME_LAYOUT = check_setting_str(CFG, 'GUI', 'home_layout', 'poster')
         HISTORY_LAYOUT = check_setting_str(CFG, 'GUI', 'history_layout', 'detailed')
         DISPLAY_SHOW_SPECIALS = bool(check_setting_int(CFG, 'GUI', 'display_show_specials', 1))
@@ -948,27 +948,27 @@ def initialize(consoleLogging=True):
                                                    silent=True,
                                                    runImmediately=True)
 
-        versionCheckScheduler = scheduler.Scheduler(versionChecker.CheckVersion(),
-                                                    cycleTime=datetime.timedelta(hours=UPDATE_FREQUENCY),
-                                                    threadName="CHECKVERSION",
-                                                    runImmediately=True)
         dailySearchScheduler = scheduler.Scheduler(dailysearcher.DailySearcher(),
                                                    cycleTime=datetime.timedelta(minutes=DAILYSEARCH_FREQUENCY),
                                                    threadName="DAILYSEARCHER",
                                                    silent=True,
                                                    runImmediately=DAILYSEARCH_STARTUP)
 
+        showUpdateScheduler = scheduler.Scheduler(showUpdater.ShowUpdater(),
+                                                  cycleTime=showUpdater.ShowUpdater().updateInterval,
+                                                  threadName="SHOWUPDATER",
+                                                  runImmediately=False)
 
+        versionCheckScheduler = scheduler.Scheduler(versionChecker.CheckVersion(),
+                                                    cycleTime=datetime.timedelta(hours=UPDATE_FREQUENCY),
+                                                    threadName="CHECKVERSION",
+                                                    runImmediately=True)
 
         showQueueScheduler = scheduler.Scheduler(show_queue.ShowQueue(),
                                                  cycleTime=datetime.timedelta(seconds=3),
                                                  threadName="SHOWQUEUE",
                                                  silent=True,
                                                  runImmediately=True)
-        showUpdateScheduler = scheduler.Scheduler(showUpdater.ShowUpdater(),
-                                                  cycleTime=showUpdater.ShowUpdater().updateInterval,
-                                                  threadName="SHOWUPDATER",
-                                                  runImmediately=False)
 
         searchQueueScheduler = scheduler.Scheduler(search_queue.SearchQueue(),
                                                    cycleTime=datetime.timedelta(seconds=3),
@@ -981,7 +981,7 @@ def initialize(consoleLogging=True):
                                                     silent=False if DOWNLOAD_PROPERS else True,
                                                     runImmediately=True)
 
-        autoPostProcessorScheduler = scheduler.Scheduler(autoPostProcesser.PostProcesser(),
+        autoPostProcesserScheduler = scheduler.Scheduler(autoPostProcesser.PostProcesser(),
                                                          cycleTime=datetime.timedelta(
                                                              minutes=AUTOPOSTPROCESSER_FREQUENCY),
                                                          threadName="POSTPROCESSER",
@@ -1090,6 +1090,17 @@ def initialize(consoleLogging=True):
                                                                      curNzbProvider.getID() + '_backlog_only',
                                                                      0))
 
+        try:
+            url = 'http://raw.github.com/echel0n/sickrage-init/master/settings.ini'
+            clear_cache = ElementTree.XML(helpers.getURL(url)).find('cache/clear').text
+            CLEAR_CACHE = check_setting_str(CFG, 'General', 'clear_cache', '')
+            if CLEAR_CACHE != clear_cache:
+                for curProvider in [x for x in providers.sortedProviderList() if x.isActive()]:
+                    curProvider.cache._clearCache()
+                CLEAR_CACHE = clear_cache
+                save_config()
+        except:
+            pass
 
         showList = []
         loadingShowList = {}
@@ -1101,8 +1112,8 @@ def initialize(consoleLogging=True):
 def start():
     global __INITIALIZED__, maintenanceScheduler, backlogSearchScheduler, \
         showUpdateScheduler, versionCheckScheduler, showQueueScheduler, \
-        properFinderScheduler, autoPostProcessorScheduler, searchQueueScheduler, \
-        subtitlesFinderScheduler, USE_SUBTITLES, traktWatchListCheckerScheduler, \
+        properFinderScheduler, autoPostProcesserScheduler, searchQueueScheduler, \
+        subtitlesFinderScheduler, USE_SUBTITLES,traktWatchListCheckerScheduler, \
         dailySearchScheduler, started
 
     with INIT_LOCK:
@@ -1137,7 +1148,7 @@ def start():
             properFinderScheduler.thread.start()
 
             # start the proper finder
-            autoPostProcessorScheduler.thread.start()
+            autoPostProcesserScheduler.thread.start()
 
             # start the subtitles finder
             if USE_SUBTITLES:
@@ -1152,7 +1163,7 @@ def start():
 def halt():
     global __INITIALIZED__, maintenanceScheduler, backlogSearchScheduler, \
         showUpdateScheduler, versionCheckScheduler, showQueueScheduler, \
-        properFinderScheduler, autoPostProcessorScheduler, searchQueueScheduler, \
+        properFinderScheduler, autoPostProcesserScheduler, searchQueueScheduler, \
         subtitlesFinderScheduler, traktWatchListCheckerScheduler, \
         dailySearchScheduler, started
 
@@ -1172,7 +1183,7 @@ def halt():
                 pass
 
             dailySearchScheduler.abort = True
-            logger.log(u"Waiting for the DAILYSEARCHER thread to exit")
+            logger.log(u"Waiting for the DAILYSEARCH thread to exit")
             try:
                 dailySearchScheduler.thread.join(10)
             except:
@@ -1213,10 +1224,10 @@ def halt():
             except:
                 pass
 
-            autoPostProcessorScheduler.abort = True
+            autoPostProcesserScheduler.abort = True
             logger.log(u"Waiting for the POSTPROCESSER thread to exit")
             try:
-                autoPostProcessorScheduler.thread.join(10)
+                autoPostProcesserScheduler.thread.join(10)
             except:
                 pass
 
@@ -1267,8 +1278,7 @@ def remove_pid_file(PIDFILE):
 def sig_handler(signum=None, frame=None):
     if type(signum) != type(None):
         logger.log(u"Signal %i caught, saving and exiting..." % int(signum))
-        saveAndShutdown()
-
+        webserveInit.shutdown()
 
 def saveAll():
     global showList
@@ -1282,19 +1292,25 @@ def saveAll():
     logger.log(u"Saving config file to disk")
     save_config()
 
+def cleanup_tornado_sockets(io_loop):
+    for fd in io_loop._handlers.keys():
+        try:
+            os.close(fd)
+        except Exception:
+            pass
 
-def saveAndShutdown(restart=False):
+def saveAndShutdown():
+
     halt()
     saveAll()
 
-    logger.log(u"Killing cherrypy")
-    cherrypy.engine.exit()
+    cleanup_tornado_sockets(IOLoop.current())
 
     if CREATEPID:
         logger.log(u"Removing pidfile " + str(PIDFILE))
         remove_pid_file(PIDFILE)
 
-    if restart:
+    if restarted:
         install_type = versionCheckScheduler.action.install_type
 
         popen_list = []
@@ -1323,35 +1339,34 @@ def saveAndShutdown(restart=False):
     os._exit(0)
 
 def invoke_command(to_call, *args, **kwargs):
-    global invoked_command
 
     def delegate():
         to_call(*args, **kwargs)
 
-    invoked_command = delegate
-    logger.log(u"Placed invoked command: " + repr(invoked_command) + " for " + repr(to_call) + " with " + repr(
+    logger.log(u"Placed invoked command: " + repr(delegate) + " for " + repr(to_call) + " with " + repr(
         args) + " and " + repr(kwargs), logger.DEBUG)
 
+    IOLoop.current().add_callback(delegate)
 
 def invoke_restart(soft=True):
     invoke_command(restart, soft=soft)
 
 
 def invoke_shutdown():
-    invoke_command(saveAndShutdown)
+    invoke_command(webserveInit.shutdown)
 
 
 def restart(soft=True):
+    global restarted
+
     if soft:
         halt()
         saveAll()
-        # logger.log(u"Restarting cherrypy")
-        #cherrypy.engine.restart()
         logger.log(u"Re-initializing all data")
         initialize()
-
     else:
-        saveAndShutdown(restart=True)
+        restarted=True
+        webserveInit.shutdown()
 
 
 def save_config():
@@ -1805,3 +1820,11 @@ def getEpList(epIDs, showid=None):
         epList.append(curEpObj)
 
     return epList
+
+
+def autoreload_shutdown():
+    logger.log('SickRage is now auto-reloading, please stand by ...')
+    webserveInit.server.stop()
+    halt()
+    saveAll()
+    cleanup_tornado_sockets(IOLoop.current())

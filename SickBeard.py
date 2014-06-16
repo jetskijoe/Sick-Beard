@@ -47,23 +47,26 @@ if sys.hexversion >= 0x020600F0:
 import locale
 import datetime
 import threading
-import time
 import signal
 import traceback
 import getopt
 
 import sickbeard
 
+import tornado.ioloop
+import tornado.autoreload
+
 from sickbeard import db
 from sickbeard.tv import TVShow
 from sickbeard import logger
+from sickbeard import webserveInit
 from sickbeard.version import SICKBEARD_VERSION
 from sickbeard.databases.mainDB import MIN_DB_VERSION
 from sickbeard.databases.mainDB import MAX_DB_VERSION
 
-from sickbeard.webserveInit import initWebServer
-
 from lib.configobj import ConfigObj
+
+from tornado.ioloop import IOLoop, PeriodicCallback
 
 signal.signal(signal.SIGINT, sickbeard.sig_handler)
 signal.signal(signal.SIGTERM, sickbeard.sig_handler)
@@ -107,7 +110,7 @@ def daemonize():
         sys.stderr.write("fork #1 failed: %d (%s)\n" % (e.errno, e.strerror))
         sys.exit(1)
 
-    os.setsid() # unix
+    os.setsid()  # unix
 
     # Make sure I can read my own files and shut out others
     prev = os.umask(0)
@@ -145,11 +148,12 @@ def daemonize():
     os.dup2(stdout.fileno(), sys.stdout.fileno())
     os.dup2(stderr.fileno(), sys.stderr.fileno())
 
-
 def main():
     """
     TV for me
     """
+
+    io_loop = IOLoop.current()
 
     # do some preliminary stuff
     sickbeard.MY_FULLNAME = os.path.normpath(os.path.abspath(__file__))
@@ -238,6 +242,10 @@ def main():
         # Specify folder to use as the data dir
         if o in ('--datadir',):
             sickbeard.DATA_DIR = os.path.abspath(a)
+
+        # Prevent resizing of the banner/posters even if PIL is installed
+        if o in ('--noresize',):
+            sickbeard.NO_RESIZE = True
 
         # Write a pidfile if requested
         if o in ('--pidfile',):
@@ -343,51 +351,50 @@ def main():
         else:
             webhost = '0.0.0.0'
 
-    try:
-        initWebServer({
-            'port': startPort,
-            'host': webhost,
-            'data_root': os.path.join(sickbeard.PROG_DIR, 'gui/' + sickbeard.GUI_NAME),
-            'web_root': sickbeard.WEB_ROOT,
-            'log_dir': log_dir,
-            'username': sickbeard.WEB_USERNAME,
-            'password': sickbeard.WEB_PASSWORD,
-            'enable_https': sickbeard.ENABLE_HTTPS,
-            'handle_reverse_proxy': sickbeard.HANDLE_REVERSE_PROXY,
-            'https_cert': sickbeard.HTTPS_CERT,
-            'https_key': sickbeard.HTTPS_KEY,
-        })
-    except IOError:
-        logger.log(u"Unable to start web server, is something else running on port %d?" % startPort, logger.ERROR)
-        if sickbeard.LAUNCH_BROWSER and not sickbeard.DAEMON:
-            logger.log(u"Launching browser and exiting", logger.ERROR)
-            sickbeard.launchBrowser(startPort)
-        sys.exit()
+    options = {
+        'port': int(startPort),
+        'host': webhost,
+        'data_root': os.path.join(sickbeard.PROG_DIR, 'gui', sickbeard.GUI_NAME),
+        'web_root': sickbeard.WEB_ROOT,
+        'log_dir': log_dir,
+        'username': sickbeard.WEB_USERNAME,
+        'password': sickbeard.WEB_PASSWORD,
+        'enable_https': sickbeard.ENABLE_HTTPS,
+        'handle_reverse_proxy': sickbeard.HANDLE_REVERSE_PROXY,
+        'https_cert': sickbeard.HTTPS_CERT,
+        'https_key': sickbeard.HTTPS_KEY,
+    }
+
+    # init tornado
+    webserveInit.initWebServer(options)
 
     # Build from the DB to start with
     logger.log(u"Loading initial show list")
     loadShowsFromDB()
 
-    # Fire up all our threads
-    sickbeard.start()
+    def startup():
+        # Fire up all our threads
+        sickbeard.start()
 
-    # Launch browser if we're supposed to
-    if sickbeard.LAUNCH_BROWSER and not noLaunch and not sickbeard.DAEMON:
-        sickbeard.launchBrowser(startPort)
+        # Launch browser if we're supposed to
+        if sickbeard.LAUNCH_BROWSER and not noLaunch and not sickbeard.DAEMON:
+            sickbeard.launchBrowser(startPort)
 
-    # Start an update if we're supposed to
-    if forceUpdate or sickbeard.UPDATE_SHOWS_ON_START:
-        sickbeard.showUpdateScheduler.action.run(force=True)  # @UndefinedVariable
+        # Start an update if we're supposed to
+        if forceUpdate or sickbeard.UPDATE_SHOWS_ON_START:
+            sickbeard.showUpdateScheduler.action.run(force=True)  # @UndefinedVariable
 
-    # Stay alive while my threads do the work
-    while (True):
+    # init startup tasks
+    io_loop.add_timeout(datetime.timedelta(seconds=5), startup)
 
-        if sickbeard.invoked_command:
-            sickbeard.invoked_command()
-            sickbeard.invoked_command = None
+    # autoreload.
+    if sickbeard.AUTO_UPDATE:
+        tornado.autoreload.start(io_loop)
+        tornado.autoreload.add_reload_hook(sickbeard.autoreload_shutdown)
 
-        time.sleep(1)
-
+    # start IOLoop.
+    io_loop.start()
+    sickbeard.saveAndShutdown()
     return
 
 if __name__ == "__main__":
