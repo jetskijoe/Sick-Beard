@@ -1824,7 +1824,6 @@ def getEpList(epIDs, showid=None):
 
 def autoreload_shutdown():
     logger.log('SickRage is now auto-reloading, please stand by ...')
-    webserveInit.server.stop()
+
     halt()
     saveAll()
-    cleanup_tornado_sockets(IOLoop.current())
