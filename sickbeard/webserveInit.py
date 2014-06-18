@@ -4,7 +4,6 @@ import sickbeard
 import webserve
 import webapi
 
-import tornado.options
 from sickbeard import logger
 from sickbeard.helpers import create_https_certificates
 from tornado.web import Application, StaticFileHandler, RedirectHandler, HTTPError
@@ -13,9 +12,11 @@ from tornado.ioloop import IOLoop
 
 server = None
 
+
 class MultiStaticFileHandler(StaticFileHandler):
     def initialize(self, paths, default_filename=None):
         self.paths = paths
+        self.default_filename = default_filename
 
     def get(self, path, include_body=True):
         for p in self.paths:
@@ -33,6 +34,7 @@ class MultiStaticFileHandler(StaticFileHandler):
         # Oops file not found anywhere!
         raise HTTPError(404)
 
+
 def initWebServer(options={}):
     options.setdefault('port', 8081)
     options.setdefault('host', '0.0.0.0')
@@ -42,41 +44,6 @@ def initWebServer(options={}):
     options.setdefault('web_root', '/')
     assert isinstance(options['port'], int)
     assert 'data_root' in options
-
-    def http_error_401_hander(status, message, traceback, version):
-        """ Custom handler for 401 error """
-        if status != "401 Unauthorized":
-            logger.log(u"Tornado caught an error: %s %s" % (status, message), logger.ERROR)
-            logger.log(traceback, logger.DEBUG)
-        return r'''<!DOCTYPE html>
-<html>
-    <head>
-        <title>%s</title>
-    </head>
-    <body>
-        <br/>
-        <font color="#0000FF">Error %s: You need to provide a valid username and password.</font>
-    </body>
-</html>
-''' % ('Access denied', status)
-
-    def http_error_404_hander(status, message, traceback, version):
-        """ Custom handler for 404 error, redirect back to main page """
-        return r'''<!DOCTYPE html>
-<html>
-    <head>
-        <title>404</title>
-        <script type="text/javascript" charset="utf-8">
-          <!--
-          location.href = "%s/home/"
-          //-->
-        </script>
-    </head>
-    <body>
-        <br/>
-    </body>
-</html>
-''' % options['web_root']
 
     # tornado setup
     enable_https = options['enable_https']
@@ -98,30 +65,29 @@ def initWebServer(options={}):
 
     # Load the app
     app = Application([],
-                        debug=sickbeard.DEBUG,
+                        debug=False,
                         gzip=True,
-                        xheaders=True,
-                        cookie_secret='61oETzKXQAGaYdkL5gEmGeJJFuYh7EQnp2XdTP1o/Vo=',
-                        login_url='/login'
+                        xheaders=sickbeard.HANDLE_REVERSE_PROXY,
+                        cookie_secret='61oETzKXQAGaYdkL5gEmGeJJFuYh7EQnp2XdTP1o/Vo='
     )
 
-    # Index Handler
+    # Main Handler
     app.add_handlers(".*$", [
-        (r"/", RedirectHandler, {'url': '/home/'}),
-        (r'/login', webserve.LoginHandler),
-        (r'/api/(.*)(/?)', webapi.Api),
-        (r'%s(.*)(/?)' % options['web_root'], webserve.IndexHandler)
+        (r"/", RedirectHandler, {'url': '%s/home/' % options['web_root']}),
+        (r'%s/api/(.*)(/?)' % options['web_root'], webapi.Api),
+        (r'%s/(.*)(/?)' % options['web_root'], webserve.IndexHandler)
     ])
 
     # Static Path Handler
     app.add_handlers(".*$", [
-        ('%s/%s/(.*)([^/]*)' % (options['web_root'], 'images'), MultiStaticFileHandler,
+        (r'%s/(favicon\.ico)' % options['web_root'], MultiStaticFileHandler,
+         {'paths': [os.path.join(options['data_root'], 'images/ico/favicon.ico')]}),
+        (r'%s/%s/(.*)(/?)' % (options['web_root'], 'images'), MultiStaticFileHandler,
          {'paths': [os.path.join(options['data_root'], 'images'),
-                    os.path.join(sickbeard.CACHE_DIR, 'images'),
-                    os.path.join(sickbeard.CACHE_DIR, 'images', 'thumbnails')]}),
-        ('%s/%s/(.*)([^/]*)' % (options['web_root'], 'css'), MultiStaticFileHandler,
+                    os.path.join(sickbeard.CACHE_DIR, 'images')]}),
+        (r'%s/%s/(.*)(/?)' % (options['web_root'], 'css'), MultiStaticFileHandler,
          {'paths': [os.path.join(options['data_root'], 'css')]}),
-        ('%s/%s/(.*)([^/]*)' % (options['web_root'], 'js'), MultiStaticFileHandler,
+        (r'%s/%s/(.*)(/?)' % (options['web_root'], 'js'), MultiStaticFileHandler,
          {'paths': [os.path.join(options['data_root'], 'js')]})
 
     ])
@@ -131,7 +97,7 @@ def initWebServer(options={}):
     if enable_https:
         protocol = "https"
         server = HTTPServer(app, no_keep_alive=True,
-                                 ssl_options={"certfile": https_cert, "keyfile": https_key})
+                            ssl_options={"certfile": https_cert, "keyfile": https_key})
     else:
         protocol = "http"
         server = HTTPServer(app, no_keep_alive=True)
@@ -143,6 +109,7 @@ def initWebServer(options={}):
         server.listen(options['port'], options['host'])
     except:
         pass
+
 
 def shutdown():
     global server

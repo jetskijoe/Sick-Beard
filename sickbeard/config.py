@@ -97,17 +97,7 @@ def change_LOG_DIR(log_dir, web_log):
             return False
 
     if sickbeard.WEB_LOG != web_log_value or log_dir_changed == True:
-
         sickbeard.WEB_LOG = web_log_value
-
-        if sickbeard.WEB_LOG:
-            cherry_log = os.path.join(sickbeard.LOG_DIR, "cherrypy.log")
-            logger.log(u"Change cherry log file to " + cherry_log)
-        else:
-            cherry_log = None
-            logger.log(u"Disable cherry logging")
-
-        #cherrypy.config.update({'log.access_file': cherry_log})
 
     return True
 
@@ -436,7 +426,7 @@ class ConfigMigrator():
             else:
                 logger.log(u"Proceeding with upgrade")
 
-            # do the migration, expect a method named _migrate_v<num>
+            # do the                                                                                                migration, expect a method named _migrate_v<num>
             logger.log(u"Migrating config up to version " + str(next_version) + migration_name)
             getattr(self, '_migrate_v' + str(next_version))()
             self.config_version = next_version

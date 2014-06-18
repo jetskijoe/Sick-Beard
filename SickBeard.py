@@ -18,6 +18,8 @@
 # along with SickRage.  If not, see <http://www.gnu.org/licenses/>.
 
 # Check needed software dependencies to nudge users to fix their setup
+from __future__ import with_statement
+
 import sys
 
 if sys.version_info < (2, 6):
@@ -73,7 +75,7 @@ signal.signal(signal.SIGINT, sickbeard.sig_handler)
 signal.signal(signal.SIGTERM, sickbeard.sig_handler)
 
 throwaway = datetime.datetime.strptime('20110101', '%Y%m%d')
-
+io_loop = IOLoop.current()
 
 def loadShowsFromDB():
     """
@@ -89,41 +91,33 @@ def loadShowsFromDB():
                 sickbeard.showList.append(curShow)
             except Exception, e:
                 logger.log(
-                    u"There was an error creating the show in " + sqlShow["location"] + ": " + str(e).decode('utf-8'),
+                        u"There was an error creating the show in " + sqlShow["location"] + ": " + str(e).decode('utf-8'),
                     logger.ERROR)
                 logger.log(traceback.format_exc(), logger.DEBUG)
 
             # TODO: update the existing shows if the showlist has something in it
 
-
 def daemonize():
-    """
-    Fork off as a daemon
-    """
-
-    # pylint: disable=E1101
-    # Make a non-session-leader child process
     try:
-        pid = os.fork()  # @UndefinedVariable - only available in UNIX
-        if pid != 0:
-            os._exit(0)
-    except OSError, e:
-        sys.stderr.write("fork #1 failed: %d (%s)\n" % (e.errno, e.strerror))
+        pid = os.fork()
+        if pid > 0:
+            sys.exit(0)
+    except OSError:
+        print "fork() failed"
         sys.exit(1)
 
-    os.setsid()  # unix
-
+    os.chdir(sickbeard.PROG_DIR)
+    os.setsid()
     # Make sure I can read my own files and shut out others
-    prev = os.umask(0)
-    os.umask(prev and int('077', 8))
+    prev= os.umask(0)
+    os.umask(prev and int('077',8))
 
-    # Make the child a session-leader by detaching from the terminal
     try:
-        pid = os.fork()  # @UndefinedVariable - only available in UNIX
-        if pid != 0:
-            os._exit(0)
-    except OSError, e:
-        sys.stderr.write("fork #2 failed: %d (%s)\n" % (e.errno, e.strerror))
+        pid = os.fork()
+        if pid > 0:
+            sys.exit(0)
+    except OSError:
+        print "fork() failed"
         sys.exit(1)
 
     # Write pid
@@ -137,24 +131,13 @@ def daemonize():
                 u"Unable to write PID file: " + sickbeard.PIDFILE + " Error: " + str(e.strerror) + " [" + str(
                     e.errno) + "]")
 
-    # Redirect all output
-    sys.stdout.flush()
-    sys.stderr.flush()
-
-    devnull = getattr(os, 'devnull', '/dev/null')
-    stdin = file(devnull, 'r')
-    stdout = file(devnull, 'a+')
-    stderr = file(devnull, 'a+')
-    os.dup2(stdin.fileno(), sys.stdin.fileno())
-    os.dup2(stdout.fileno(), sys.stdout.fileno())
-    os.dup2(stderr.fileno(), sys.stderr.fileno())
+    dev_null = file('/dev/null', 'r')
+    os.dup2(dev_null.fileno(), sys.stdin.fileno())
 
 def main():
     """
     TV for me
     """
-
-    io_loop = IOLoop.current()
 
     # do some preliminary stuff
     sickbeard.MY_FULLNAME = os.path.normpath(os.path.abspath(__file__))
@@ -325,12 +308,6 @@ def main():
 
     sickbeard.showList = []
 
-    if sickbeard.DAEMON:
-        daemonize()
-
-    # Use this PID for everything
-    sickbeard.PID = os.getpid()
-
     if forcedPort:
         logger.log(u"Forcing web server to port " + str(forcedPort))
         startPort = forcedPort
@@ -393,12 +370,15 @@ def main():
     if sickbeard.AUTO_UPDATE:
         tornado.autoreload.start(io_loop)
 
-    # start IOLoop.
-    io_loop.start()
-    sickbeard.saveAndShutdown()
-    return
+    if sickbeard.DAEMON:
+        daemonize()
+
+    # Use this PID for everything
+    sickbeard.PID = os.getpid()
 
 if __name__ == "__main__":
     if sys.hexversion >= 0x020600F0:
         freeze_support()
     main()
+    io_loop.start()
+    sickbeard.saveAndShutdown()
