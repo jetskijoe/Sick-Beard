@@ -35,25 +35,16 @@ class NameParser(object):
     SPORTS_REGEX = 2
     ANIME_REGEX = 3
 
-    def __init__(self, file_name=True, showObj=None, epObj=None, useIndexers=False, convert=False):
-
-        regexMode = self.ALL_REGEX
-        if showObj and showObj.is_anime:
-            regexMode = self.ANIME_REGEX
-        elif showObj and showObj.is_sports:
-            regexMode = self.SPORTS_REGEX
-        elif showObj and not showObj.is_anime and not showObj.is_sports:
-            regexMode = self.NORMAL_REGEX
+    def __init__(self, file_name=True, showObj=None, epObj=None, useIndexers=False, convert=False,
+                 naming_pattern=False):
 
         self.file_name = file_name
-        self.regexMode = regexMode
-        self.compiled_regexes = {}
-        self._compile_regexes(self.regexMode)
-        self.showList = sickbeard.showList
+        self.showList = sickbeard.showList or []
         self.useIndexers = useIndexers
         self.showObj = showObj
         self.epObj = epObj
         self.convert = convert
+        self.naming_pattern = naming_pattern
 
     def clean_series_name(self, series_name):
         """Cleans up series name by removing any . and _
@@ -102,17 +93,57 @@ class NameParser(object):
 
         for regexItem in uncompiled_regex:
             for regex_type, regex_pattern in regexItem.items():
+                i = 0
                 for (cur_pattern_name, cur_pattern) in regex_pattern:
+                    i += 1
                     try:
                         cur_regex = re.compile(cur_pattern, re.VERBOSE | re.IGNORECASE)
                     except re.error, errormsg:
                         logger.log(u"WARNING: Invalid episode_pattern, %s. %s" % (errormsg, cur_pattern))
                     else:
+                        cur_pattern_name = str(i) + "_" + cur_pattern_name
                         self.compiled_regexes[(regex_type, cur_pattern_name)] = cur_regex
+
+    def _matchShowName(self, name, pattern):
+        try:
+            show_regex = re.compile(pattern, re.VERBOSE | re.IGNORECASE)
+        except re.error, errormsg:
+            logger.log(u"WARNING: Invalid show series name pattern, %s: [%s]" % (errormsg, pattern))
+        else:
+            # attempt matching with main show name pattern
+            seriesname_match = show_regex.match(name)
+            if seriesname_match:
+                seriesname_groups = seriesname_match.groupdict().keys()
+                if 'series_name' in seriesname_groups:
+                    series_name = self.clean_series_name(seriesname_match.group('series_name'))
+                    return helpers.get_show_by_name(series_name, useIndexer=self.useIndexers)
 
     def _parse_string(self, name):
         if not name:
             return
+
+        if not self.showObj and not self.naming_pattern:
+            # Regex pattern to return the Show / Series Name regardless of the file pattern tossed at it, matched 53 show name examples from regexes.py
+            show_pattern = '''(?:(?:\[.*?\])|(?:\d{3}[\.-]))*[ _\.]?(?P<series_name>.*?(?:[ ._-](\d{4}))?)(?:(?:(?:[ ._-]+\d+)|(?:[ ._-]+s\d{2}))|(?:\W+(?:(?:S\d[\dE._ -])|(?:\d\d?x)|(?:\d{4}\W\d\d\W\d\d)|(?:(?:part|pt)[\._ -]?(?:\d|[ivx]))|Season\W+\d+\W+|E\d+\W+|(?:\d{1,3}.+\d{1,}[a-zA-Z]{2}\W+[a-zA-Z]{3,}\W+\d{4}.+))))'''
+            show_pattern_alt = '''^(?P<series_name>.*?(?:[ ._-](\d{4}))?)(?:(?:(?:[ ._-]+\d+)|(?:[ ._-]+s\d{2}))|(?:\W+(?:(?:S\d[\dE._ -])|(?:\d\d?x)|(?:\d{4}\W\d\d\W\d\d)|(?:(?:part|pt)[\._ -]?(?:\d|[ivx]))|Season\W+\d+\W+|E\d+\W+|(?:\d{1,3}.+\d{1,}[a-zA-Z]{2}\W+[a-zA-Z]{3,}\W+\d{4}.+))))'''
+
+            self.showObj = self._matchShowName(name, show_pattern)
+            if not self.showObj:
+                self.showObj = self._matchShowName(name, show_pattern_alt)
+
+            if not self.showObj:
+                return
+
+        regexMode = self.ALL_REGEX
+        if self.showObj and self.showObj.is_anime:
+            regexMode = self.ANIME_REGEX
+        elif self.showObj and self.showObj.is_sports:
+            regexMode = self.SPORTS_REGEX
+        elif self.showObj and not self.showObj.is_anime and not self.showObj.is_sports:
+            regexMode = self.NORMAL_REGEX
+
+        self.compiled_regexes = {}
+        self._compile_regexes(regexMode)
 
         matches = []
         result = None
@@ -205,29 +236,14 @@ class NameParser(object):
                 result.release_group = match.group('release_group')
                 result.score += 1
 
-            cur_show = helpers.get_show_by_name(result.series_name, useIndexer=self.useIndexers)
-            if not cur_show:
-                if self.showObj:
-                    if self.showObj.air_by_date and result.air_date:
-                        result.score += 1
-                    elif self.showObj.sports and result.sports_event_date:
-                        result.score += 1
-                    elif self.showObj.anime and len(result.ab_episode_numbers):
-                        result.score += 1
-
-                matches.append(result)
-                continue
-
-            if self.showObj and self.showObj.indexerid != cur_show.indexerid:
-                logger.log(
-                    u"I expected an episode of the show " + self.showObj.name + " but the parser thinks its the show " + cur_show.name + ". I will continue thinking its " + self.showObj.name,
-                    logger.WARNING)
-                continue
-
-            result.show = cur_show
-
-            if self.convert:
-                result = result.convert()
+            if self.showObj:
+                result.show = self.showObj
+                if getattr(self.showObj, 'air_by_date', None) and result.air_date:
+                    result.score += 1
+                elif getattr(self.showObj, 'sports', None) and result.sports_event_date:
+                    result.score += 1
+                elif getattr(self.showObj, 'anime', None) and len(result.ab_episode_numbers):
+                    result.score += 1
 
             result.score += 1
             matches.append(result)
@@ -235,9 +251,13 @@ class NameParser(object):
         if len(matches):
             result = max(matches, key=lambda x: x.score)
 
-            # get quality
             if result.show:
-                result.quality = common.Quality.nameQuality(name, bool(result.show and result.show.is_anime))
+                if self.convert and not self.naming_pattern:
+                    # scene convert result
+                    result = result.convert()
+
+                # get quality
+                result.quality = common.Quality.nameQuality(name, result.show.is_anime)
 
         return result
 
@@ -317,14 +337,14 @@ class NameParser(object):
         else:
             base_file_name = file_name
 
-        # use only the direct parent dir
-        dir_name = os.path.basename(dir_name)
-
         # set up a result to use
         final_result = ParseResult(name)
 
         # try parsing the file name
         file_name_result = self._parse_string(base_file_name)
+
+        # use only the direct parent dir
+        dir_name = os.path.basename(dir_name)
 
         # parse the dirname for extra info if needed
         dir_name_result = self._parse_string(dir_name)
@@ -370,6 +390,7 @@ class NameParser(object):
             name_parser_cache.add(name, final_result)
 
         logger.log(u"Parsed " + name + " into " + str(final_result).decode('utf-8', 'xmlcharrefreplace'), logger.DEBUG)
+
         return final_result
 
 
@@ -548,7 +569,10 @@ class ParseResult(object):
             self.episode_numbers = new_episode_numbers
             self.season_number = new_season_numbers[0]
 
-        logger.log(u"Converted parsed result " + self.original_name + " into " + str(self).decode('utf-8', 'xmlcharrefreplace'), logger.DEBUG)
+        logger.log(u"Converted parsed result " + self.original_name + " into " + str(self).decode('utf-8',
+                                                                                                  'xmlcharrefreplace'),
+                   logger.DEBUG)
+
         return self
 
     def _is_air_by_date(self):

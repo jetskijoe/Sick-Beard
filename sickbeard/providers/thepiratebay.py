@@ -256,7 +256,7 @@ class ThePirateBayProvider(generic.TorrentProvider):
                         continue
 
                         #Accept Torrent only from Good People for every Episode Search
-                    if self.confirmed and re.search('(VIP|Trusted|Helper)', torrent.group(0)) is None:
+                    if self.confirmed and re.search('(VIP|Trusted|Helper|Moderator)', torrent.group(0)) is None:
                         logger.log(u"ThePirateBay Provider found result " + torrent.group(
                             'title') + " but that doesn't seem like a trusted result so I'm ignoring it", logger.DEBUG)
                         continue
@@ -371,14 +371,14 @@ class ThePirateBayProvider(generic.TorrentProvider):
 
         results = []
 
-        with db.DBConnection() as myDB:
-            sqlResults = myDB.select(
-                'SELECT s.show_name, e.showid, e.season, e.episode, e.status, e.airdate FROM tv_episodes AS e' +
-                ' INNER JOIN tv_shows AS s ON (e.showid = s.indexer_id)' +
-                ' WHERE e.airdate >= ' + str(search_date.toordinal()) +
-                ' AND (e.status IN (' + ','.join([str(x) for x in Quality.DOWNLOADED]) + ')' +
-                ' OR (e.status IN (' + ','.join([str(x) for x in Quality.SNATCHED]) + ')))'
-            )
+        myDB = db.DBConnection()
+        sqlResults = myDB.select(
+            'SELECT s.show_name, e.showid, e.season, e.episode, e.status, e.airdate FROM tv_episodes AS e' +
+            ' INNER JOIN tv_shows AS s ON (e.showid = s.indexer_id)' +
+            ' WHERE e.airdate >= ' + str(search_date.toordinal()) +
+            ' AND (e.status IN (' + ','.join([str(x) for x in Quality.DOWNLOADED]) + ')' +
+            ' OR (e.status IN (' + ','.join([str(x) for x in Quality.SNATCHED]) + ')))'
+        )
 
         if not sqlResults:
             return []
@@ -435,8 +435,8 @@ class ThePirateBayCache(tvcache.TVCache):
                 cl.append(ci)
 
         if cl:
-            with self._getDB() as myDB:
-                myDB.mass_action(cl)
+            myDB = self._getDB()
+            myDB.mass_action(cl)
 
     def _parseItem(self, item):
 

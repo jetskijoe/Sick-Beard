@@ -39,30 +39,11 @@ from name_parser.parser import NameParser, InvalidNameException
 class ProperFinder():
     def __init__(self):
         self.amActive = False
-        self.updateInterval = datetime.timedelta(hours=1)
-
-        check_propers_interval = {'15m': 15, '45m': 45, '90m': 90, '4h': 4*60, 'daily': 24*60}
-        for curInterval in ('15m', '45m', '90m', '4h', 'daily'):
-            if sickbeard.CHECK_PROPERS_INTERVAL == curInterval:
-                self.updateInterval = datetime.timedelta(minutes = check_propers_interval[curInterval])
 
     def run(self, force=False):
 
         if not sickbeard.DOWNLOAD_PROPERS:
             return
-
-        # look for propers every night at 1 AM
-        updateTime = datetime.time(hour=1)
-
-        logger.log(u"Checking proper time", logger.DEBUG)
-
-        hourDiff = datetime.datetime.today().time().hour - updateTime.hour
-        dayDiff = (datetime.date.today() - self._get_lastProperSearch()).days
-
-        if sickbeard.CHECK_PROPERS_INTERVAL == "daily" and not force:
-            # if it's less than an interval after the update time then do an update
-            if not (hourDiff >= 0 and hourDiff < self.updateInterval.seconds / 3600 or dayDiff >= 1):
-                return
 
         logger.log(u"Beginning the search for new propers")
 
@@ -75,11 +56,14 @@ class ProperFinder():
 
         self._set_lastProperSearch(datetime.datetime.today().toordinal())
 
-        msg = u"Completed the search for new propers, next check "
-        if sickbeard.CHECK_PROPERS_INTERVAL == "daily":
-            logger.log(u"%sat 1am tomorrow" % msg)
-        else:
-            logger.log(u"%sin ~%s" % (msg, sickbeard.CHECK_PROPERS_INTERVAL))
+        run_at = ""
+        if None is sickbeard.properFinderScheduler.start_time:
+            run_in = sickbeard.properFinderScheduler.lastRun + sickbeard.properFinderScheduler.cycleTime - datetime.datetime.now()
+            hours, remainder = divmod(run_in.seconds, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            run_at = u", next check in approx. " + ("%dh, %dm" % (hours, minutes) if 0 < hours else "%dm, %ds" % (minutes, seconds))
+
+        logger.log(u"Completed the search for new propers%s" % run_at)
 
         self.amActive = False
 
@@ -182,10 +166,10 @@ class ProperFinder():
                     u"Looks like this is an air-by-date or sports show, attempting to convert the date to season/episode",
                     logger.DEBUG)
                 airdate = curProper.episode.toordinal()
-                with db.DBConnection() as myDB:
-                    sql_result = myDB.select(
-                        "SELECT season, episode FROM tv_episodes WHERE showid = ? and indexer = ? and airdate = ?",
-                        [curProper.indexerid, curProper.indexer, airdate])
+                myDB = db.DBConnection()
+                sql_result = myDB.select(
+                    "SELECT season, episode FROM tv_episodes WHERE showid = ? and indexer = ? and airdate = ?",
+                    [curProper.indexerid, curProper.indexer, airdate])
 
                 if sql_result:
                     curProper.season = int(sql_result[0][0])
@@ -196,10 +180,10 @@ class ProperFinder():
                     continue
 
             # check if we actually want this proper (if it's the right quality)
-            with db.DBConnection() as myDB:
-                sqlResults = myDB.select(
-                    "SELECT status FROM tv_episodes WHERE showid = ? AND season = ? AND episode = ?",
-                    [curProper.indexerid, curProper.season, curProper.episode])
+            myDB = db.DBConnection()
+            sqlResults = myDB.select(
+                "SELECT status FROM tv_episodes WHERE showid = ? AND season = ? AND episode = ?",
+                [curProper.indexerid, curProper.season, curProper.episode])
 
             if not sqlResults:
                 continue
@@ -225,13 +209,13 @@ class ProperFinder():
             historyLimit = datetime.datetime.today() - datetime.timedelta(days=30)
 
             # make sure the episode has been downloaded before
-            with db.DBConnection() as myDB:
-                historyResults = myDB.select(
-                    "SELECT resource FROM history "
-                    "WHERE showid = ? AND season = ? AND episode = ? AND quality = ? AND date >= ? "
-                    "AND action IN (" + ",".join([str(x) for x in Quality.SNATCHED]) + ")",
-                    [curProper.indexerid, curProper.season, curProper.episode, curProper.quality,
-                     historyLimit.strftime(history.dateFormat)])
+            myDB = db.DBConnection()
+            historyResults = myDB.select(
+                "SELECT resource FROM history "
+                "WHERE showid = ? AND season = ? AND episode = ? AND quality = ? AND date >= ? "
+                "AND action IN (" + ",".join([str(x) for x in Quality.SNATCHED]) + ")",
+                [curProper.indexerid, curProper.season, curProper.episode, curProper.quality,
+                 historyLimit.strftime(history.dateFormat)])
 
             # if we didn't download this episode in the first place we don't know what quality to use for the proper so we can't do it
             if len(historyResults) == 0:
@@ -276,19 +260,19 @@ class ProperFinder():
 
         logger.log(u"Setting the last Proper search in the DB to " + str(when), logger.DEBUG)
 
-        with db.DBConnection() as myDB:
-            sqlResults = myDB.select("SELECT * FROM info")
+        myDB = db.DBConnection()
+        sqlResults = myDB.select("SELECT * FROM info")
 
-            if len(sqlResults) == 0:
-                myDB.action("INSERT INTO info (last_backlog, last_indexer, last_proper_search) VALUES (?,?,?)",
-                            [0, 0, str(when)])
-            else:
-                myDB.action("UPDATE info SET last_proper_search=" + str(when))
+        if len(sqlResults) == 0:
+            myDB.action("INSERT INTO info (last_backlog, last_indexer, last_proper_search) VALUES (?,?,?)",
+                        [0, 0, str(when)])
+        else:
+            myDB.action("UPDATE info SET last_proper_search=" + str(when))
 
     def _get_lastProperSearch(self):
 
-        with db.DBConnection() as myDB:
-            sqlResults = myDB.select("SELECT * FROM info")
+        myDB = db.DBConnection()
+        sqlResults = myDB.select("SELECT * FROM info")
 
         try:
             last_proper_search = datetime.date.fromordinal(int(sqlResults[0]["last_proper_search"]))

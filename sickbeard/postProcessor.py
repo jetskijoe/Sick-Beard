@@ -275,7 +275,7 @@ class PostProcessor(object):
                     cur_extension = cur_lang + os.path.splitext(cur_extension)[1]
 
             # replace .nfo with .nfo-orig to avoid conflicts
-            if cur_extension == 'nfo':
+            if cur_extension == 'nfo' and sickbeard.NFO_RENAME == True:
                 cur_extension = 'nfo-orig'
 
             # If new base name then convert name
@@ -406,29 +406,29 @@ class PostProcessor(object):
             names.append(self.folder_name)
 
         # search the database for a possible match and return immediately if we find one
-        with db.DBConnection() as myDB:
-            for curName in names:
-                search_name = re.sub("[\.\-\ ]", "_", curName)
-                sql_results = myDB.select("SELECT * FROM history WHERE resource LIKE ?", [search_name])
+        myDB = db.DBConnection()
+        for curName in names:
+            search_name = re.sub("[\.\-\ ]", "_", curName)
+            sql_results = myDB.select("SELECT * FROM history WHERE resource LIKE ?", [search_name])
 
-                if len(sql_results) == 0:
-                    continue
+            if len(sql_results) == 0:
+                continue
 
-                show = helpers.findCertainShow(sickbeard.showList, int(sql_results[0]["showid"]))
-                if not show:
-                    continue
+            show = helpers.findCertainShow(sickbeard.showList, int(sql_results[0]["showid"]))
+            if not show:
+                continue
 
-                season = int(sql_results[0]["season"])
-                quality = int(sql_results[0]["quality"])
+            season = int(sql_results[0]["season"])
+            quality = int(sql_results[0]["quality"])
 
-                if quality == common.Quality.UNKNOWN:
-                    quality = None
+            if quality == common.Quality.UNKNOWN:
+                quality = None
 
-                self.in_history = True
-                to_return = (show, season, [], quality)
-                self._log("Found result in history: " + str(to_return), logger.DEBUG)
+            self.in_history = True
+            to_return = (show, season, [], quality)
+            self._log("Found result in history: " + str(to_return), logger.DEBUG)
 
-                return to_return
+            return to_return
 
         self.in_history = False
         return to_return
@@ -480,7 +480,6 @@ class PostProcessor(object):
         # parse the name to break it into show name, season, and episode
         np = NameParser(file, useIndexers=True, convert=True)
         parse_result = np.parse(name)
-
 
         # couldn't find this in our show list
         if not parse_result.show:
@@ -622,9 +621,9 @@ class PostProcessor(object):
                 self._log(u"Looks like this is an air-by-date or sports show, attempting to convert the date to season/episode",
                           logger.DEBUG)
                 airdate = episodes[0].toordinal()
-                with db.DBConnection() as myDB:
-                    sql_result = myDB.select("SELECT season, episode FROM tv_episodes WHERE showid = ? and indexer = ? and airdate = ?",
-                                             [show.indexerid, show.indexer, airdate])
+                myDB = db.DBConnection()
+                sql_result = myDB.select("SELECT season, episode FROM tv_episodes WHERE showid = ? and indexer = ? and airdate = ?",
+                                         [show.indexerid, show.indexer, airdate])
 
                 if sql_result:
                     season = int(sql_result[0][0])
@@ -638,10 +637,10 @@ class PostProcessor(object):
 
             # if there's no season then we can hopefully just use 1 automatically
             elif season == None and show:
-                with db.DBConnection() as myDB:
-                    numseasonsSQlResult = myDB.select(
-                        "SELECT COUNT(DISTINCT season) as numseasons FROM tv_episodes WHERE showid = ? and indexer = ? and season != 0",
-                        [show.indexerid, show.indexer])
+                myDB = db.DBConnection()
+                numseasonsSQlResult = myDB.select(
+                    "SELECT COUNT(DISTINCT season) as numseasons FROM tv_episodes WHERE showid = ? and indexer = ? and season != 0",
+                    [show.indexerid, show.indexer])
                 if int(numseasonsSQlResult[0][0]) == 1 and season == None:
                     self._log(
                         u"Don't have a season number, but this show appears to only have 1 season, setting season number to 1...",
@@ -869,16 +868,17 @@ class PostProcessor(object):
         if not priority_download:
 
             # if there's an existing file that we don't want to replace stop here
-            if existing_file_status in (PostProcessor.EXISTS_LARGER, PostProcessor.EXISTS_SAME):
-                self._log(
-                    u"File exists and we are not going to replace it because it's not smaller, quitting post-processing",
-                    logger.ERROR)
-                return False
-            elif existing_file_status == PostProcessor.EXISTS_SMALLER:
-                self._log(u"File exists and is smaller than the new file so I'm going to replace it", logger.DEBUG)
-            elif existing_file_status != PostProcessor.DOESNT_EXIST:
-                self._log(u"Unknown existing file status. This should never happen, please log this as a bug.",
-                          logger.ERROR)
+            if existing_file_status == PostProcessor.EXISTS_LARGER:
+                if self.is_proper:
+                    self._log(u"File exists and new file is smaller, new file is a proper/repack, marking it safe to replace", logger.DEBUG)
+                    return True
+
+                else:
+                    self._log(u"File exists and new file is smaller, marking it unsafe to replace", logger.DEBUG)
+                    return False
+
+            elif existing_file_status == PostProcessor.EXISTS_SAME:
+                self._log(u"File exists and new file is same size, marking it unsafe to replace", logger.DEBUG)
                 return False
 
         # if the file is priority then we're going to replace it even if it exists
@@ -963,8 +963,8 @@ class PostProcessor(object):
                     self._log(u"Couldn't find release in snatch history", logger.WARNING)
 
         if sql_l:
-            with db.DBConnection() as myDB:
-                myDB.mass_action(sql_l)
+            myDB = db.DBConnection()
+            myDB.mass_action(sql_l)
 
         # find the destination folder
         try:
@@ -1040,8 +1040,8 @@ class PostProcessor(object):
         sql_l.append(ep_obj.get_sql())
 
         if sql_l:
-            with db.DBConnection() as myDB:
-                myDB.mass_action(sql_l)
+            myDB = db.DBConnection()
+            myDB.mass_action(sql_l)
 
         # log it to history
         history.logDownload(ep_obj, self.file_path, new_ep_quality, self.release_group)

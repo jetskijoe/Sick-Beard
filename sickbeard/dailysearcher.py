@@ -43,9 +43,9 @@ class DailySearcher():
         fromDate = datetime.date.today() - datetime.timedelta(weeks=1)
         curDate = datetime.date.today()
 
-        with db.DBConnection() as myDB:
-            sqlResults = myDB.select("SELECT * FROM tv_episodes WHERE status in (?,?) AND airdate >= ? AND airdate <= ?",
-                                     [common.UNAIRED, common.WANTED, fromDate.toordinal(), curDate.toordinal()])
+        myDB = db.DBConnection()
+        sqlResults = myDB.select("SELECT * FROM tv_episodes WHERE status in (?,?) AND airdate >= ? AND airdate <= ?",
+                                 [common.UNAIRED, common.WANTED, fromDate.toordinal(), curDate.toordinal()])
 
         sql_l = []
         todaysEps = {}
@@ -71,7 +71,6 @@ class DailySearcher():
                         logger.log(u"New episode " + ep.prettyName() + " airs today, setting status to WANTED")
                         ep.status = common.WANTED
 
-
                 if ep.status == common.WANTED:
                     if show not in todaysEps:
                         todaysEps[show] = [ep]
@@ -81,8 +80,8 @@ class DailySearcher():
                 sql_l.append(ep.get_sql())
 
         if sql_l:
-            with db.DBConnection() as myDB:
-                myDB.mass_action(sql_l)
+            myDB = db.DBConnection()
+            myDB.mass_action(sql_l)
 
         if len(todaysEps):
             for show in todaysEps:

@@ -31,6 +31,7 @@ from sickbeard import generic_queue
 from sickbeard import name_cache
 from sickbeard.exceptions import ex
 
+
 class ShowQueue(generic_queue.GenericQueue):
     def __init__(self):
         generic_queue.GenericQueue.__init__(self)
@@ -369,9 +370,9 @@ class QueueItemAdd(ShowQueueItem):
         # if they gave a custom status then change all the eps to it
         if self.default_status != SKIPPED:
             logger.log(u"Setting all episodes to the specified default status: " + str(self.default_status))
-            with db.DBConnection() as myDB:
-                myDB.action("UPDATE tv_episodes SET status = ? WHERE status = ? AND showid = ? AND season != 0",
-                            [self.default_status, SKIPPED, self.show.indexerid])
+            myDB = db.DBConnection()
+            myDB.action("UPDATE tv_episodes SET status = ? WHERE status = ? AND showid = ? AND season != 0",
+                        [self.default_status, SKIPPED, self.show.indexerid])
 
         # if they started with WANTED eps then run the backlog
         if self.default_status == WANTED:
@@ -561,6 +562,7 @@ class QueueItemUpdate(ShowQueueItem):
                         pass
 
         sickbeard.showQueueScheduler.action.refreshShow(self.show, self.force)
+
 
 class QueueItemForceUpdate(QueueItemUpdate):
     def __init__(self, show=None):

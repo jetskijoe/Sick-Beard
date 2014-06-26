@@ -19,8 +19,10 @@
 
 # Check needed software dependencies to nudge users to fix their setup
 from __future__ import with_statement
+import functools
 
 import sys
+import shutil
 
 if sys.version_info < (2, 6):
     print "Sorry, requires Python 2.6 or 2.7."
@@ -52,6 +54,7 @@ import threading
 import signal
 import traceback
 import getopt
+import time
 
 import sickbeard
 
@@ -75,27 +78,26 @@ signal.signal(signal.SIGINT, sickbeard.sig_handler)
 signal.signal(signal.SIGTERM, sickbeard.sig_handler)
 
 throwaway = datetime.datetime.strptime('20110101', '%Y%m%d')
-io_loop = IOLoop.current()
 
 def loadShowsFromDB():
     """
     Populates the showList with shows from the database
     """
 
-    with db.DBConnection() as myDB:
-        sqlResults = myDB.select("SELECT * FROM tv_shows")
+    myDB = db.DBConnection()
+    sqlResults = myDB.select("SELECT * FROM tv_shows")
 
-        for sqlShow in sqlResults:
-            try:
-                curShow = TVShow(int(sqlShow["indexer"]), int(sqlShow["indexer_id"]))
-                sickbeard.showList.append(curShow)
-            except Exception, e:
-                logger.log(
-                        u"There was an error creating the show in " + sqlShow["location"] + ": " + str(e).decode('utf-8'),
-                    logger.ERROR)
-                logger.log(traceback.format_exc(), logger.DEBUG)
+    for sqlShow in sqlResults:
+        try:
+            curShow = TVShow(int(sqlShow["indexer"]), int(sqlShow["indexer_id"]))
+            sickbeard.showList.append(curShow)
+        except Exception, e:
+            logger.log(
+                    u"There was an error creating the show in " + sqlShow["location"] + ": " + str(e).decode('utf-8'),
+                logger.ERROR)
+            logger.log(traceback.format_exc(), logger.DEBUG)
 
-            # TODO: update the existing shows if the showlist has something in it
+        # TODO: update the existing shows if the showlist has something in it
 
 def daemonize():
     try:
@@ -133,6 +135,20 @@ def daemonize():
 
     dev_null = file('/dev/null', 'r')
     os.dup2(dev_null.fileno(), sys.stdin.fileno())
+
+def restore(srcDir, dstDir):
+    try:
+        for file in os.listdir(srcDir):
+            srcFile = os.path.join(srcDir, file)
+            dstFile = os.path.join(dstDir, file)
+            bakFile = os.path.join(dstDir, file + '.bak')
+            shutil.move(dstFile, bakFile)
+            shutil.move(srcFile, dstFile)
+
+        os.rmdir(srcDir)
+        return True
+    except:
+        return False
 
 def main():
     """
@@ -277,6 +293,14 @@ def main():
         elif not os.access(os.path.dirname(sickbeard.CONFIG_FILE), os.W_OK):
             raise SystemExit("Config file root dir '" + os.path.dirname(sickbeard.CONFIG_FILE) + "' must be writeable.")
 
+    # Check if we need to perform a restore first
+    restoreDir = os.path.join(sickbeard.DATA_DIR, 'restore')
+    if os.path.exists(restoreDir):
+        if restore(restoreDir, sickbeard.DATA_DIR):
+            logger.log(u"Restore successful...")
+        else:
+            logger.log(u"Restore FAILED!", logger.ERROR)
+
     os.chdir(sickbeard.DATA_DIR)
 
     if consoleLogging:
@@ -288,8 +312,7 @@ def main():
 
     sickbeard.CFG = ConfigObj(sickbeard.CONFIG_FILE)
 
-    with db.DBConnection() as myDB:
-        CUR_DB_VERSION = myDB.checkDBVersion()
+    CUR_DB_VERSION = db.DBConnection().checkDBVersion()
 
     if CUR_DB_VERSION > 0:
         if CUR_DB_VERSION < MIN_DB_VERSION:
@@ -307,6 +330,16 @@ def main():
     sickbeard.initialize(consoleLogging=consoleLogging)
 
     sickbeard.showList = []
+
+    if sickbeard.DAEMON and not sickbeard.restarted:
+        daemonize()
+
+    # Use this PID for everything
+    sickbeard.PID = os.getpid()
+
+    # Build from the DB to start with
+    logger.log(u"Loading initial show list")
+    loadShowsFromDB()
 
     if forcedPort:
         logger.log(u"Forcing web server to port " + str(forcedPort))
@@ -341,44 +374,55 @@ def main():
         'handle_reverse_proxy': sickbeard.HANDLE_REVERSE_PROXY,
         'https_cert': sickbeard.HTTPS_CERT,
         'https_key': sickbeard.HTTPS_KEY,
-    }
+        }
 
     # init tornado
-    webserveInit.initWebServer(options)
-
-    # Build from the DB to start with
-    logger.log(u"Loading initial show list")
-    loadShowsFromDB()
+    try:
+        webserveInit.initWebServer(options)
+    except IOError:
+        logger.log(u"Unable to start web server, is something else running on port %d?" % startPort, logger.ERROR)
+        if sickbeard.LAUNCH_BROWSER and not sickbeard.DAEMON:
+            logger.log(u"Launching browser and exiting", logger.ERROR)
+            sickbeard.launchBrowser(startPort)
+        sys.exit()
 
     def startup():
         # Fire up all our threads
         sickbeard.start()
 
         # Launch browser if we're supposed to
-        if sickbeard.LAUNCH_BROWSER and not noLaunch and not sickbeard.DAEMON:
+        if sickbeard.LAUNCH_BROWSER and not noLaunch and not sickbeard.DAEMON and not sickbeard.restarted:
             sickbeard.launchBrowser(startPort)
 
         # Start an update if we're supposed to
         if forceUpdate or sickbeard.UPDATE_SHOWS_ON_START:
             sickbeard.showUpdateScheduler.action.run(force=True)  # @UndefinedVariable
 
-    # init startup tasks
+        # If we restarted then unset the restarted flag
+        if sickbeard.restarted:
+            sickbeard.restarted = False
+
+    # create ioloop
+    io_loop = IOLoop.current()
+
     io_loop.add_timeout(datetime.timedelta(seconds=5), startup)
 
-    # autoreload.
-    tornado.autoreload.add_reload_hook(autoreload_shutdown)
-    if sickbeard.AUTO_UPDATE:
-        tornado.autoreload.start(io_loop)
-
-    if sickbeard.DAEMON:
-        daemonize()
-
-    # Use this PID for everything
-    sickbeard.PID = os.getpid()
+    io_loop.start()
+    sickbeard.saveAndShutdown()
 
 if __name__ == "__main__":
     if sys.hexversion >= 0x020600F0:
         freeze_support()
-    main()
-    io_loop.start()
-    sickbeard.saveAndShutdown()
+
+    while(True):
+        main()
+
+        # check if restart was requested
+        if not sickbeard.restarted:
+            if sickbeard.CREATEPID:
+                logger.log(u"Removing pidfile " + str(sickbeard.PIDFILE))
+                sickbeard.remove_pid_file(sickbeard.PIDFILE)
+            break
+
+        # restart
+        logger.log("Restarting SickRage, please stand by...")

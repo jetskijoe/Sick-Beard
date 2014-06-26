@@ -210,6 +210,7 @@ PROCESS_AUTOMATICALLY = False
 KEEP_PROCESSED_DIR = False
 PROCESS_METHOD = None
 MOVE_ASSOCIATED_FILES = False
+NFO_RENAME = True
 TV_DOWNLOAD_DIR = None
 UNPACK = False
 SKIP_REMOVED_FILES = False
@@ -313,6 +314,7 @@ PUSHOVER_NOTIFY_ONSNATCH = False
 PUSHOVER_NOTIFY_ONDOWNLOAD = False
 PUSHOVER_NOTIFY_ONSUBTITLEDOWNLOAD = False
 PUSHOVER_USERKEY = None
+PUSHOVER_APIKEY = None
 
 USE_LIBNOTIFY = False
 LIBNOTIFY_NOTIFY_ONSNATCH = False
@@ -463,19 +465,19 @@ def initialize(consoleLogging=True):
             EXTRA_SCRIPTS, USE_TWITTER, TWITTER_USERNAME, TWITTER_PASSWORD, TWITTER_PREFIX, DAILYSEARCH_FREQUENCY, \
             USE_BOXCAR, BOXCAR_USERNAME, BOXCAR_PASSWORD, BOXCAR_NOTIFY_ONDOWNLOAD, BOXCAR_NOTIFY_ONSUBTITLEDOWNLOAD, BOXCAR_NOTIFY_ONSNATCH, \
             USE_BOXCAR2, BOXCAR2_ACCESSTOKEN, BOXCAR2_NOTIFY_ONDOWNLOAD, BOXCAR2_NOTIFY_ONSUBTITLEDOWNLOAD, BOXCAR2_NOTIFY_ONSNATCH, \
-            USE_PUSHOVER, PUSHOVER_USERKEY, PUSHOVER_NOTIFY_ONDOWNLOAD, PUSHOVER_NOTIFY_ONSUBTITLEDOWNLOAD, PUSHOVER_NOTIFY_ONSNATCH, \
+            USE_PUSHOVER, PUSHOVER_USERKEY, PUSHOVER_APIKEY, PUSHOVER_NOTIFY_ONDOWNLOAD, PUSHOVER_NOTIFY_ONSUBTITLEDOWNLOAD, PUSHOVER_NOTIFY_ONSNATCH, \
             USE_LIBNOTIFY, LIBNOTIFY_NOTIFY_ONSNATCH, LIBNOTIFY_NOTIFY_ONDOWNLOAD, LIBNOTIFY_NOTIFY_ONSUBTITLEDOWNLOAD, USE_NMJ, NMJ_HOST, NMJ_DATABASE, NMJ_MOUNT, USE_NMJv2, NMJv2_HOST, NMJv2_DATABASE, NMJv2_DBLOC, USE_SYNOINDEX, \
             USE_SYNOLOGYNOTIFIER, SYNOLOGYNOTIFIER_NOTIFY_ONSNATCH, SYNOLOGYNOTIFIER_NOTIFY_ONDOWNLOAD, SYNOLOGYNOTIFIER_NOTIFY_ONSUBTITLEDOWNLOAD, \
             USE_EMAIL, EMAIL_HOST, EMAIL_PORT, EMAIL_TLS, EMAIL_USER, EMAIL_PASSWORD, EMAIL_FROM, EMAIL_NOTIFY_ONSNATCH, EMAIL_NOTIFY_ONDOWNLOAD, EMAIL_NOTIFY_ONSUBTITLEDOWNLOAD, EMAIL_LIST, \
             USE_LISTVIEW, METADATA_XBMC, METADATA_XBMC_12PLUS, METADATA_MEDIABROWSER, METADATA_PS3, metadata_provider_dict, \
-            NEWZBIN, NEWZBIN_USERNAME, NEWZBIN_PASSWORD, GIT_PATH, MOVE_ASSOCIATED_FILES, CLEAR_CACHE, dailySearchScheduler, \
+            NEWZBIN, NEWZBIN_USERNAME, NEWZBIN_PASSWORD, GIT_PATH, MOVE_ASSOCIATED_FILES, CLEAR_CACHE, dailySearchScheduler, NFO_RENAME, \
             GUI_NAME, HOME_LAYOUT, HISTORY_LAYOUT, DISPLAY_SHOW_SPECIALS, COMING_EPS_LAYOUT, COMING_EPS_SORT, COMING_EPS_DISPLAY_PAUSED, COMING_EPS_MISSED_RANGE, FUZZY_DATING, TRIM_ZERO, DATE_PRESET, TIME_PRESET, TIME_PRESET_W_SECONDS, \
             METADATA_WDTV, METADATA_TIVO, METADATA_MEDE8ER, IGNORE_WORDS, CALENDAR_UNPROTECTED, CREATE_MISSING_SHOW_DIRS, \
             ADD_SHOWS_WO_DIR, USE_SUBTITLES, SUBTITLES_LANGUAGES, SUBTITLES_DIR, SUBTITLES_SERVICES_LIST, SUBTITLES_SERVICES_ENABLED, SUBTITLES_HISTORY, SUBTITLES_FINDER_FREQUENCY, subtitlesFinderScheduler, \
             USE_FAILED_DOWNLOADS, DELETE_FAILED, ANON_REDIRECT, LOCALHOST_IP, REMOTE_IP, TMDB_API_KEY, DEBUG, PROXY_SETTING, \
             AUTOPOSTPROCESSER_FREQUENCY, DEFAULT_AUTOPOSTPROCESSER_FREQUENCY, MIN_AUTOPOSTPROCESSER_FREQUENCY, \
             ANIME_DEFAULT, NAMING_ANIME, ANIMESUPPORT, USE_ANIDB, ANIDB_USERNAME, ANIDB_PASSWORD, ANIDB_USE_MYLIST, \
-            ANIME_SPLIT_HOME, maintenanceScheduler, SCENE_DEFAULT
+            ANIME_SPLIT_HOME, maintenanceScheduler, SCENE_DEFAULT, RES
 
         if __INITIALIZED__:
             return False
@@ -657,6 +659,7 @@ def initialize(consoleLogging=True):
         KEEP_PROCESSED_DIR = check_setting_int(CFG, 'General', 'keep_processed_dir', 1)
         PROCESS_METHOD = check_setting_str(CFG, 'General', 'process_method', 'copy' if KEEP_PROCESSED_DIR else 'move')
         MOVE_ASSOCIATED_FILES = check_setting_int(CFG, 'General', 'move_associated_files', 0)
+        NFO_RENAME = check_setting_int(CFG, 'General', 'nfo_rename', 1)
         CREATE_MISSING_SHOW_DIRS = check_setting_int(CFG, 'General', 'create_missing_show_dirs', 0)
         ADD_SHOWS_WO_DIR = check_setting_int(CFG, 'General', 'add_shows_wo_dir', 0)
 
@@ -754,7 +757,7 @@ def initialize(consoleLogging=True):
         PUSHOVER_NOTIFY_ONSUBTITLEDOWNLOAD = bool(
             check_setting_int(CFG, 'Pushover', 'pushover_notify_onsubtitledownload', 0))
         PUSHOVER_USERKEY = check_setting_str(CFG, 'Pushover', 'pushover_userkey', '')
-
+	PUSHOVER_APIKEY = check_setting_str(CFG, 'Pushover', 'pushover_apikey', '')
         USE_LIBNOTIFY = bool(check_setting_int(CFG, 'Libnotify', 'use_libnotify', 0))
         LIBNOTIFY_NOTIFY_ONSNATCH = bool(check_setting_int(CFG, 'Libnotify', 'libnotify_notify_onsnatch', 0))
         LIBNOTIFY_NOTIFY_ONDOWNLOAD = bool(check_setting_int(CFG, 'Libnotify', 'libnotify_notify_ondownload', 0))
@@ -904,20 +907,20 @@ def initialize(consoleLogging=True):
         logger.sb_log_instance.initLogging(consoleLogging=consoleLogging)
 
         # initialize the main SB database
-        with db.DBConnection() as myDB:
-            db.upgradeDatabase(myDB, mainDB.InitialSchema)
+        myDB = db.DBConnection()
+        db.upgradeDatabase(myDB, mainDB.InitialSchema)
 
         # initialize the cache database
-        with db.DBConnection('cache.db') as myDB:
-            db.upgradeDatabase(myDB, cache_db.InitialSchema)
+        myDB = db.DBConnection('cache.db')
+        db.upgradeDatabase(myDB, cache_db.InitialSchema)
 
         # initialize the failed downloads database
-        with db.DBConnection('failed.db') as myDB:
-            db.upgradeDatabase(myDB, failed_db.InitialSchema)
+        myDB = db.DBConnection('failed.db')
+        db.upgradeDatabase(myDB, failed_db.InitialSchema)
 
         # fix up any db problems
-        with db.DBConnection() as myDB:
-            db.sanityCheckDatabase(myDB, mainDB.MainSanityCheck)
+        myDB = db.DBConnection()
+        db.sanityCheckDatabase(myDB, mainDB.MainSanityCheck)
 
         # migrate the config if it needs it
         migrator = ConfigMigrator(CFG)
@@ -942,70 +945,76 @@ def initialize(consoleLogging=True):
         newznabProviderList = providers.getNewznabProviderList(NEWZNAB_DATA)
         providerList = providers.makeProviderList()
 
-        maintenanceScheduler = scheduler.Scheduler(maintenance.Maintenance(),
-                                                   cycleTime=datetime.timedelta(hours=1),
-                                                   threadName="MAINTENANCE",
-                                                   silent=True,
-                                                   runImmediately=True)
-
-        dailySearchScheduler = scheduler.Scheduler(dailysearcher.DailySearcher(),
-                                                   cycleTime=datetime.timedelta(minutes=DAILYSEARCH_FREQUENCY),
-                                                   threadName="DAILYSEARCHER",
-                                                   silent=True,
-                                                   runImmediately=DAILYSEARCH_STARTUP)
-
-        showUpdateScheduler = scheduler.Scheduler(showUpdater.ShowUpdater(),
-                                                  cycleTime=showUpdater.ShowUpdater().updateInterval,
-                                                  threadName="SHOWUPDATER",
-                                                  runImmediately=False)
-
+        # initialize schedulers
+        # updaters
+        update_now = datetime.timedelta(minutes=0)
         versionCheckScheduler = scheduler.Scheduler(versionChecker.CheckVersion(),
                                                     cycleTime=datetime.timedelta(hours=UPDATE_FREQUENCY),
                                                     threadName="CHECKVERSION",
-                                                    runImmediately=True)
+                                                    silent=False)
+
+        maintenanceScheduler = scheduler.Scheduler(maintenance.Maintenance(),
+                                                   cycleTime=datetime.timedelta(hours=1),
+                                                   threadName="MAINTENANCE")
 
         showQueueScheduler = scheduler.Scheduler(show_queue.ShowQueue(),
                                                  cycleTime=datetime.timedelta(seconds=3),
-                                                 threadName="SHOWQUEUE",
-                                                 silent=True,
-                                                 runImmediately=True)
+                                                 threadName="SHOWQUEUE")
 
+        showUpdateScheduler = scheduler.Scheduler(showUpdater.ShowUpdater(),
+                                                  cycleTime=datetime.timedelta(hours=1),
+                                                  threadName="SHOWUPDATER",
+                                                  start_time=datetime.time(hour=3))  # 3 AM
+
+        # searchers
         searchQueueScheduler = scheduler.Scheduler(search_queue.SearchQueue(),
                                                    cycleTime=datetime.timedelta(seconds=3),
-                                                   threadName="SEARCHQUEUE",
-                                                   silent=True)
+                                                   threadName="SEARCHQUEUE")
+
+        update_interval = datetime.timedelta(minutes=DAILYSEARCH_FREQUENCY)
+        dailySearchScheduler = scheduler.Scheduler(dailysearcher.DailySearcher(),
+                                                   cycleTime=update_interval,
+                                                   threadName="DAILYSEARCHER",
+                                                   run_delay=update_now if DAILYSEARCH_STARTUP
+                                                   else update_interval)
+
+        update_interval = datetime.timedelta(minutes=BACKLOG_FREQUENCY)
+        backlogSearchScheduler = searchBacklog.BacklogSearchScheduler(searchBacklog.BacklogSearcher(),
+                                                                      cycleTime=update_interval,
+                                                                      threadName="BACKLOG",
+                                                                      run_delay=update_now if BACKLOG_STARTUP
+                                                                      else update_interval)
+
+        search_intervals = {'15m': 15, '45m': 45, '90m': 90, '4h': 4*60, 'daily': 24*60}
+        if CHECK_PROPERS_INTERVAL in search_intervals:
+            update_interval = datetime.timedelta(minutes=search_intervals[CHECK_PROPERS_INTERVAL])
+            run_at = None
+        else:
+            update_interval = datetime.timedelta(hours=1)
+            run_at = datetime.time(hour=1)  # 1 AM
 
         properFinderScheduler = scheduler.Scheduler(properFinder.ProperFinder(),
-                                                    cycleTime=properFinder.ProperFinder().updateInterval,
+                                                    cycleTime=update_interval,
                                                     threadName="FINDPROPERS",
-                                                    silent=False if DOWNLOAD_PROPERS else True,
-                                                    runImmediately=True)
+                                                    start_time=run_at,
+                                                    run_delay=update_interval)
 
+        # processors
         autoPostProcesserScheduler = scheduler.Scheduler(autoPostProcesser.PostProcesser(),
                                                          cycleTime=datetime.timedelta(
                                                              minutes=AUTOPOSTPROCESSER_FREQUENCY),
                                                          threadName="POSTPROCESSER",
-                                                         silent=False if PROCESS_AUTOMATICALLY else True,
-                                                         runImmediately=True)
+                                                         silent=not PROCESS_AUTOMATICALLY)
 
         traktWatchListCheckerScheduler = scheduler.Scheduler(traktWatchListChecker.TraktChecker(),
                                                              cycleTime=datetime.timedelta(hours=1),
                                                              threadName="TRAKTWATCHLIST",
-                                                             silent=False if USE_TRAKT else True,
-                                                             runImmediately=True)
+                                                             silent=not USE_TRAKT)
 
         subtitlesFinderScheduler = scheduler.Scheduler(subtitles.SubtitlesFinder(),
                                                        cycleTime=datetime.timedelta(hours=SUBTITLES_FINDER_FREQUENCY),
                                                        threadName="FINDSUBTITLES",
-                                                       silent=False if USE_SUBTITLES else True,
-                                                       runImmediately=True)
-
-        backlogSearchScheduler = searchBacklog.BacklogSearchScheduler(searchBacklog.BacklogSearcher(),
-                                                                      cycleTime=datetime.timedelta(
-                                                                          minutes=BACKLOG_FREQUENCY),
-                                                                      threadName="BACKLOG",
-                                                                      silent=True,
-                                                                      runImmediately=BACKLOG_STARTUP)
+                                                       silent=not USE_SUBTITLES)
 
         # dynamically load provider settings
         for curTorrentProvider in [curProvider for curProvider in providers.sortedProviderList() if
@@ -1300,43 +1309,8 @@ def cleanup_tornado_sockets(io_loop):
             pass
 
 def saveAndShutdown():
-
     halt()
     saveAll()
-
-    cleanup_tornado_sockets(IOLoop.current())
-
-    if CREATEPID:
-        logger.log(u"Removing pidfile " + str(PIDFILE))
-        remove_pid_file(PIDFILE)
-
-    if restarted:
-        install_type = versionCheckScheduler.action.install_type
-
-        popen_list = []
-
-        if install_type in ('git', 'source'):
-            popen_list = [sys.executable, MY_FULLNAME]
-        elif install_type == 'win':
-            if hasattr(sys, 'frozen'):
-                # c:\dir\to\updater.exe 12345 c:\dir\to\sickbeard.exe
-                popen_list = [os.path.join(PROG_DIR, 'updater.exe'), str(PID), sys.executable]
-            else:
-                logger.log(u"Unknown SB launch method, please file a bug report about this", logger.ERROR)
-                popen_list = [sys.executable, os.path.join(PROG_DIR, 'updater.py'), str(PID), sys.executable,
-                              MY_FULLNAME]
-
-        if popen_list:
-            popen_list += MY_ARGS
-            if '--nolaunch' not in popen_list:
-                popen_list += ['--nolaunch']
-
-            logger.log(u"Restarting SickRage with " + str(popen_list))
-            logger.close()
-
-            subprocess.Popen(popen_list, cwd=os.getcwd())
-
-    os._exit(0)
 
 def invoke_command(to_call, *args, **kwargs):
 
@@ -1366,6 +1340,7 @@ def restart(soft=True):
         initialize()
     else:
         restarted=True
+        time.sleep(5)
         webserveInit.shutdown()
 
 
@@ -1449,6 +1424,7 @@ def save_config():
     new_config['General']['keep_processed_dir'] = int(KEEP_PROCESSED_DIR)
     new_config['General']['process_method'] = PROCESS_METHOD
     new_config['General']['move_associated_files'] = int(MOVE_ASSOCIATED_FILES)
+    new_config['General']['nfo_rename'] = int(NFO_RENAME)
     new_config['General']['process_automatically'] = int(PROCESS_AUTOMATICALLY)
     new_config['General']['unpack'] = int(UNPACK)
     new_config['General']['rename_episodes'] = int(RENAME_EPISODES)
@@ -1650,6 +1626,7 @@ def save_config():
     new_config['Pushover']['pushover_notify_ondownload'] = int(PUSHOVER_NOTIFY_ONDOWNLOAD)
     new_config['Pushover']['pushover_notify_onsubtitledownload'] = int(PUSHOVER_NOTIFY_ONSUBTITLEDOWNLOAD)
     new_config['Pushover']['pushover_userkey'] = PUSHOVER_USERKEY
+    new_config['Pushover']['pushover_apikey'] = PUSHOVER_APIKEY
 
     new_config['Libnotify'] = {}
     new_config['Libnotify']['use_libnotify'] = int(USE_LIBNOTIFY)
@@ -1809,8 +1786,8 @@ def getEpList(epIDs, showid=None):
         query += " AND showid = ?"
         params.append(showid)
 
-    with db.DBConnection() as myDB:
-        sqlResults = myDB.select(query, params)
+    myDB = db.DBConnection()
+    sqlResults = myDB.select(query, params)
 
     epList = []
 
@@ -1825,5 +1802,12 @@ def getEpList(epIDs, showid=None):
 def autoreload_shutdown():
     logger.log('SickRage is now auto-reloading, please stand by ...')
 
+    # halt all tasks
     halt()
+
+    # save  settings
     saveAll()
+
+    if CREATEPID:
+        logger.log(u"Removing pidfile " + str(PIDFILE))
+        remove_pid_file(PIDFILE)

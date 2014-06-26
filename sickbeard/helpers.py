@@ -32,6 +32,7 @@ import urlparse
 import uuid
 import base64
 import string
+import zipfile
 
 from lib import requests
 from lib.requests import exceptions
@@ -290,37 +291,37 @@ def searchDBForShow(regShowName, log=False):
 
     yearRegex = "([^()]+?)\s*(\()?(\d{4})(?(2)\))$"
 
-    with db.DBConnection() as myDB:
-        for showName in showNames:
+    myDB = db.DBConnection()
+    for showName in showNames:
 
-            sqlResults = myDB.select("SELECT * FROM tv_shows WHERE show_name LIKE ?",
-                                     [showName])
+        sqlResults = myDB.select("SELECT * FROM tv_shows WHERE show_name LIKE ?",
+                                 [showName])
 
-            if len(sqlResults) == 1:
-                return (int(sqlResults[0]["indexer_id"]), sqlResults[0]["show_name"])
+        if len(sqlResults) == 1:
+            return (int(sqlResults[0]["indexer_id"]), sqlResults[0]["show_name"])
 
+        else:
+            # if we didn't get exactly one result then try again with the year stripped off if possible
+            match = re.match(yearRegex, showName)
+            if match and match.group(1):
+                if log:
+                    logger.log(u"Unable to match original name but trying to manually strip and specify show year",
+                               logger.DEBUG)
+                sqlResults = myDB.select(
+                    "SELECT * FROM tv_shows WHERE (show_name LIKE ?) AND startyear = ?",
+                    [match.group(1) + '%', match.group(3)])
+
+            if len(sqlResults) == 0:
+                if log:
+                    logger.log(u"Unable to match a record in the DB for " + showName, logger.DEBUG)
+                continue
+            elif len(sqlResults) > 1:
+                if log:
+                    logger.log(u"Multiple results for " + showName + " in the DB, unable to match show name",
+                               logger.DEBUG)
+                continue
             else:
-                # if we didn't get exactly one result then try again with the year stripped off if possible
-                match = re.match(yearRegex, showName)
-                if match and match.group(1):
-                    if log:
-                        logger.log(u"Unable to match original name but trying to manually strip and specify show year",
-                                   logger.DEBUG)
-                    sqlResults = myDB.select(
-                        "SELECT * FROM tv_shows WHERE (show_name LIKE ?) AND startyear = ?",
-                        [match.group(1) + '%', match.group(3)])
-
-                if len(sqlResults) == 0:
-                    if log:
-                        logger.log(u"Unable to match a record in the DB for " + showName, logger.DEBUG)
-                    continue
-                elif len(sqlResults) > 1:
-                    if log:
-                        logger.log(u"Multiple results for " + showName + " in the DB, unable to match show name",
-                                   logger.DEBUG)
-                    continue
-                else:
-                    return (int(sqlResults[0]["indexer_id"]), sqlResults[0]["show_name"])
+                return (int(sqlResults[0]["indexer_id"]), sqlResults[0]["show_name"])
 
     return
 
@@ -529,7 +530,7 @@ def rename_ep_file(cur_path, new_path, old_path_length=0):
         # Extract subtitle language from filename
         sublang = os.path.splitext(cur_file_name)[1][1:]
 
-        #Check if the language extracted from filename is a valid language
+        # Check if the language extracted from filename is a valid language
         try:
             language = subliminal.language.Language(sublang, strict=True)
             cur_file_ext = '.' + sublang + cur_file_ext
@@ -679,10 +680,11 @@ def is_anime_in_show_list():
 def update_anime_support():
     sickbeard.ANIMESUPPORT = is_anime_in_show_list()
 
+
 def get_absolute_number_from_season_and_episode(show, season, episode):
-    with db.DBConnection() as myDB:
-        sql = "SELECT * FROM tv_episodes WHERE showid = ? and season = ? and episode = ?"
-        sqlResults = myDB.select(sql, [show.indexerid, season, episode])
+    myDB = db.DBConnection()
+    sql = "SELECT * FROM tv_episodes WHERE showid = ? and season = ? and episode = ?"
+    sqlResults = myDB.select(sql, [show.indexerid, season, episode])
 
     if len(sqlResults) == 1:
         absolute_number = int(sqlResults[0]["absolute_number"])
@@ -692,13 +694,15 @@ def get_absolute_number_from_season_and_episode(show, season, episode):
         return absolute_number
     else:
         logger.log(
-            "No entries for absolute number in show: " + show.name + " found using " + str(season) + "x" + str(episode),logger.DEBUG)
+            "No entries for absolute number in show: " + show.name + " found using " + str(season) + "x" + str(episode),
+            logger.DEBUG)
 
     return None
 
+
 def get_all_episodes_from_absolute_number(show, indexer_id, absolute_numbers):
     if len(absolute_numbers) == 0:
-        raise EpisodeNotFoundByAbsoluteNumberException()
+        raise EpisodeNotFoundByAbsoluteNumberException
 
     episodes = []
     season = None
@@ -714,7 +718,7 @@ def get_all_episodes_from_absolute_number(show, indexer_id, absolute_numbers):
         if ep:
             episodes.append(ep.episode)
         else:
-            raise EpisodeNotFoundByAbsoluteNumberException()
+            raise EpisodeNotFoundByAbsoluteNumberException
         season = ep.season  # this will always take the last found seson so eps that cross the season border are not handeled well
 
     return (season, episodes)
@@ -885,6 +889,7 @@ def backupVersionedFile(old_file, version):
 
     return True
 
+
 def restoreVersionedFile(backup_file, version):
     numTries = 0
 
@@ -896,10 +901,14 @@ def restoreVersionedFile(backup_file, version):
         return False
 
     try:
-        logger.log(u"Trying to backup " + new_file + " to " + new_file + "." + "r" + str(version) + " before restoring backup", logger.DEBUG)
+        logger.log(
+            u"Trying to backup " + new_file + " to " + new_file + "." + "r" + str(version) + " before restoring backup",
+            logger.DEBUG)
         shutil.move(new_file, new_file + '.' + 'r' + str(version))
     except Exception, e:
-        logger.log(u"Error while trying to backup DB file " + restore_file + " before proceeding with restore: " + ex(e), logger.WARNING)
+        logger.log(
+            u"Error while trying to backup DB file " + restore_file + " before proceeding with restore: " + ex(e),
+            logger.WARNING)
         return False
 
     while not ek.ek(os.path.isfile, new_file):
@@ -919,10 +928,12 @@ def restoreVersionedFile(backup_file, version):
             logger.log(u"Trying again.", logger.DEBUG)
 
         if numTries >= 10:
-            logger.log(u"Unable to restore " + restore_file + " to " + new_file + " please do it manually.", logger.ERROR)
+            logger.log(u"Unable to restore " + restore_file + " to " + new_file + " please do it manually.",
+                       logger.ERROR)
             return False
 
     return True
+
 
 # try to convert to int, if it fails the default will be returned
 def tryInt(s, s_default=0):
@@ -1044,7 +1055,6 @@ def full_sanitizeSceneName(name):
 
 
 def _check_against_names(nameInQuestion, show, season=-1):
-
     showNames = []
     if season in [-1, 1]:
         showNames = [show.name]
@@ -1069,7 +1079,8 @@ def get_show_by_name(name, useIndexer=False):
             return showObj
         if not showObj and sickbeard.showList:
             if name in sickbeard.scene_exceptions.exceptionIndexerCache:
-                showObj = findCertainShow(sickbeard.showList, int(sickbeard.scene_exceptions.exceptionIndexerCache[name]))
+                showObj = findCertainShow(sickbeard.showList,
+                                          int(sickbeard.scene_exceptions.exceptionIndexerCache[name]))
 
             if useIndexer and not showObj:
                 (sn, idx, id) = searchIndexerForShowID(name, ui=classes.ShowListUI)
@@ -1083,6 +1094,7 @@ def get_show_by_name(name, useIndexer=False):
         showObj = None
 
     return showObj
+
 
 def is_hidden_folder(folder):
     """
@@ -1145,3 +1157,48 @@ def set_up_anidb_connection():
         return True
 
     return sickbeard.ADBA_CONNECTION.authed()
+
+
+def makeZip(fileList, archive):
+    """
+    'fileList' is a list of file names - full path each name
+    'archive' is the file name for the archive with a full path
+    """
+    try:
+        a = zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED)
+        for f in fileList:
+            a.write(f)
+        a.close()
+        return True
+    except Exception as e:
+        logger.log(u"Zip creation error: " + str(e), logger.ERROR)
+        return False
+
+
+def extractZip(archive, targetDir):
+    """
+    'fileList' is a list of file names - full path each name
+    'archive' is the file name for the archive with a full path
+    """
+    try:
+        if not os.path.exists(targetDir):
+            os.mkdir(targetDir)
+
+        zip_file = zipfile.ZipFile(archive, 'r')
+        for member in zip_file.namelist():
+            filename = os.path.basename(member)
+            # skip directories
+            if not filename:
+                continue
+
+            # copy file (taken from zipfile's extract)
+            source = zip_file.open(member)
+            target = file(os.path.join(targetDir, filename), "wb")
+            shutil.copyfileobj(source, target)
+            source.close()
+            target.close()
+        zip_file.close()
+        return True
+    except Exception as e:
+        logger.log(u"Zip extraction error: " + str(e), logger.ERROR)
+        return False

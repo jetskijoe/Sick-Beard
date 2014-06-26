@@ -223,7 +223,8 @@ class BTNProvider(generic.TorrentProvider):
             else:
                 whole_season_params['name'] = 'Season ' + str(ep_obj.scene_season)
 
-            search_params.append(whole_season_params)
+            if whole_season_params not in search_params:
+                search_params.append(whole_season_params)
 
         return search_params
 
@@ -343,8 +344,8 @@ class BTNCache(tvcache.TVCache):
                         cl.append(ci)
 
                 if cl:
-                    with self._getDB() as myDB:
-                        myDB.mass_action(cl)
+                    myDB = self._getDB()
+                    myDB.mass_action(cl)
 
             else:
                 raise AuthException(

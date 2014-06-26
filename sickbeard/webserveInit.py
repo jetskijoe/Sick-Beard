@@ -1,5 +1,6 @@
 import os
 import traceback
+import time
 import sickbeard
 import webserve
 import webapi
@@ -73,9 +74,9 @@ def initWebServer(options={}):
 
     # Main Handler
     app.add_handlers(".*$", [
-        (r"/", RedirectHandler, {'url': '%s/home/' % options['web_root']}),
+        (r"%s" % options['web_root'], RedirectHandler, {'url': '%s/home/' % options['web_root']}),
         (r'%s/api/(.*)(/?)' % options['web_root'], webapi.Api),
-        (r'%s/(.*)(/?)' % options['web_root'], webserve.IndexHandler)
+        (r'%s/(.*)(/?)' % options['web_root'], webserve.MainHandler)
     ])
 
     # Static Path Handler
@@ -105,19 +106,16 @@ def initWebServer(options={}):
     logger.log(u"Starting SickRage on " + protocol + "://" + str(options['host']) + ":" + str(
         options['port']) + "/")
 
-    try:
+    if not sickbeard.restarted:
         server.listen(options['port'], options['host'])
-    except:
-        pass
-
 
 def shutdown():
     global server
 
-    logger.log('Shutting down tornado')
+    logger.log('Shutting down tornado io loop')
     try:
         IOLoop.current().stop()
     except RuntimeError:
         pass
     except:
-        logger.log('Failed shutting down the server: %s' % traceback.format_exc(), logger.ERROR)
+        logger.log('Failed shutting down tornado io loop: %s' % traceback.format_exc(), logger.ERROR)
