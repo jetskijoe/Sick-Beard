@@ -129,16 +129,16 @@ class TVCache():
                 if cl:
                     myDB = self._getDB()
                     myDB.mass_action(cl)
-
+                    del cl
             else:
                 raise AuthException(
                     u"Your authentication credentials for " + self.provider.name + " are incorrect, check your config")
 
         return []
 
-    def getRSSFeed(self, url, post_data=None):
+    def getRSSFeed(self, url, post_data=None, request_headers=None):
         with RSSFeeds(self.providerID) as feed:
-            data = feed.getRSSFeed(url, post_data)
+            data = feed.getRSSFeed(url, post_data, request_headers)
         return data
 
     def _translateTitle(self, title):

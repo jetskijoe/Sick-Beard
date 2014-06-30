@@ -22,7 +22,8 @@ import webbrowser
 import time
 import datetime
 import socket
-import os, sys, subprocess, re
+import os
+import re
 
 from urllib2 import getproxies
 from threading import Lock
@@ -102,7 +103,6 @@ AUTO_UPDATE = None
 CUR_COMMIT_HASH = None
 
 INIT_LOCK = Lock()
-__INITIALIZED__ = False
 started = False
 restarted = False
 
@@ -123,7 +123,6 @@ HANDLE_REVERSE_PROXY = None
 PROXY_SETTING = None
 
 LOCALHOST_IP = None
-REMOTE_IP = None
 
 CPU_PRESET = None
 
@@ -434,8 +433,8 @@ CALENDAR_UNPROTECTED = False
 
 TMDB_API_KEY = 'edc5f123313769de83a71e157758030b'
 
-__INITIALIZED__ = False
 
+__INITIALIZED__ = False
 def initialize(consoleLogging=True):
     with INIT_LOCK:
 
@@ -476,10 +475,10 @@ def initialize(consoleLogging=True):
             GUI_NAME, HOME_LAYOUT, HISTORY_LAYOUT, DISPLAY_SHOW_SPECIALS, COMING_EPS_LAYOUT, COMING_EPS_SORT, COMING_EPS_DISPLAY_PAUSED, COMING_EPS_MISSED_RANGE, FUZZY_DATING, TRIM_ZERO, DATE_PRESET, TIME_PRESET, TIME_PRESET_W_SECONDS, \
             METADATA_WDTV, METADATA_TIVO, METADATA_MEDE8ER, IGNORE_WORDS, CALENDAR_UNPROTECTED, CREATE_MISSING_SHOW_DIRS, \
             ADD_SHOWS_WO_DIR, USE_SUBTITLES, SUBTITLES_LANGUAGES, SUBTITLES_DIR, SUBTITLES_SERVICES_LIST, SUBTITLES_SERVICES_ENABLED, SUBTITLES_HISTORY, SUBTITLES_FINDER_FREQUENCY, subtitlesFinderScheduler, \
-            USE_FAILED_DOWNLOADS, DELETE_FAILED, ANON_REDIRECT, LOCALHOST_IP, REMOTE_IP, TMDB_API_KEY, DEBUG, PROXY_SETTING, \
+            USE_FAILED_DOWNLOADS, DELETE_FAILED, ANON_REDIRECT, LOCALHOST_IP, TMDB_API_KEY, DEBUG, PROXY_SETTING, \
             AUTOPOSTPROCESSER_FREQUENCY, DEFAULT_AUTOPOSTPROCESSER_FREQUENCY, MIN_AUTOPOSTPROCESSER_FREQUENCY, \
             ANIME_DEFAULT, NAMING_ANIME, ANIMESUPPORT, USE_ANIDB, ANIDB_USERNAME, ANIDB_PASSWORD, ANIDB_USE_MYLIST, \
-            ANIME_SPLIT_HOME, maintenanceScheduler, SCENE_DEFAULT, RES
+            ANIME_SPLIT_HOME, maintenanceScheduler, SCENE_DEFAULT
 
         if __INITIALIZED__:
             return False
@@ -1134,9 +1133,6 @@ def start():
 
             # start the maintenance scheduler
             maintenanceScheduler.thread.start()
-            logger.log(u"Performing initial maintenance tasks, please wait ...")
-            while maintenanceScheduler.action.amActive:
-                time.sleep(1)
 
             # start the daily search scheduler
             dailySearchScheduler.thread.start()
@@ -1303,13 +1299,6 @@ def saveAll():
     # save config
     logger.log(u"Saving config file to disk")
     save_config()
-
-def cleanup_tornado_sockets(io_loop):
-    for fd in io_loop._handlers.keys():
-        try:
-            os.close(fd)
-        except Exception:
-            pass
 
 def saveAndShutdown():
     halt()
@@ -1802,17 +1791,3 @@ def getEpList(epIDs, showid=None):
         epList.append(curEpObj)
 
     return epList
-
-
-def autoreload_shutdown():
-    logger.log('SickRage is now auto-reloading, please stand by ...')
-
-    # halt all tasks
-    halt()
-
-    # save  settings
-    saveAll()
-
-    if CREATEPID:
-        logger.log(u"Removing pidfile " + str(PIDFILE))
-        remove_pid_file(PIDFILE)

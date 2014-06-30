@@ -1007,6 +1007,7 @@ class CMD_EpisodeSetStatus(ApiCall):
         if sql_l:
             myDB = db.DBConnection()
             myDB.mass_action(sql_l)
+            del sql_l
 
         extra_msg = ""
         if start_backlog:
@@ -1450,7 +1451,7 @@ class CMD_SickBeardGetMessages(ApiCall):
 
     def run(self):
         messages = []
-        for cur_notification in ui.notifications.get_notifications():
+        for cur_notification in ui.notifications.get_notifications(self.handler.request.remote_ip):
             messages.append({"title": cur_notification.title,
                              "message": cur_notification.message,
                              "type": cur_notification.type})
