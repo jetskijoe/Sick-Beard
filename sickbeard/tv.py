@@ -103,6 +103,9 @@ class TVShow(object):
 
         self.loadFromDB()
 
+    def __del__(self):
+        pass
+
     name = property(lambda self: self._name, dirty_setter("_name"))
     indexerid = property(lambda self: self._indexerid, dirty_setter("_indexerid"))
     indexer = property(lambda self: self._indexer, dirty_setter("_indexer"))
@@ -456,7 +459,7 @@ class TVShow(object):
         if sql_l:
             myDB = db.DBConnection()
             myDB.mass_action(sql_l)
-            del sql_l
+
 
     def loadEpisodesFromDB(self):
 
@@ -578,7 +581,7 @@ class TVShow(object):
         if sql_l:
             myDB = db.DBConnection()
             myDB.mass_action(sql_l)
-            del sql_l
+
 
         # Done updating save last update date
         self.last_update_indexer = datetime.date.today().toordinal()
@@ -749,7 +752,7 @@ class TVShow(object):
         if sql_l:
             myDB = db.DBConnection()
             myDB.mass_action(sql_l)
-            del sql_l
+
 
         # creating metafiles on the root should be good enough
         if sickbeard.USE_FAILED_DOWNLOADS and rootEp is not None:
@@ -1005,7 +1008,7 @@ class TVShow(object):
 
         myDB = db.DBConnection()
         myDB.mass_action(sql_l)
-        del sql_l
+
 
         # remove self from show list
         sickbeard.showList = [x for x in sickbeard.showList if int(x.indexerid) != self.indexerid]
@@ -1080,7 +1083,7 @@ class TVShow(object):
         if sql_l:
             myDB = db.DBConnection()
             myDB.mass_action(sql_l)
-            del sql_l
+
 
     def airdateModifyStamp(self, ep_obj):
         """
@@ -1347,6 +1350,9 @@ class TVEpisode(object):
         self.relatedEps = []
 
         self.checkForMetaFiles()
+
+    def __del__(self):
+        pass
 
     name = property(lambda self: self._name, dirty_setter("_name"))
     season = property(lambda self: self._season, dirty_setter("_season"))
@@ -2420,4 +2426,4 @@ class TVEpisode(object):
         if sql_l:
             myDB = db.DBConnection()
             myDB.mass_action(sql_l)
-            del sql_l
+

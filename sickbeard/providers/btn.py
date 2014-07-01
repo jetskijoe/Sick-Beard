@@ -49,6 +49,9 @@ class BTNProvider(generic.TorrentProvider):
 
         self.url = "http://api.btnapps.net"
 
+    def __del__(self):
+        pass
+
     def isEnabled(self):
         return self.enabled
 
@@ -315,6 +318,9 @@ class BTNCache(tvcache.TVCache):
             # At least 15 minutes between queries
         self.minTime = 15
 
+    def __del__(self):
+        pass
+
     def updateCache(self):
 
         # delete anything older then 7 days
@@ -346,7 +352,6 @@ class BTNCache(tvcache.TVCache):
                 if cl:
                     myDB = self._getDB()
                     myDB.mass_action(cl)
-                    del cl
 
             else:
                 raise AuthException(
