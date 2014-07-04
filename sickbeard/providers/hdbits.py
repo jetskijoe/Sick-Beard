@@ -55,9 +55,6 @@ class HDBitsProvider(generic.TorrentProvider):
         self.rss_url = 'http://hdbits.org/api/torrents'
         self.download_url = 'http://hdbits.org/download.php?'
 
-    def __del__(self):
-        pass
-
     def isEnabled(self):
         return self.enabled
 
@@ -217,9 +214,6 @@ class HDBitsCache(tvcache.TVCache):
         # only poll HDBits every 15 minutes max                                                                                          
         self.minTime = 15
 
-    def __del__(self):
-        pass
-
     def updateCache(self):
 
         # delete anything older then 7 days
@@ -259,6 +253,8 @@ class HDBitsCache(tvcache.TVCache):
                     ci = self._parseItem(item)
                     if ci is not None:
                         ql.append(ci)
+
+
 
                 if ql:
                     myDB = self._getDB()

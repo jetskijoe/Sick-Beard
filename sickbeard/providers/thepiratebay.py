@@ -67,9 +67,6 @@ class ThePirateBayProvider(generic.TorrentProvider):
 
         self.re_title_url = '/torrent/(?P<id>\d+)/(?P<title>.*?)//1".+?(?P<url>magnet.*?)//1".+?(?P<seeders>\d+)</td>.+?(?P<leechers>\d+)</td>'
 
-    def __del__(self):
-        pass
-
     def isEnabled(self):
         return self.enabled
 
@@ -180,11 +177,9 @@ class ThePirateBayProvider(generic.TorrentProvider):
                 ep_string = show_name + ' ' + "%d" % ep_obj.scene_absolute_number
                 search_string['Season'].append(ep_string)
             else:
-                ep_string = show_name + ' S%02d' % int(ep_obj.scene_season) + ' -S%02d' % int(
-                    ep_obj.scene_season) + 'E' + ' category:tv'  #1) showName SXX -SXXE
+                ep_string = show_name + ' S%02d' % int(ep_obj.scene_season)
                 search_string['Season'].append(ep_string)
-                ep_string = show_name + ' Season ' + str(
-                    ep_obj.scene_season) + ' -Ep*' + ' category:tv'  # 2) showName Season X
+                ep_string = show_name + ' Season ' + str(ep_obj.scene_season) + ' -Ep*'
                 search_string['Season'].append(ep_string)
 
             search_string['Season'].append(ep_string)
@@ -412,9 +407,6 @@ class ThePirateBayCache(tvcache.TVCache):
         # only poll ThePirateBay every 10 minutes max
         self.minTime = 20
 
-    def __del__(self):
-        pass
-
     def updateCache(self):
 
         # delete anything older then 7 days
@@ -439,6 +431,8 @@ class ThePirateBayCache(tvcache.TVCache):
             ci = self._parseItem(item)
             if ci is not None:
                 cl.append(ci)
+
+
 
         if cl:
             myDB = self._getDB()
@@ -476,9 +470,6 @@ class ThePirateBayWebproxy:
             'Unblockersurf.info (DK)': 'http://unblockersurf.info/',
             'Hiload.org (NL)': 'http://hiload.org/',
         }
-
-    def __del__(self):
-        pass
 
     def isEnabled(self):
         """ Return True if we Choose to call TPB via Proxy """

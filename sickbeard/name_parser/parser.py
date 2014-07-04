@@ -28,7 +28,6 @@ from dateutil import parser
 
 nameparser_lock = threading.Lock()
 
-
 class NameParser(object):
     ALL_REGEX = 0
     NORMAL_REGEX = 1
@@ -45,8 +44,6 @@ class NameParser(object):
         self.epObj = epObj
         self.convert = convert
         self.naming_pattern = naming_pattern
-    def __del__(self):
-        pass
 
     def clean_series_name(self, series_name):
         """Cleans up series name by removing any . and _
@@ -155,9 +152,10 @@ class NameParser(object):
             if not match:
                 continue
 
+            regex_num = int(re.match('^\d{1,2}', cur_regex_name).group(0))
             result = ParseResult(name)
             result.which_regex = [cur_regex_name]
-            result.score = 0
+            result.score = 0 - regex_num
 
             named_groups = match.groupdict().keys()
 
@@ -446,8 +444,6 @@ class ParseResult(object):
         self.show = show
         self.score = score
 
-    def __del__(self):
-        pass
     def __eq__(self, other):
         if not other:
             return False
@@ -623,11 +619,7 @@ class NameParserCache(object):
             logger.log("Using cached parse result for: " + name, logger.DEBUG)
             return self._previous_parsed[name]
 
-    def __del__(self):
-        pass
-
 name_parser_cache = NameParserCache()
-
 
 class InvalidNameException(Exception):
     "The given name is not valid"
