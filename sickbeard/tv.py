@@ -66,7 +66,6 @@ class TVShow(object):
         self._indexerid = int(indexerid)
         self._indexer = int(indexer)
         self._name = ""
-        self._location = ""
         self._imdbid = ""
         self._network = ""
         self._genre = ""
@@ -93,18 +92,17 @@ class TVShow(object):
 
         self.dirty = True
 
+        self._location = ""
         self.lock = threading.Lock()
         self.isDirGood = False
         self.episodes = {}
+        self.nextaired = ""
 
         otherShow = helpers.findCertainShow(sickbeard.showList, self.indexerid)
         if otherShow != None:
             raise exceptions.MultipleShowObjectsException("Can't create a show if it already exists")
 
         self.loadFromDB()
-
-    def __del__(self):
-        pass
 
     name = property(lambda self: self._name, dirty_setter("_name"))
     indexerid = property(lambda self: self._indexerid, dirty_setter("_indexerid"))
@@ -172,7 +170,7 @@ class TVShow(object):
         logger.log(u"Setter sets location to " + newLocation, logger.DEBUG)
         # Don't validate dir if user wants to add shows without creating a dir
         if sickbeard.ADD_SHOWS_WO_DIR or ek.ek(os.path.isdir, newLocation):
-            self._location = newLocation
+            dirty_setter("_location")(self, newLocation)
             self._isDirGood = True
         else:
             raise exceptions.NoNFOException("Invalid folder for the show!")
@@ -834,7 +832,7 @@ class TVShow(object):
             self.flatten_folders = int(sqlResults[0]["flatten_folders"])
             self.paused = int(sqlResults[0]["paused"])
 
-            self._location = sqlResults[0]["location"]
+            self.location = sqlResults[0]["location"]
 
             if not self.lang:
                 self.lang = sqlResults[0]["lang"]
@@ -981,25 +979,22 @@ class TVShow(object):
     def nextEpisode(self):
         logger.log(str(self.indexerid) + ": Finding the episode which airs next", logger.DEBUG)
 
-        myDB = db.DBConnection()
-        innerQuery = "SELECT airdate FROM tv_episodes WHERE showid = ? AND airdate >= ? AND status in (?,?) ORDER BY airdate ASC LIMIT 1"
-        innerParams = [self.indexerid, datetime.date.today().toordinal(), UNAIRED, WANTED]
-        query = "SELECT * FROM tv_episodes WHERE showid = ? AND airdate >= ? AND airdate <= (" + innerQuery + ") and status in (?,?)"
-        params = [self.indexerid, datetime.date.today().toordinal()] + innerParams + [UNAIRED, WANTED]
-        sqlResults = myDB.select(query, params)
+        curDate = datetime.date.today().toordinal()
+        if not self.nextaired or self.nextaired and curDate > self.nextaired:
+            myDB = db.DBConnection()
+            sqlResults = myDB.select("SELECT airdate, season, episode FROM tv_episodes WHERE showid = ? AND airdate >= ? AND status in (?,?) ORDER BY airdate ASC LIMIT 1",
+            [self.indexerid, datetime.date.today().toordinal(), UNAIRED, WANTED])
 
-        if sqlResults == None or len(sqlResults) == 0:
-            logger.log(str(self.indexerid) + u": No episode found... need to implement a show status",
-                       logger.DEBUG)
-            return []
-        else:
-            logger.log(str(self.indexerid) + u": Found episode " + str(sqlResults[0]["season"]) + "x" + str(
-                sqlResults[0]["episode"]), logger.DEBUG)
-            foundEps = []
-            for sqlEp in sqlResults:
-                curEp = self.getEpisode(int(sqlEp["season"]), int(sqlEp["episode"]))
-                foundEps.append(curEp)
-            return foundEps
+            if sqlResults == None or len(sqlResults) == 0:
+                logger.log(str(self.indexerid) + u": No episode found... need to implement a show status",
+                           logger.DEBUG)
+                self.nextaired = ""
+            else:
+                logger.log(str(self.indexerid) + u": Found episode " + str(sqlResults[0]["season"]) + "x" + str(
+                    sqlResults[0]["episode"]), logger.DEBUG)
+                self.nextaired = sqlResults[0]['airdate']
+
+        return self.nextaired
 
     def deleteShow(self):
 
