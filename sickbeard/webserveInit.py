@@ -55,8 +55,11 @@ class SRWebServer(threading.Thread):
         assert 'data_root' in self.options
 
         # video root
-        root_dirs = sickbeard.ROOT_DIRS.split('|')
-        self.video_root = root_dirs[int(root_dirs[0]) + 1] if root_dirs else None
+        if sickbeard.ROOT_DIRS:
+            root_dirs = sickbeard.ROOT_DIRS.split('|')
+            self.video_root = root_dirs[int(root_dirs[0]) + 1]
+        else:
+            self.video_root = None
 
         # web root
         self.options['web_root'] = ('/' + self.options['web_root'].lstrip('/')) if self.options[
@@ -113,7 +116,7 @@ class SRWebServer(threading.Thread):
         # Static Videos Path
         if self.video_root:
             self.app.add_handlers(".*$", [
-                (r'%s/%s/(.*)' % (self.options['web_root'], self.video_root), MultiStaticFileHandler,
+                (r'%s/%s/(.*)' % (self.options['web_root'], 'videos'), MultiStaticFileHandler,
                  {'paths': [self.video_root]}),
             ])
 
@@ -148,5 +151,7 @@ class SRWebServer(threading.Thread):
     def shutDown(self):
         self.alive = False
         if self.server:
+            logger.log("Shutting down tornado")
             self.server.stop()
             self.io_loop.stop()
+            self.join()

@@ -1,4 +1,5 @@
-# Author: Mr_Orange <mr_orange@hotmail.it>
+# Author: Idan Gutman
+# URL: http://code.google.com/p/sickbeard/
 #
 # This file is part of SickRage.
 #
@@ -10,17 +11,16 @@
 # SickRage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#  GNU General Public License for more details.
+# GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
 # along with SickRage.  If not, see <http://www.gnu.org/licenses/>.
 
-import time
-import json
 import re
 import traceback
 import datetime
 import urlparse
+import time
 import sickbeard
 import generic
 from sickbeard.common import Quality, cpu_presets
@@ -40,43 +40,38 @@ from lib.unidecode import unidecode
 from sickbeard.helpers import sanitizeSceneName
 
 
-class TorrentDayProvider(generic.TorrentProvider):
-    urls = {'base_url': 'http://www.torrentday.com',
-            'login': 'http://www.torrentday.com/torrents/',
-            'search': 'http://www.torrentday.com/V3/API/API.php',
-            'download': 'http://www.torrentday.com/download.php/%s/%s'
+class TorrentBytesProvider(generic.TorrentProvider):
+    urls = {'base_url': 'https://www.torrentbytes.net',
+            'login': 'https://www.torrentbytes.net/takelogin.php',
+            'detail': 'https://www.torrentbytes.net/details.php?id=%s',
+            'search': 'https://www.torrentbytes.net/browse.php?search=%s%s',
+            'download': 'https://www.torrentbytes.net/download.php?id=%s&name=%s',
     }
 
     def __init__(self):
 
-        generic.TorrentProvider.__init__(self, "TorrentDay")
+        generic.TorrentProvider.__init__(self, "TorrentBytes")
 
         self.supportsBacklog = True
 
         self.enabled = False
-        self._uid = None
-        self._hash = None
         self.username = None
         self.password = None
         self.ratio = None
-        self.freeleech = False
         self.minseed = None
         self.minleech = None
 
-        self.cache = TorrentDayCache(self)
+        self.cache = TorrentBytesCache(self)
 
         self.url = self.urls['base_url']
 
-        self.cookies = None
-
-        self.categories = {'Season': {'c14': 1}, 'Episode': {'c2': 1, 'c26': 1, 'c7': 1, 'c24': 1},
-                           'RSS': {'c2': 1, 'c26': 1, 'c7': 1, 'c24': 1, 'c14': 1}}
+        self.categories = "&c41=1&c33=1&c38=1&c32=1&c37=1"
 
     def isEnabled(self):
         return self.enabled
 
     def imageName(self):
-        return 'torrentday.png'
+        return 'torrentbytes.png'
 
     def getQuality(self, item, anime=False):
 
@@ -85,60 +80,35 @@ class TorrentDayProvider(generic.TorrentProvider):
 
     def _doLogin(self):
 
-        if any(requests.utils.dict_from_cookiejar(self.session.cookies).values()):
-            return True
+        login_params = {'username': self.username,
+                        'password': self.password,
+                        'login': 'submit'
+        }
 
-        if self._uid and self._hash:
+        self.session = requests.Session()
 
-            requests.utils.add_dict_to_cookiejar(self.session.cookies, self.cookies)
+        try:
+            response = self.session.post(self.urls['login'], data=login_params, timeout=30)
+        except (requests.exceptions.ConnectionError, requests.exceptions.HTTPError), e:
+            logger.log(u'Unable to connect to ' + self.name + ' provider: ' + ex(e), logger.ERROR)
+            return False
 
-        else:
+        if re.search('Username or password incorrect', response.text):
+            logger.log(u'Invalid username or password for ' + self.name + ' Check your settings', logger.ERROR)
+            return False
 
-            login_params = {'username': self.username,
-                            'password': self.password,
-                            'submit.x': 0,
-                            'submit.y': 0
-            }
-
-            try:
-                response = self.session.post(self.urls['login'], data=login_params, timeout=30)
-            except (requests.exceptions.ConnectionError, requests.exceptions.HTTPError), e:
-                logger.log(u'Unable to connect to ' + self.name + ' provider: ' + ex(e), logger.ERROR)
-                return False
-
-            if re.search('You tried too often', response.text):
-                logger.log(u'Too many login access for ' + self.name + ', can''t retrive any data', logger.ERROR)
-                return False
-
-            if response.status_code == 401:
-                logger.log(u'Invalid username or password for ' + self.name + ', Check your settings!', logger.ERROR)
-                return False
-
-            if requests.utils.dict_from_cookiejar(self.session.cookies)['uid'] and requests.utils.dict_from_cookiejar(self.session.cookies)['pass']:
-                self._uid = requests.utils.dict_from_cookiejar(self.session.cookies)['uid']
-                self._hash = requests.utils.dict_from_cookiejar(self.session.cookies)['pass']
-
-                self.cookies = {'uid': self._uid,
-                                'pass': self._hash
-                }
-                return True
-
-            else:
-                logger.log(u'Unable to obtain cookie for TorrentDay', logger.ERROR)
-                return False
-
+        return True
 
     def _get_season_search_strings(self, ep_obj):
 
         search_string = {'Season': []}
         for show_name in set(show_name_helpers.allPossibleShowNames(self.show)):
             if ep_obj.show.air_by_date or ep_obj.show.sports:
-                ep_string = show_name + ' ' + str(ep_obj.airdate).split('-')[0]
+                ep_string = show_name + '.' + str(ep_obj.airdate).split('-')[0]
             elif ep_obj.show.anime:
-                ep_string = show_name + ' ' + "%d" % ep_obj.scene_absolute_number
-                search_string['Season'].append(ep_string)
+                ep_string = show_name + '.' + "%d" % ep_obj.scene_absolute_number
             else:
-                ep_string = show_name + ' S%02d' % int(ep_obj.scene_season)  #1) showName SXX
+                ep_string = show_name + '.S%02d' % int(ep_obj.scene_season)  #1) showName SXX
 
             search_string['Season'].append(ep_string)
 
@@ -182,46 +152,72 @@ class TorrentDayProvider(generic.TorrentProvider):
         results = []
         items = {'Season': [], 'Episode': [], 'RSS': []}
 
-        freeleech = '&free=on' if self.freeleech else ''
-
         if not self._doLogin():
             return []
 
         for mode in search_params.keys():
             for search_string in search_params[mode]:
 
-                logger.log(u"Search string: " + search_string, logger.DEBUG)
+                if isinstance(search_string, unicode):
+                    search_string = unidecode(search_string)
 
-                search_string = '+'.join(search_string.split())
+                searchURL = self.urls['search'] % (search_string, self.categories)
 
-                post_data = dict({'/browse.php?': None, 'cata': 'yes', 'jxt': 8, 'jxw': 'b', 'search': search_string},
-                                 **self.categories[mode])
+                logger.log(u"Search string: " + searchURL, logger.DEBUG)
 
-                if self.freeleech:
-                    post_data.update({'free': 'on'})
-
-                data = self.session.post(self.urls['search'], data=post_data).json()
-
-                try:
-                    torrents = data.get('Fs', [])[0].get('Cn', {}).get('torrents', [])
-                except:
+                data = self.getURL(searchURL)
+                if not data:
                     continue
 
-                for torrent in torrents:
+                try:
+                    html = BeautifulSoup(data)
 
-                    title = re.sub(r"\[.*\=.*\].*\[/.*\]", "", torrent['name'])
-                    url = self.urls['download'] % ( torrent['id'], torrent['fname'] )
-                    seeders = int(torrent['seed'])
-                    leechers = int(torrent['leech'])
+                    torrent_table = html.find('table', attrs={'border': '1'})
+                    torrent_rows = torrent_table.find_all('tr') if torrent_table else []
 
-                    if mode != 'RSS' and (seeders < self.minseed or leechers < self.minleech):
+                    #Continue only if one Release is found                    
+                    if len(torrent_rows) < 2:
+                        logger.log(u"The Data returned from " + self.name + " do not contains any torrent",
+                                   logger.DEBUG)
                         continue
 
-                    if not title or not url:
-                        continue
+                    for result in torrent_rows[1:]:
+                        cells = result.find_all('td')
 
-                    item = title, url, seeders, leechers
-                    items[mode].append(item)
+                        link = cells[1].find('a', attrs={'class': 'index'})
+
+                        full_id = link['href'].replace('details.php?id=', '')
+                        torrent_id = full_id[:6]
+
+                        try:
+                            if link.has_key('title'):
+                                title = cells[1].find('a', {'class': 'index'})['title']
+                            else:
+                                title = link.contents[0]
+                            download_url = self.urls['download'] % (torrent_id, link.contents[0])
+                            id = int(torrent_id)
+                            seeders = int(cells[8].find('span').contents[0])
+                            leechers = int(cells[9].find('span').contents[0])
+                        except (AttributeError, TypeError):
+                            continue
+
+                        #Filter unseeded torrent
+                        if mode != 'RSS' and (seeders < self.minseed or leechers < self.minleech):
+                            continue
+
+                        if not title or not download_url:
+                            continue
+
+                        item = title, download_url, id, seeders, leechers
+                        logger.log(u"Found result: " + title + "(" + searchURL + ")", logger.DEBUG)
+
+                        items[mode].append(item)
+
+                except Exception, e:
+                    logger.log(u"Failed parsing " + self.name + " Traceback: " + traceback.format_exc(), logger.ERROR)
+
+            #For each search mode sort all the items by seeders
+            items[mode].sort(key=lambda tup: tup[3], reverse=True)
 
             results += items[mode]
 
@@ -229,7 +225,7 @@ class TorrentDayProvider(generic.TorrentProvider):
 
     def _get_title_and_url(self, item):
 
-        title, url = item[0], item[1]
+        title, url, id, seeders, leechers = item
 
         if url:
             url = str(url).replace('&amp;', '&')
@@ -240,6 +236,9 @@ class TorrentDayProvider(generic.TorrentProvider):
 
         if not self.session:
             self._doLogin()
+
+        if not headers:
+            headers = []
 
         try:
             # Remove double-slashes from url
@@ -292,13 +291,13 @@ class TorrentDayProvider(generic.TorrentProvider):
         return self.ratio
 
 
-class TorrentDayCache(tvcache.TVCache):
+class TorrentBytesCache(tvcache.TVCache):
     def __init__(self, provider):
 
         tvcache.TVCache.__init__(self, provider)
 
-        # Only poll IPTorrents every 10 minutes max
-        self.minTime = 10
+        # only poll TorrentBytes every 20 minutes max
+        self.minTime = 20
 
     def updateCache(self):
 
@@ -325,8 +324,6 @@ class TorrentDayCache(tvcache.TVCache):
             if ci is not None:
                 cl.append(ci)
 
-
-
         if cl:
             myDB = self._getDB()
             myDB.mass_action(cl)
@@ -339,9 +336,9 @@ class TorrentDayCache(tvcache.TVCache):
         if not title or not url:
             return None
 
-        logger.log(u"Attempting to cache item:[" + title +"]", logger.DEBUG)
+        logger.log(u"Attempting to cache item:[" + title + "]", logger.DEBUG)
 
         return self._addCacheEntry(title, url)
 
 
-provider = TorrentDayProvider()
+provider = TorrentBytesProvider()

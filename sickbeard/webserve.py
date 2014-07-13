@@ -132,8 +132,7 @@ class HTTPRedirect(Exception):
     """Exception raised when the request should be redirected."""
 
     def __init__(self, url, permanent=False, status=None):
-        self.web_root = ('/' + sickbeard.WEB_ROOT.lstrip('/')) if sickbeard.WEB_ROOT else ''
-        self.url = urlparse.urljoin(self.web_root, url)
+        self.url = url
         self.permanent = permanent
         self.status = status
         Exception.__init__(self, self.url, self.permanent, self.status)
@@ -144,8 +143,8 @@ class HTTPRedirect(Exception):
 
 
 def redirect(url, permanent=False, status=None):
-    raise HTTPRedirect(url, permanent, status)
-
+    assert url[0] == '/'
+    raise HTTPRedirect(sickbeard.WEB_ROOT + url, permanent, status)
 
 @authenticated
 class MainHandler(RequestHandler):
@@ -167,7 +166,7 @@ class MainHandler(RequestHandler):
         if status_code == 401:
             self.finish(self.http_error_401_handler())
         elif status_code == 404:
-            self.redirect(urlparse.urljoin(sickbeard.WEB_ROOT, '/home/'))
+            self.redirect(sickbeard.WEB_ROOT + '/home/')
         elif self.settings.get("debug") and "exc_info" in kwargs:
             exc_info = kwargs["exc_info"]
             trace_info = ''.join(["%s<br/>" % line for line in traceback.format_exception(*exc_info)])
@@ -1433,11 +1432,12 @@ class ConfigGeneral(MainHandler):
                     proxy_setting=None,
                     anon_redirect=None, git_path=None, calendar_unprotected=None,
                     fuzzy_dating=None, trim_zero=None, date_preset=None, date_preset_na=None, time_preset=None,
-                    indexer_timeout=None):
+                    indexer_timeout=None, play_videos=None):
 
         results = []
 
         # Misc
+        sickbeard.PLAY_VIDEOS = config.checkbox_to_value(play_videos)
         sickbeard.LAUNCH_BROWSER = config.checkbox_to_value(launch_browser)
         config.change_VERSION_NOTIFY(config.checkbox_to_value(version_notify))
         sickbeard.AUTO_UPDATE = config.checkbox_to_value(auto_update)
@@ -2830,10 +2830,13 @@ class NewHomeAddShows(MainHandler):
         if helpers.findCertainShow(sickbeard.showList, int(indexer_id)):
             return
 
-        root_dirs = sickbeard.ROOT_DIRS.split('|')
-        if root_dirs:
+        if sickbeard.ROOT_DIRS:
+            root_dirs = sickbeard.ROOT_DIRS.split('|')
             location = root_dirs[int(root_dirs[0]) + 1]
+        else:
+            location = None
 
+        if location:
             show_dir = ek.ek(os.path.join, location, helpers.sanitizeFileName(showName))
             dir_exists = helpers.makeDir(show_dir)
             if not dir_exists:

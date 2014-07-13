@@ -65,6 +65,7 @@ class KATProvider(generic.TorrentProvider):
         self.cache = KATCache(self)
 
         self.urls = ['http://kickass.to/', 'http://katproxy.com/']
+        self.url = None
 
     def isEnabled(self):
         return self.enabled
@@ -240,6 +241,7 @@ class KATProvider(generic.TorrentProvider):
 
                     html = self.getURL(searchURL)
                     if html:
+                        self.url = url
                         break
 
                 if not html:
@@ -273,7 +275,7 @@ class KATProvider(generic.TorrentProvider):
                         except (AttributeError, TypeError):
                             continue
 
-                        if mode != 'RSS' and (seeders == 0 or seeders < self.minseed or leechers < self.minleech):
+                        if mode != 'RSS' and (seeders < self.minseed or leechers < self.minleech):
                             continue
 
                         if self.confirmed and not verified:
