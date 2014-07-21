@@ -1,5 +1,5 @@
-# Author: Mr_Orange
-# URL: https://github.com/mr-orange/Sick-Beard
+# Author: Idan Gutman
+# URL: http://code.google.com/p/sickbeard/
 #
 # This file is part of SickRage.
 #
@@ -17,12 +17,12 @@
 # along with SickRage.  If not, see <http://www.gnu.org/licenses/>.
 
 import re
+import traceback
 import datetime
 import urlparse
 import time
 import sickbeard
 import generic
-
 from sickbeard.common import Quality, cpu_presets
 from sickbeard import logger
 from sickbeard import tvcache
@@ -35,20 +35,22 @@ from sickbeard.exceptions import ex
 from sickbeard import clients
 from lib import requests
 from lib.requests import exceptions
+from bs4 import BeautifulSoup
+from lib.unidecode import unidecode
 from sickbeard.helpers import sanitizeSceneName
 
 
-class SpeedCDProvider(generic.TorrentProvider):
-    urls = {'base_url': 'http://speed.cd/',
-            'login': 'http://speed.cd/takelogin.php',
-            'detail': 'http://speed.cd/t/%s',
-            'search': 'http://speed.cd/V3/API/API.php',
-            'download': 'http://speed.cd/download.php?torrent=%s',
+class BitSoupProvider(generic.TorrentProvider):
+    urls = {'base_url': 'https://www.bitsoup.me',
+            'login': 'https://www.bitsoup.me/takelogin.php',
+            'detail': 'https://www.bitsoup.me/details.php?id=%s',
+            'search': 'https://www.bitsoup.me/browse.php?search=%s%s',
+            'download': 'https://bitsoup.me/%s',
     }
 
     def __init__(self):
 
-        generic.TorrentProvider.__init__(self, "Speedcd")
+        generic.TorrentProvider.__init__(self, "BitSoup")
 
         self.supportsBacklog = True
 
@@ -56,21 +58,20 @@ class SpeedCDProvider(generic.TorrentProvider):
         self.username = None
         self.password = None
         self.ratio = None
-        self.freeleech = False
         self.minseed = None
         self.minleech = None
 
-        self.cache = SpeedCDCache(self)
+        self.cache = BitSoupCache(self)
 
         self.url = self.urls['base_url']
 
-        self.categories = {'Season': {'c14': 1}, 'Episode': {'c2': 1, 'c49': 1}, 'RSS': {'c14': 1, 'c2': 1, 'c49': 1}}
+        self.categories = "&c42=1&c45=1&c49=1&c7=1"
 
     def isEnabled(self):
         return self.enabled
 
     def imageName(self):
-        return 'speedcd.png'
+        return 'bitsoup.png'
 
     def getQuality(self, item, anime=False):
 
@@ -80,17 +81,19 @@ class SpeedCDProvider(generic.TorrentProvider):
     def _doLogin(self):
 
         login_params = {'username': self.username,
-                        'password': self.password
+                        'password': self.password,
+                        'ssl': 'yes'
         }
 
+        self.session = requests.Session()
+
         try:
-            response = self.session.post(self.urls['login'], data=login_params, timeout=30, verify=False)
+            response = self.session.post(self.urls['login'], data=login_params, timeout=30)
         except (requests.exceptions.ConnectionError, requests.exceptions.HTTPError), e:
             logger.log(u'Unable to connect to ' + self.name + ' provider: ' + ex(e), logger.ERROR)
             return False
 
-        if re.search('Incorrect username or Password. Please try again.', response.text) \
-                or response.status_code == 401:
+        if re.search('Username or password incorrect', response.text):
             logger.log(u'Invalid username or password for ' + self.name + ' Check your settings', logger.ERROR)
             return False
 
@@ -98,7 +101,6 @@ class SpeedCDProvider(generic.TorrentProvider):
 
     def _get_season_search_strings(self, ep_obj):
 
-        #If Every episode in Season is a wanted Episode then search for Season first
         search_string = {'Season': []}
         for show_name in set(show_name_helpers.allPossibleShowNames(self.show)):
             if ep_obj.show.air_by_date or ep_obj.show.sports:
@@ -156,41 +158,64 @@ class SpeedCDProvider(generic.TorrentProvider):
         for mode in search_params.keys():
             for search_string in search_params[mode]:
 
-                logger.log(u"Search string: " + search_string, logger.DEBUG)
+                if isinstance(search_string, unicode):
+                    search_string = unidecode(search_string)
 
-                search_string = '+'.join(search_string.split())
+                searchURL = self.urls['search'] % (search_string, self.categories)
 
-                post_data = dict({'/browse.php?': None, 'cata': 'yes', 'jxt': 4, 'jxw': 'b', 'search': search_string},
-                                 **self.categories[mode])
+                logger.log(u"Search string: " + searchURL, logger.DEBUG)
 
-                data = self.session.post(self.urls['search'], data=post_data).json()
-
-                try:
-                    torrents = data.get('Fs', [])[0].get('Cn', {}).get('torrents', [])
-                except:
+                data = self.getURL(searchURL)
+                if not data:
                     continue
+                
+                try:
+                    html = BeautifulSoup(data, "html.parser")
+                    
+                    torrent_table = html.find('table', attrs={'class': 'koptekst'})
+                    torrent_rows = torrent_table.find_all('tr') if torrent_table else []
+                    
+                    #Continue only if one Release is found
+                    if len(torrent_rows) < 2:
+                         logger.log(u"The Data returned from " + self.name + " do not contains any torrent",
+                             logger.DEBUG)
+                         continue
 
-                for torrent in torrents:
+                    for result in torrent_rows[1:]:
+                        cells = result.find_all('td')
 
-                    if self.freeleech and not torrent['free']:
-                        continue
+                        link = cells[1].find('a')
+                        download_url = self.urls['download'] % cells[3].find('a')['href'] 
+                        
+                        id = link['href']
+                        id = id.replace('details.php?id=','')
+                        id = id.replace('&hit=1', '')
+                        
+                        try:
+                            title = link.getText()
+                            id = int(id)
+                            seeders = int(cells[9].getText())
+                            leechers = int(cells[10].getText())
+                        except (AttributeError, TypeError):
+                            continue
 
-                    title = re.sub('<[^>]*>', '', torrent['name'])
-                    url = self.urls['download'] % (torrent['id'])
-                    seeders = int(torrent['seed'])
-                    leechers = int(torrent['leech'])
+                        #Filter unseeded torrent
+                        if mode != 'RSS' and (seeders < self.minseed or leechers < self.minleech):
+                            continue
 
-                    if mode != 'RSS' and (seeders < self.minseed or leechers < self.minleech):
-                        continue
+                        if not title or not download_url:
+                            continue
 
-                    if not title or not url:
-                        continue
+                        item = title, download_url, id, seeders, leechers
+                        logger.log(u"Found result: " + title + "(" + searchURL + ")", logger.DEBUG)
 
-                    item = title, url, seeders, leechers
-                    items[mode].append(item)
+                        items[mode].append(item)
+
+                except Exception, e:
+                    logger.log(u"Failed parsing " + self.name + " Traceback: " + traceback.format_exc(), logger.ERROR)
 
             #For each search mode sort all the items by seeders
-            items[mode].sort(key=lambda tup: tup[2], reverse=True)
+            items[mode].sort(key=lambda tup: tup[3], reverse=True)
 
             results += items[mode]
 
@@ -198,11 +223,7 @@ class SpeedCDProvider(generic.TorrentProvider):
 
     def _get_title_and_url(self, item):
 
-        title, url, seeders, leechers = item
-
-        if title:
-            title = u'' + title
-            title = title.replace(' ', '.')
+        title, url, id, seeders, leechers = item
 
         if url:
             url = str(url).replace('&amp;', '&')
@@ -210,8 +231,12 @@ class SpeedCDProvider(generic.TorrentProvider):
         return (title, url)
 
     def getURL(self, url, post_data=None, headers=None, json=False):
+
         if not self.session:
             self._doLogin()
+
+        if not headers:
+            headers = []
 
         try:
             # Remove double-slashes from url
@@ -219,25 +244,17 @@ class SpeedCDProvider(generic.TorrentProvider):
             parsed[2] = re.sub("/{2,}", "/", parsed[2])  # replace two or more / with one
             url = urlparse.urlunparse(parsed)
 
-            if sickbeard.PROXY_SETTING:
-                proxies = {
-                    "http": sickbeard.PROXY_SETTING,
-                    "https": sickbeard.PROXY_SETTING,
-                }
-
-                r = self.session.get(url, proxies=proxies, verify=False)
-            else:
-                r = self.session.get(url, verify=False)
+            response = self.session.get(url, verify=False)
         except (requests.exceptions.ConnectionError, requests.exceptions.HTTPError), e:
             logger.log(u"Error loading " + self.name + " URL: " + ex(e), logger.ERROR)
             return None
 
-        if r.status_code != 200:
+        if response.status_code != 200:
             logger.log(self.name + u" page requested with url " + url + " returned status code is " + str(
-                r.status_code) + ': ' + clients.http_error_code[r.status_code], logger.WARNING)
+                response.status_code) + ': ' + clients.http_error_code[response.status_code], logger.WARNING)
             return None
 
-        return r.content
+        return response.content
 
     def findPropers(self, search_date=datetime.datetime.today()):
 
@@ -272,17 +289,18 @@ class SpeedCDProvider(generic.TorrentProvider):
         return self.ratio
 
 
-class SpeedCDCache(tvcache.TVCache):
+class BitSoupCache(tvcache.TVCache):
     def __init__(self, provider):
 
         tvcache.TVCache.__init__(self, provider)
 
-        # only poll Speedcd every 20 minutes max
+        # only poll TorrentBytes every 20 minutes max
         self.minTime = 20
 
     def updateCache(self):
 
         # delete anything older then 7 days
+        logger.log(u"Clearing " + self.provider.name + " cache")
         self._clearCache()
 
         if not self.shouldUpdate():
@@ -304,8 +322,6 @@ class SpeedCDCache(tvcache.TVCache):
             if ci is not None:
                 cl.append(ci)
 
-
-
         if len(cl) > 0:
             myDB = self._getDB()
             myDB.mass_action(cl)
@@ -323,5 +339,4 @@ class SpeedCDCache(tvcache.TVCache):
         return self._addCacheEntry(title, url)
 
 
-provider = SpeedCDProvider()
-
+provider = BitSoupProvider()
