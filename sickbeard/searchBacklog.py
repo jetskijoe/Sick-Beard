@@ -40,9 +40,6 @@ class BacklogSearchScheduler(scheduler.Scheduler):
         else:
             return datetime.date.fromordinal(self.action._lastBacklog + self.action.cycleTime)
 
-    def __del__(self):
-        pass
-
 class BacklogSearcher:
     def __init__(self):
 
@@ -54,9 +51,6 @@ class BacklogSearcher:
         self.amWaiting = False
 
         self._resetPI()
-
-    def __del__(self):
-        pass
 
     def _resetPI(self):
         self.percentDone = 0
@@ -74,14 +68,14 @@ class BacklogSearcher:
 
     def searchBacklog(self, which_shows=None):
 
+        if self.amActive:
+            logger.log(u"Backlog is still running, not starting it again", logger.DEBUG)
+            return
+
         if which_shows:
             show_list = which_shows
         else:
             show_list = sickbeard.showList
-
-        if self.amActive:
-            logger.log(u"Backlog is still running, not starting it again", logger.DEBUG)
-            return
 
         self._get_lastBacklog()
 

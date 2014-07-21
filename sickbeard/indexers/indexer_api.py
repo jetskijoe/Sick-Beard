@@ -27,6 +27,7 @@ class indexerApi(object):
 
     def __del__(self):
         pass
+
     def indexer(self, *args, **kwargs):
         if self.indexerID:
             return indexerConfig[self.indexerID]['module'](*args, **kwargs)

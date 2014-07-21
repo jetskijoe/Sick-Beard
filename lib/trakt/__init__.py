@@ -29,12 +29,10 @@ def TraktCall(method, api, username=None, password=None, data={}):
     if username and password:
         password = sha1(password).hexdigest()
         data["username"] = username
-
         data["password"] = password
 
     # replace the API string with what we found
     method = method.replace("%API%", api)
-
 
     # take the URL params and make a json object out of them
     encoded_data = json.dumps(data)

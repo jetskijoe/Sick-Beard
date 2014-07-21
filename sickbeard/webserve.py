@@ -2398,22 +2398,21 @@ class ConfigSubtitles(MainHandler):
         if subtitles_finder_frequency == '' or subtitles_finder_frequency is None:
             subtitles_finder_frequency = 1
 
-        if use_subtitles == "on":
-            if sickbeard.subtitlesFinderScheduler.thread is None or not sickbeard.subtitlesFinderScheduler.thread.isAlive():
-                sickbeard.subtitlesFinderScheduler.silent = False
-                sickbeard.subtitlesFinderScheduler.initThread()
+        if use_subtitles == "on" and not sickbeard.subtitlesFinderScheduler.isAlive():
+            sickbeard.subtitlesFinderScheduler.silent = False
+            sickbeard.subtitlesFinderScheduler.start()
         else:
-            sickbeard.subtitlesFinderScheduler.abort = True
+            sickbeard.subtitlesFinderScheduler.stop.set()
             sickbeard.subtitlesFinderScheduler.silent = True
             logger.log(u"Waiting for the SUBTITLESFINDER thread to exit")
             try:
-                sickbeard.subtitlesFinderScheduler.thread.join(5)
+                sickbeard.subtitlesFinderScheduler.join(5)
             except:
                 pass
 
         sickbeard.USE_SUBTITLES = config.checkbox_to_value(use_subtitles)
         sickbeard.SUBTITLES_LANGUAGES = [lang.alpha2 for lang in subtitles.isValidLanguage(
-            subtitles_languages.replace(' ', '').split(','))] if subtitles_languages != ''  else ''
+            subtitles_languages.replace(' ', '').split(','))] if subtitles_languages != '' else ''
         sickbeard.SUBTITLES_DIR = subtitles_dir
         sickbeard.SUBTITLES_HISTORY = config.checkbox_to_value(subtitles_history)
         sickbeard.SUBTITLES_FINDER_FREQUENCY = config.to_int(subtitles_finder_frequency, default=1)
@@ -2557,12 +2556,12 @@ class HomePostProcess(MainHandler):
         else:
             failed = True
 
-        if force == "on":
+        if force in ["on", "1"]:
             force = True
         else:
             force = False
 
-        if is_priority == "on":
+        if is_priority in ["on", "1"]:
             is_priority = True
         else:
             is_priority = False
@@ -3592,7 +3591,9 @@ class Home(MainHandler):
             t.sortedShowLists = [
                 ["Shows", sorted(sickbeard.showList, lambda x, y: cmp(titler(x.name), titler(y.name)))]]
 
-        t.bwl = BlackAndWhiteList(showObj.indexerid)
+        t.bwl = None
+        if showObj.is_anime:
+            t.bwl = BlackAndWhiteList(showObj.indexerid)
 
         t.epCounts = epCounts
         t.epCats = epCats
@@ -3657,15 +3658,16 @@ class Home(MainHandler):
             t = PageTemplate(headers=self.request.headers, file="editShow.tmpl")
             t.submenu = HomeMenu()
 
-            bwl = BlackAndWhiteList(showObj.indexerid)
-            t.whiteWords = ""
-            if "global" in bwl.whiteDict:
-                t.whiteWords = ", ".join(bwl.whiteDict["global"])
-            t.blackWords = ""
-            if "global" in bwl.blackDict:
-                t.blackWords = ", ".join(bwl.blackDict["global"])
-
             if showObj.is_anime:
+                bwl = BlackAndWhiteList(showObj.indexerid)
+
+                t.whiteWords = ""
+                if "global" in bwl.whiteDict:
+                    t.whiteWords = ", ".join(bwl.whiteDict["global"])
+
+                t.blackWords = ""
+                if "global" in bwl.blackDict:
+                    t.blackWords = ", ".join(bwl.blackDict["global"])
 
                 t.whitelist = []
                 if bwl.whiteDict.has_key("release_group"):
@@ -3737,54 +3739,55 @@ class Home(MainHandler):
 
         # If directCall from mass_edit_update no scene exceptions handling
         if not directCall:
-            bwl = BlackAndWhiteList(showObj.indexerid)
-            if whitelist:
-                whitelist = whitelist.split(",")
-                shortWhiteList = []
-                if helpers.set_up_anidb_connection():
-                    for groupName in whitelist:
-                        group = sickbeard.ADBA_CONNECTION.group(gname=groupName)
-                        for line in group.datalines:
-                            if line["shortname"]:
-                                shortWhiteList.append(line["shortname"])
-                        else:
-                            if not groupName in shortWhiteList:
-                                shortWhiteList.append(groupName)
+            if showObj.is_anime:
+                bwl = BlackAndWhiteList(showObj.indexerid)
+                if whitelist:
+                    whitelist = whitelist.split(",")
+                    shortWhiteList = []
+                    if helpers.set_up_anidb_connection():
+                        for groupName in whitelist:
+                            group = sickbeard.ADBA_CONNECTION.group(gname=groupName)
+                            for line in group.datalines:
+                                if line["shortname"]:
+                                    shortWhiteList.append(line["shortname"])
+                            else:
+                                if not groupName in shortWhiteList:
+                                    shortWhiteList.append(groupName)
+                    else:
+                        shortWhiteList = whitelist
+                    bwl.set_white_keywords_for("release_group", shortWhiteList)
                 else:
-                    shortWhiteList = whitelist
-                bwl.set_white_keywords_for("release_group", shortWhiteList)
-            else:
-                bwl.set_white_keywords_for("release_group", [])
+                    bwl.set_white_keywords_for("release_group", [])
 
-            if blacklist:
-                blacklist = blacklist.split(",")
-                shortBlacklist = []
-                if helpers.set_up_anidb_connection():
-                    for groupName in blacklist:
-                        group = sickbeard.ADBA_CONNECTION.group(gname=groupName)
-                        for line in group.datalines:
-                            if line["shortname"]:
-                                shortBlacklist.append(line["shortname"])
-                        else:
-                            if not groupName in shortBlacklist:
-                                shortBlacklist.append(groupName)
+                if blacklist:
+                    blacklist = blacklist.split(",")
+                    shortBlacklist = []
+                    if helpers.set_up_anidb_connection():
+                        for groupName in blacklist:
+                            group = sickbeard.ADBA_CONNECTION.group(gname=groupName)
+                            for line in group.datalines:
+                                if line["shortname"]:
+                                    shortBlacklist.append(line["shortname"])
+                            else:
+                                if not groupName in shortBlacklist:
+                                    shortBlacklist.append(groupName)
+                    else:
+                        shortBlacklist = blacklist
+                    bwl.set_black_keywords_for("release_group", shortBlacklist)
                 else:
-                    shortBlacklist = blacklist
-                bwl.set_black_keywords_for("release_group", shortBlacklist)
-            else:
-                bwl.set_black_keywords_for("release_group", [])
+                    bwl.set_black_keywords_for("release_group", [])
 
-            if whiteWords:
-                whiteWords = [x.strip() for x in whiteWords.split(",")]
-                bwl.set_white_keywords_for("global", whiteWords)
-            else:
-                bwl.set_white_keywords_for("global", [])
+                if whiteWords:
+                    whiteWords = [x.strip() for x in whiteWords.split(",")]
+                    bwl.set_white_keywords_for("global", whiteWords)
+                else:
+                    bwl.set_white_keywords_for("global", [])
 
-            if blackWords:
-                blackWords = [x.strip() for x in blackWords.split(",")]
-                bwl.set_black_keywords_for("global", blackWords)
-            else:
-                bwl.set_black_keywords_for("global", [])
+                if blackWords:
+                    blackWords = [x.strip() for x in blackWords.split(",")]
+                    bwl.set_black_keywords_for("global", blackWords)
+                else:
+                    bwl.set_black_keywords_for("global", [])
 
         errors = []
         with showObj.lock:
@@ -3826,10 +3829,10 @@ class Home(MainHandler):
             if showObj.archive_firstmatch != archive_firstmatch:
                 showObj.archive_firstmatch = archive_firstmatch
 
-            if rls_ignore_words and showObj.rls_ignore_words != rls_ignore_words.strip():
+            if rls_ignore_words is not None and showObj.rls_ignore_words != rls_ignore_words.strip():
                 showObj.rls_ignore_words = rls_ignore_words.strip()
 
-            if rls_require_words and showObj.rls_require_words != rls_require_words.strip():
+            if rls_require_words is not None and showObj.rls_require_words != rls_require_words.strip():
                 showObj.rls_require_words = rls_require_words.strip()
 
             # if we change location clear the db of episodes, change it, write to db, and rescan
@@ -4078,7 +4081,7 @@ class Home(MainHandler):
                     # mass add to database
                     sql_l.append(epObj.get_sql())
 
-            if sql_l:
+            if len(sql_l) > 0:
                 myDB = db.DBConnection()
                 myDB.mass_action(sql_l)
 

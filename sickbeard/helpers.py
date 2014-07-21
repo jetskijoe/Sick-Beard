@@ -59,11 +59,11 @@ from sickbeard import encodingKludge as ek
 from sickbeard import notifiers
 from lib import subliminal
 from lib import adba
+from lib import trakt
 
 urllib._urlopener = classes.SickBeardURLopener()
-
 session = requests.Session()
-
+indexerMap = {}
 
 def indentXML(elem, level=0):
     '''
@@ -86,6 +86,29 @@ def indentXML(elem, level=0):
         if level and (not elem.tail or not elem.tail.strip()):
             elem.tail = i
 
+def remove_extension(name):
+    """
+    Remove download or media extension from name (if any)
+    """
+
+    if name and "." in name:
+        base_name, sep, extension = name.rpartition('.')  # @UnusedVariable
+        if base_name and extension.lower() in ['nzb', 'torrent'] + mediaExtensions:
+            name = base_name
+
+    return name
+
+def remove_non_release_groups(name):
+    """
+    Remove non release groups from name
+    """
+
+    if name and "-" in name:
+        name_group = name.rsplit('-', 1)
+        if name_group[-1].upper() in ["RP", "NZBGEEK"]:
+            name = name_group[0]
+
+    return name
 
 def replaceExtension(filename, newExt):
     '''
@@ -261,13 +284,12 @@ def download_file(url, filename):
     return True
 
 
-def findCertainShow(showList, indexerid=None):
+def findCertainShow(showList, indexerid):
     if not showList:
         return None
 
+    results = []
     if indexerid:
-        results = filter(lambda x: int(x.indexerid) == int(indexerid), showList)
-    else:
         results = filter(lambda x: int(x.indexerid) == int(indexerid), showList)
 
     if len(results) == 0:
@@ -324,6 +346,7 @@ def searchDBForShow(regShowName, log=False):
                 continue
             else:
                 return int(sqlResults[0]["indexer_id"])
+
 
 def searchIndexerForShowID(regShowName, indexer=None, indexer_id=None, ui=None):
     showNames = [re.sub('[. -]', ' ', regShowName)]
@@ -443,8 +466,9 @@ def symlink(srcFile, destFile):
     if os.name == 'nt':
         import ctypes
 
-        if ctypes.windll.kernel32.CreateSymbolicLinkW(unicode(destFile), unicode(srcFile), 1 if os.path.isdir(srcFile) else 0) in [0,
-                                                                                                                      1280]:
+        if ctypes.windll.kernel32.CreateSymbolicLinkW(unicode(destFile), unicode(srcFile),
+                                                      1 if os.path.isdir(srcFile) else 0) in [0,
+                                                                                              1280]:
             raise ctypes.WinError()
         else:
             os.symlink(srcFile, destFile)
@@ -1067,10 +1091,10 @@ def _check_against_names(nameInQuestion, show, season=-1):
     return False
 
 
-def get_show_by_name(name, useIndexer=False):
+def get_show(name, indexer_id=0, useIndexer=False):
     try:
         # check cache for show
-        showObj = sickbeard.name_cache.retrieveShowFromCache(name)
+        showObj = sickbeard.name_cache.retrieveShowFromCache(name, indexer_id=indexer_id)
         if showObj:
             return showObj
 
@@ -1086,6 +1110,7 @@ def get_show_by_name(name, useIndexer=False):
         return showObj
     except:
         pass
+
 
 def is_hidden_folder(folder):
     """
@@ -1193,3 +1218,28 @@ def extractZip(archive, targetDir):
     except Exception as e:
         logger.log(u"Zip extraction error: " + str(e), logger.ERROR)
         return False
+
+
+def mapIndexersToShow(showObj):
+    global indexerMap
+
+    mapped = {'tvdb_id': 0, 'tvrage_id': 0}
+
+    if showObj.name in indexerMap:
+        logger.log(u"Found TVDB<->TVRAGE indexer mapping in cache for show: " + showObj.name, logger.DEBUG)
+        return indexerMap[showObj.name]
+
+    logger.log(u"Mapping indexers TVDB<->TVRAGE for show: " + showObj.name, logger.DEBUG)
+    results = trakt.TraktCall("search/shows.json/%API%?query=" + sanitizeSceneName(showObj.name),
+                              sickbeard.TRAKT_API_KEY)
+
+    if results:
+        result = filter(lambda x: int(showObj.indexerid) in [int(x['tvdb_id']), int(x['tvrage_id'])], results)
+        if len(result):
+            mapped['tvdb_id'] = int(result[0]['tvdb_id'])
+            mapped['tvrage_id'] = int(result[0]['tvrage_id'])
+
+            logger.log(u"Adding TVDB<->TVRAGE indexer mapping to cache for show: " + showObj.name, logger.DEBUG)
+            indexerMap[showObj.name] = mapped
+
+    return mapped
