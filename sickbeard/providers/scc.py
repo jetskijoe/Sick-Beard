@@ -17,26 +17,24 @@
 # You should have received a copy of the GNU General Public License
 # along with SickRage.  If not, see <http://www.gnu.org/licenses/>.
 
-import time
 import re
 import traceback
 import datetime
 import urlparse
 import sickbeard
 import generic
-from sickbeard.common import Quality, cpu_presets
+from sickbeard.common import Quality
 from sickbeard import logger
 from sickbeard import tvcache
 from sickbeard import db
 from sickbeard import classes
 from sickbeard import helpers
 from sickbeard import show_name_helpers
-from sickbeard.common import Overview
 from sickbeard.exceptions import ex
 from sickbeard import clients
 from lib import requests
 from lib.requests import exceptions
-from bs4 import BeautifulSoup
+from sickbeard.bs4_parser import BS4Parser
 from lib.unidecode import unidecode
 from sickbeard.helpers import sanitizeSceneName
 
@@ -198,57 +196,58 @@ class SCCProvider(generic.TorrentProvider):
 
                 try:
                     for dataItem in data:
-                        html = BeautifulSoup(dataItem, features=["html5lib", "permissive"])
+                        with BS4Parser(dataItem, features=["html5lib", "permissive"]) as html:
+                            torrent_table = html.find('table', attrs={'id': 'torrents-table'})
+                            torrent_rows = torrent_table.find_all('tr') if torrent_table else []
 
-                        torrent_table = html.find('table', attrs={'id': 'torrents-table'})
-                        torrent_rows = torrent_table.find_all('tr') if torrent_table else []
-
-                        #Continue only if at least one Release is found
-                        if len(torrent_rows) < 2:
-                            if html.title:
-                                source = self.name + " (" + html.title.string + ")"
-                            else:
-                                source = self.name
-                            logger.log(u"The Data returned from " + source + " does not contain any torrent", logger.DEBUG)
-                            continue
-
-                        for result in torrent_table.find_all('tr')[1:]:
-
-                            try:
-                                link = result.find('td', attrs={'class': 'ttr_name'}).find('a')
-                                all_urls = result.find('td', attrs={'class': 'td_dl'}).find_all('a', limit=2)
-                                # Foreign section contain two links, the others one
-                                if self._isSection('Foreign', dataItem):
-                                    url = all_urls[1]
+                            #Continue only if at least one Release is found
+                            if len(torrent_rows) < 2:
+                                if html.title:
+                                    source = self.name + " (" + html.title.string + ")"
                                 else:
-                                    url = all_urls[0]
-                                title = link.string
-                                if re.search('\.\.\.', title):
-                                    details_html = BeautifulSoup(self.getURL(self.url + "/" + link['href']))
-                                    title = re.search('(?<=").+(?<!")', details_html.title.string).group(0)
-                                download_url = self.urls['download'] % url['href']
-                                id = int(link['href'].replace('details?id=', ''))
-                                seeders = int(result.find('td', attrs={'class': 'ttr_seeders'}).string)
-                                leechers = int(result.find('td', attrs={'class': 'ttr_leechers'}).string)
-                            except (AttributeError, TypeError):
+                                    source = self.name
+                                logger.log(u"The Data returned from " + source + " does not contain any torrent", logger.DEBUG)
                                 continue
 
-                            if mode != 'RSS' and (seeders < self.minseed or leechers < self.minleech):
-                                continue
+                            for result in torrent_table.find_all('tr')[1:]:
 
-                            if not title or not download_url:
-                                continue
+                                try:
+                                    link = result.find('td', attrs={'class': 'ttr_name'}).find('a')
+                                    all_urls = result.find('td', attrs={'class': 'td_dl'}).find_all('a', limit=2)
+                                    # Foreign section contain two links, the others one
+                                    if self._isSection('Foreign', dataItem):
+                                        url = all_urls[1]
+                                    else:
+                                        url = all_urls[0]
 
-                            item = title, download_url, id, seeders, leechers
+                                    title = link.string
+                                    if re.search('\.\.\.', title):
+                                        with BS4Parser(self.getURL(self.url + "/" + link['href'])) as details_html:
+                                            title = re.search('(?<=").+(?<!")', details_html.title.string).group(0)
 
-                            if self._isSection('Non-Scene', dataItem):
-                                logger.log(u"Found result: " + title + "(" + nonsceneSearchURL + ")", logger.DEBUG)
-                            elif self._isSection('Foreign', dataItem):
-                                logger.log(u"Found result: " + title + "(" + foreignSearchURL + ")", logger.DEBUG)
-                            else:
-                                logger.log(u"Found result: " + title + "(" + searchURL + ")", logger.DEBUG)
+                                    download_url = self.urls['download'] % url['href']
+                                    id = int(link['href'].replace('details?id=', ''))
+                                    seeders = int(result.find('td', attrs={'class': 'ttr_seeders'}).string)
+                                    leechers = int(result.find('td', attrs={'class': 'ttr_leechers'}).string)
+                                except (AttributeError, TypeError):
+                                    continue
 
-                            items[mode].append(item)
+                                if mode != 'RSS' and (seeders < self.minseed or leechers < self.minleech):
+                                    continue
+
+                                if not title or not download_url:
+                                    continue
+
+                                item = title, download_url, id, seeders, leechers
+
+                                if self._isSection('Non-Scene', dataItem):
+                                    logger.log(u"Found result: " + title + "(" + nonsceneSearchURL + ")", logger.DEBUG)
+                                elif self._isSection('Foreign', dataItem):
+                                    logger.log(u"Found result: " + title + "(" + foreignSearchURL + ")", logger.DEBUG)
+                                else:
+                                    logger.log(u"Found result: " + title + "(" + searchURL + ")", logger.DEBUG)
+
+                                items[mode].append(item)
 
                 except Exception, e:
                     logger.log(u"Failed parsing " + self.name + " Traceback: " + traceback.format_exc(), logger.ERROR)

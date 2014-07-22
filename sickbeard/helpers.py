@@ -31,7 +31,6 @@ import httplib
 import urlparse
 import uuid
 import base64
-import string
 import zipfile
 
 from lib import requests
@@ -1239,3 +1238,16 @@ def mapIndexersToShow(showObj):
             indexerMap[showObj.name] = mapped
 
     return mapped
+
+
+def touchFile(fname, atime=None):
+    if None != atime:
+        try:
+            with file(fname, 'a'):
+                os.utime(fname, (atime, atime))
+                return True
+        except:
+            logger.log(u"File air date stamping not available on your OS", logger.DEBUG)
+            pass
+
+    return False

@@ -20,22 +20,20 @@ import re
 import traceback
 import datetime
 import urlparse
-import time
 import sickbeard
 import generic
-from sickbeard.common import Quality, cpu_presets
+from sickbeard.common import Quality
 from sickbeard import logger
 from sickbeard import tvcache
 from sickbeard import db
 from sickbeard import classes
 from sickbeard import helpers
 from sickbeard import show_name_helpers
-from sickbeard.common import Overview
 from sickbeard.exceptions import ex
 from sickbeard import clients
 from lib import requests
 from lib.requests import exceptions
-from bs4 import BeautifulSoup
+from sickbeard.bs4_parser import BS4Parser
 from lib.unidecode import unidecode
 from sickbeard.helpers import sanitizeSceneName
 
@@ -170,46 +168,45 @@ class BitSoupProvider(generic.TorrentProvider):
                     continue
                 
                 try:
-                    html = BeautifulSoup(data, "html.parser")
-                    
-                    torrent_table = html.find('table', attrs={'class': 'koptekst'})
-                    torrent_rows = torrent_table.find_all('tr') if torrent_table else []
-                    
-                    #Continue only if one Release is found
-                    if len(torrent_rows) < 2:
-                         logger.log(u"The Data returned from " + self.name + " do not contains any torrent",
-                             logger.DEBUG)
-                         continue
+                    with BS4Parser(data, "html.parser") as html:
+                        torrent_table = html.find('table', attrs={'class': 'koptekst'})
+                        torrent_rows = torrent_table.find_all('tr') if torrent_table else []
 
-                    for result in torrent_rows[1:]:
-                        cells = result.find_all('td')
+                        #Continue only if one Release is found
+                        if len(torrent_rows) < 2:
+                             logger.log(u"The Data returned from " + self.name + " do not contains any torrent",
+                                 logger.DEBUG)
+                             continue
 
-                        link = cells[1].find('a')
-                        download_url = self.urls['download'] % cells[3].find('a')['href'] 
-                        
-                        id = link['href']
-                        id = id.replace('details.php?id=','')
-                        id = id.replace('&hit=1', '')
-                        
-                        try:
-                            title = link.getText()
-                            id = int(id)
-                            seeders = int(cells[9].getText())
-                            leechers = int(cells[10].getText())
-                        except (AttributeError, TypeError):
-                            continue
+                        for result in torrent_rows[1:]:
+                            cells = result.find_all('td')
 
-                        #Filter unseeded torrent
-                        if mode != 'RSS' and (seeders < self.minseed or leechers < self.minleech):
-                            continue
+                            link = cells[1].find('a')
+                            download_url = self.urls['download'] % cells[3].find('a')['href']
 
-                        if not title or not download_url:
-                            continue
+                            id = link['href']
+                            id = id.replace('details.php?id=','')
+                            id = id.replace('&hit=1', '')
 
-                        item = title, download_url, id, seeders, leechers
-                        logger.log(u"Found result: " + title + "(" + searchURL + ")", logger.DEBUG)
+                            try:
+                                title = link.getText()
+                                id = int(id)
+                                seeders = int(cells[9].getText())
+                                leechers = int(cells[10].getText())
+                            except (AttributeError, TypeError):
+                                continue
 
-                        items[mode].append(item)
+                            #Filter unseeded torrent
+                            if mode != 'RSS' and (seeders < self.minseed or leechers < self.minleech):
+                                continue
+
+                            if not title or not download_url:
+                                continue
+
+                            item = title, download_url, id, seeders, leechers
+                            logger.log(u"Found result: " + title + "(" + searchURL + ")", logger.DEBUG)
+
+                            items[mode].append(item)
 
                 except Exception, e:
                     logger.log(u"Failed parsing " + self.name + " Traceback: " + traceback.format_exc(), logger.ERROR)

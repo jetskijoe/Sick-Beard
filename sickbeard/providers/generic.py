@@ -22,10 +22,7 @@ from __future__ import with_statement
 import datetime
 import os
 import re
-import urllib
-import urlparse
-import time
-
+import itertools
 import sickbeard
 
 from lib import requests
@@ -273,12 +270,18 @@ class GenericProvider:
             for item in itemList:
                 quality = self.getQuality(item, anime=show.is_anime)
                 if quality == Quality.UNKNOWN:
-                    itemsUnknown += item
+                    itemsUnknown += [item]
                 else:
-                    items[quality] = item
-            itemList = [items.pop(k) for k in sorted(items, reverse=True)] + itemsUnknown
+                    if quality not in items:
+                        items[quality] = [item]
+                    else:
+                        items[quality].append(item)
+
+            itemList = list(itertools.chain(*[v for (k, v) in sorted(items.items(), reverse=True)]))
+            itemList += itemsUnknown if itemsUnknown else []
 
         # filter results
+        cl = []
         for item in itemList:
             (title, url) = self._get_title_and_url(item)
 
@@ -297,47 +300,61 @@ class GenericProvider:
             quality = parse_result.quality
             release_group = parse_result.release_group
 
+            addCacheEntry = False
             if not (showObj.air_by_date or showObj.sports):
                 if search_mode == 'sponly' and len(parse_result.episode_numbers):
                     logger.log(
                         u"This is supposed to be a season pack search but the result " + title + " is not a valid season pack, skipping it",
                         logger.DEBUG)
-                    continue
+                    addCacheEntry = True
+                else:
+                    if not len(parse_result.episode_numbers) and (
+                                parse_result.season_number and parse_result.season_number != season) or (
+                                not parse_result.season_number and season != 1):
+                        logger.log(u"The result " + title + " doesn't seem to be a valid season that we are trying to snatch, ignoring",
+                                   logger.DEBUG)
+                        addCacheEntry = True
+                    elif len(parse_result.episode_numbers) and (
+                                    parse_result.season_number != season or not [ep for ep in episodes if
+                                                                                 ep.scene_episode in parse_result.episode_numbers]):
+                        logger.log(u"The result " + title + " doesn't seem to be a valid episode that we are trying to snatch, ignoring",
+                                   logger.DEBUG)
+                        addCacheEntry = True
 
-                if not len(parse_result.episode_numbers) and (
-                                parse_result.season_number != None and parse_result.season_number != season) or (
-                                parse_result.season_number == None and season != 1):
-                    logger.log(u"The result " + title + " doesn't seem to be a valid season for season " + str(season) + ", ignoring", logger.DEBUG)
-                    continue
-                elif len(parse_result.episode_numbers) and (
-                                parse_result.season_number != season or parse_result.episode_numbers[0] not in episodes):
-                    logger.log(u"Episode " + title + " isn't " + str(season) + "x" + str(parse_result.episode_numbers[0]) + ", skipping it", logger.DEBUG)
-                    continue
-
-                # we just use the existing info for normal searches
-                actual_season = season
-                actual_episodes = parse_result.episode_numbers
+                if not addCacheEntry:
+                    # we just use the existing info for normal searches
+                    actual_season = season
+                    actual_episodes = parse_result.episode_numbers
             else:
                 if not (parse_result.is_air_by_date or parse_result.is_sports):
                     logger.log(
                         u"This is supposed to be a date search but the result " + title + " didn't parse as one, skipping it",
                         logger.DEBUG)
-                    continue
+                    addCacheEntry = True
+                else:
+                    airdate = parse_result.air_date.toordinal() if parse_result.air_date else parse_result.sports_air_date.toordinal()
+                    myDB = db.DBConnection()
+                    sql_results = myDB.select(
+                        "SELECT season, episode FROM tv_episodes WHERE showid = ? AND airdate = ?",
+                        [showObj.indexerid, airdate])
 
-                airdate = parse_result.air_date.toordinal() if parse_result.air_date else parse_result.is_sports_air_date.toordinal()
-                myDB = db.DBConnection()
-                sql_results = myDB.select(
-                    "SELECT season, episode FROM tv_episodes WHERE showid = ? AND airdate = ?",
-                    [showObj.indexerid, airdate])
+                    if len(sql_results) != 1:
+                        logger.log(
+                            u"Tried to look up the date for the episode " + title + " but the database didn't give proper results, skipping it",
+                            logger.WARNING)
+                        addCacheEntry = True
 
-                if len(sql_results) != 1:
-                    logger.log(
-                        u"Tried to look up the date for the episode " + title + " but the database didn't give proper results, skipping it",
-                        logger.WARNING)
-                    continue
+                if not addCacheEntry:
+                    actual_season = int(sql_results[0]["season"])
+                    actual_episodes = [int(sql_results[0]["episode"])]
 
-                actual_season = int(sql_results[0]["season"])
-                actual_episodes = [int(sql_results[0]["episode"])]
+            # add parsed result to cache for usage later on
+            if addCacheEntry:
+                logger.log(u"Adding item from search to cache: " + title, logger.DEBUG)
+                ci = self.cache._addCacheEntry(title, url, parse_result=parse_result)
+                if ci is not None:
+                    cl.append(ci)
+                continue
 
             # make sure we want the episode
             wantEp = True
@@ -383,10 +400,15 @@ class GenericProvider:
             if not result:
                 continue
 
-            if epNum in results:
-                results[epNum].append(result)
-            else:
+            if epNum not in results:
                 results[epNum] = [result]
+            else:
+                results[epNum].append(result)
+
+        # check if we have items to add to cache
+        if len(cl) > 0:
+            myDB = self.cache._getDB()
+            myDB.mass_action(cl)
 
         return results
 
