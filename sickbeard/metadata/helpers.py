@@ -38,6 +38,6 @@ def getShowImage(url, imgNum=None):
 
     if image_data is None:
         logger.log(u"There was an error trying to retrieve the image, aborting", logger.ERROR)
-        return None
+        return
 
     return image_data

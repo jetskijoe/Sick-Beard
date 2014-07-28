@@ -56,7 +56,9 @@ $(document).ready(function(){
         }
     });
 
-    $('#api_key').click(function(){ $('#api_key').select() });
+    $('#api_key').click(function () {
+        $('#api_key').select()
+    });
     $("#generate_new_apikey").click(function(){
         $.get(sbRoot + '/config/general/generateKey', 
             function(data){
@@ -68,6 +70,10 @@ $(document).ready(function(){
         });
     });
 
+    $('#branchCheckout').click(function () {
+        url = sbRoot+'/home/branchCheckout?branch='+$("#branchVersion").val();
+        window.location.href = url;
+    });
 });
 
 function config_success(){

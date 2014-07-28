@@ -51,13 +51,11 @@ class GitHub(object):
         if params and type(params) is dict:
             url += '?' + '&'.join([str(x) + '=' + str(params[x]) for x in params.keys()])
 
-        data = helpers.getURL(url)
+        parsedJSON = helpers.getURL(url, json=True)
 
-        if data:
-            json_data = json.loads(data)
-            return json_data
-        else:
+        if not parsedJSON:
             return []
+        return parsedJSON
 
     def commits(self):
         """
@@ -88,4 +86,9 @@ class GitHub(object):
         access_API = self._access_API(
             ['repos', self.github_repo_user, self.github_repo, 'compare', base + '...' + head],
             params={'per_page': per_page})
+        return access_API
+    def branches(self):
+        access_API = self._access_API(
+            ['repos', self.github_repo_user, self.github_repo, 'branches'],
+            params={'per_page': 100})
         return access_API
