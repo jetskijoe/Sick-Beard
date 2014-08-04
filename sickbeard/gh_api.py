@@ -30,7 +30,7 @@ class GitHub(object):
     needs it for - list of commits.
     """
 
-    def __init__(self, github_repo_user, github_repo, branch='master'):
+    def __init__(self, github_repo_user, github_repo, branch):
 
         self.github_repo_user = github_repo_user
         self.github_repo = github_repo
@@ -52,9 +52,9 @@ class GitHub(object):
             url += '?' + '&'.join([str(x) + '=' + str(params[x]) for x in params.keys()])
 
         parsedJSON = helpers.getURL(url, json=True)
-
         if not parsedJSON:
             return []
+
         return parsedJSON
 
     def commits(self):
@@ -87,6 +87,7 @@ class GitHub(object):
             ['repos', self.github_repo_user, self.github_repo, 'compare', base + '...' + head],
             params={'per_page': per_page})
         return access_API
+
     def branches(self):
         access_API = self._access_API(
             ['repos', self.github_repo_user, self.github_repo, 'branches'],
