@@ -860,15 +860,7 @@ class PostProcessor(object):
             #    curEp.status = common.Quality.compositeStatus(common.SNATCHED, new_ep_quality)
 
         # delete the existing file (and company)
-        for cur_ep in [ep_obj] + ep_obj.relatedEps:
-            try:
-                self._delete(cur_ep.location, associated_files=True)
                 # clean up any left over folders
-                if cur_ep.location:
-                    helpers.delete_empty_folders(ek.ek(os.path.dirname, cur_ep.location),
-                                                 keep_dir=ep_obj.show._location)
-            except (OSError, IOError):
-                raise exceptions.PostProcessingFailed("Unable to delete the existing files")
 
         # if the show directory doesn't exist then make it if allowed
         if not ek.ek(os.path.isdir, ep_obj.show._location) and sickbeard.CREATE_MISSING_SHOW_DIRS:
@@ -977,6 +969,14 @@ class PostProcessor(object):
         except (OSError, IOError):
             raise exceptions.PostProcessingFailed("Unable to move the files to their new home")
 
+        for cur_ep in [ep_obj] + ep_obj.relatedEps:
+            try:
+                self._delete(cur_ep.location, associated_files=True)
+                if cur_ep.location:
+                    helpers.delete_empty_folders(ek.ek(os.path.dirname, cur_ep.location),
+                                                 keep_dir=ep_obj.show._location)
+            except (OSError, IOError):
+                raise exceptions.PostProcessingFailed("Unable to delete the existing files")
         # download subtitles
         if sickbeard.USE_SUBTITLES and ep_obj.show.subtitles:
             for cur_ep in [ep_obj] + ep_obj.relatedEps:
