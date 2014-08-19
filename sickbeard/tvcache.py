@@ -97,7 +97,9 @@ class TVCache():
             myDB.action("DELETE FROM [" + self.providerID + "] WHERE time < ?", [int(time.mktime(curDate.timetuple()))])
 
     def _get_title_and_url(self, item):
+        # override this in the provider if daily search has a different data layout to backlog searches
         return self.provider._get_title_and_url(item)
+
     def _getRSSData(self):
 
         data = None
@@ -358,15 +360,6 @@ class TVCache():
                 result.release_group = curReleaseGroup
                 result.version = curVersion
                 result.content = None
-
-                # validate torrent file if not magnet link to avoid invalid torrent links
-                if self.provider.providerType == sickbeard.providers.generic.GenericProvider.TORRENT:
-                    if sickbeard.TORRENT_METHOD != "blackhole":
-                        client = clients.getClientIstance(sickbeard.TORRENT_METHOD)()
-                        result = client._get_torrent_hash(result)
-                        if not result.hash:
-                            logger.log(u'Unable to get torrent hash for ' + title + ', skipping it', logger.DEBUG)
-                            continue
 
                 # add it to the list
                 if epObj not in neededEps:
