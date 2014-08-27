@@ -166,7 +166,11 @@ class GenericProvider:
                 else:
                     logger.log(u"Saved result to " + filename, logger.MESSAGE)
 
-                return self._verify_download(filename)
+                if self._verify_download(filename):
+                    return True
+
+        logger.log(u"Failed to download result", logger.ERROR)
+        return False
 
     def _verify_download(self, file_name=None):
         """
@@ -182,9 +186,11 @@ class GenericProvider:
                     parser.stream._input.close()
                 except:
                     pass
-                if mime_type != 'application/x-bittorrent':
-                    logger.log(u"Result is not a valid torrent file", logger.WARNING)
-                    return False
+                if mime_type == 'application/x-bittorrent':
+                    return True
+
+            logger.log(u"Result is not a valid torrent file", logger.WARNING)
+            return False
 
         return True
 
@@ -221,16 +227,22 @@ class GenericProvider:
         Returns: A tuple containing two strings representing title and URL respectively
         """
 
-        title = item.title if item.title else None
+        title = None
+        url = None
+
+        if 'title' in item:
+            title = item.title
+
         if title:
-            title = u'' + title
             title = title.replace(' ', '.')
 
-        url = item.link if item.link else None
+        if 'link' in item:
+            url = item.link
+
         if url:
             url = url.replace('&amp;', '&')
 
-        return (title, url)
+        return title, url
 
     def findSearchResults(self, show, season, episodes, search_mode, manualSearch=False):
 
@@ -334,13 +346,13 @@ class GenericProvider:
                     actual_season = season
                     actual_episodes = parse_result.episode_numbers
             else:
-                if not (parse_result.is_air_by_date or parse_result.is_sports):
+                if not (parse_result.is_air_by_date):
                     logger.log(
                         u"This is supposed to be a date search but the result " + title + " didn't parse as one, skipping it",
                         logger.DEBUG)
                     addCacheEntry = True
                 else:
-                    airdate = parse_result.air_date.toordinal() if parse_result.air_date else parse_result.sports_air_date.toordinal()
+                    airdate = parse_result.air_date.toordinal()
                     myDB = db.DBConnection()
                     sql_results = myDB.select(
                         "SELECT season, episode FROM tv_episodes WHERE showid = ? AND airdate = ?",
