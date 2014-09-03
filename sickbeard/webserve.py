@@ -2203,14 +2203,14 @@ class ConfigProviders(MainHandler):
                     curTorrentProvider.enable_daily = config.checkbox_to_value(
                         kwargs[curTorrentProvider.getID() + '_enable_daily'])
                 except:
-                    curTorrentProvider.enable_daily = 1
+                    curTorrentProvider.enable_daily = 0 # these exceptions are actually catching unselected checkboxes
 
             if hasattr(curTorrentProvider, 'enable_backlog'):
                 try:
                     curTorrentProvider.enable_backlog = config.checkbox_to_value(
                         kwargs[curTorrentProvider.getID() + '_enable_backlog'])
                 except:
-                    curTorrentProvider.enable_backlog = 1
+                    curTorrentProvider.enable_backlog = 0 # these exceptions are actually catching unselected checkboxes
 
         for curNzbProvider in [curProvider for curProvider in sickbeard.providers.sortedProviderList() if
                                curProvider.providerType == sickbeard.GenericProvider.NZB]:
@@ -2245,14 +2245,14 @@ class ConfigProviders(MainHandler):
                     curNzbProvider.enable_daily = config.checkbox_to_value(
                         kwargs[curNzbProvider.getID() + '_enable_daily'])
                 except:
-                    curNzbProvider.enable_daily = 1
+                    curNzbProvider.enable_daily = 0  # these exceptions are actually catching unselected checkboxes
 
             if hasattr(curNzbProvider, 'enable_backlog'):
                 try:
                     curNzbProvider.enable_backlog = config.checkbox_to_value(
                         kwargs[curNzbProvider.getID() + '_enable_backlog'])
                 except:
-                    curNzbProvider.enable_backlog = 1
+                    curNzbProvider.enable_backlog = 0  # these exceptions are actually catching unselected checkboxes
 
         sickbeard.NEWZNAB_DATA = '!!!'.join([x.configStr() for x in sickbeard.newznabProviderList])
         sickbeard.PROVIDER_ORDER = provider_list
