@@ -1,7 +1,6 @@
 $(document).ready(function () {
 
     $('#sbRoot').ajaxEpSearch({'colorRow': true});
-    $('#sbRoot').ajaxEpRetry({'colorRow': true});
 
     $('#sbRoot').ajaxEpSubtitlesSearch();
 
@@ -117,7 +116,6 @@ $(document).ready(function () {
     $("#checkboxControls input").change(function (e) {
         var whichClass = $(this).attr('id');
         $(this).showHideRows(whichClass);
-
     });
 
     // initially show/hide all the rows according to the checkboxes

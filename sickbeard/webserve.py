@@ -305,8 +305,11 @@ class MainHandler(RequestHandler):
         redirect("/home/displayShow?show=" + show)
 
     def setComingEpsLayout(self, layout):
-        if layout not in ('poster', 'banner', 'list'):
+        if layout not in ('poster', 'banner', 'list', 'calendar'):
             layout = 'banner'
+
+        if layout == 'calendar':
+            sickbeard.COMING_EPS_SORT = 'date'
 
         sickbeard.COMING_EPS_LAYOUT = layout
 
@@ -320,6 +323,9 @@ class MainHandler(RequestHandler):
 
     def setComingEpsSort(self, sort):
         if sort not in ('date', 'network', 'show'):
+            sort = 'date'
+        
+        if sickbeard.COMING_EPS_LAYOUT == 'calendar':
             sort = 'date'
 
         sickbeard.COMING_EPS_SORT = sort
@@ -390,6 +396,7 @@ class MainHandler(RequestHandler):
             {'title': 'Layout:', 'path': {'Banner': 'setComingEpsLayout/?layout=banner',
                                           'Poster': 'setComingEpsLayout/?layout=poster',
                                           'List': 'setComingEpsLayout/?layout=list',
+                                          'Calendar': 'setComingEpsLayout/?layout=calendar',
             }},
             paused_item,
         ]
@@ -399,7 +406,7 @@ class MainHandler(RequestHandler):
         t.sql_results = sql_results
 
         # Allow local overriding of layout parameter
-        if layout and layout in ('poster', 'banner', 'list'):
+        if layout and layout in ('poster', 'banner', 'list','calendar'):
             t.layout = layout
         else:
             t.layout = sickbeard.COMING_EPS_LAYOUT
@@ -1616,9 +1623,9 @@ class ConfigSearch(MainHandler):
 
     def saveSearch(self, use_nzbs=None, use_torrents=None, nzb_dir=None, sab_username=None, sab_password=None,
                    sab_apikey=None, sab_category=None, sab_host=None, nzbget_username=None, nzbget_password=None,
-                   nzbget_category=None, nzbget_priority=100, nzbget_host=None, nzbget_use_https=None,
-                   dailysearch_frequency=None,
-                   nzb_method=None, torrent_method=None, usenet_retention=None, backlog_frequency=None,
+                   nzbget_category=None, nzbget_priority=None, nzbget_host=None, nzbget_use_https=None,
+                   backlog_days=None, backlog_frequency=None, dailysearch_frequency=None,
+                   nzb_method=None, torrent_method=None, usenet_retention=None,
                    download_propers=None, check_propers_interval=None, allow_high_priority=None,
                    backlog_startup=None, dailysearch_startup=None,
                    torrent_dir=None, torrent_username=None, torrent_password=None, torrent_host=None,
@@ -1634,7 +1641,9 @@ class ConfigSearch(MainHandler):
             results += ["Unable to create directory " + os.path.normpath(torrent_dir) + ", dir not changed."]
 
         config.change_DAILYSEARCH_FREQUENCY(dailysearch_frequency)
+
         config.change_BACKLOG_FREQUENCY(backlog_frequency)
+        sickbeard.BACKLOG_DAYS = config.to_int(backlog_days, default=7)
 
         sickbeard.USE_NZBS = config.checkbox_to_value(use_nzbs)
         sickbeard.USE_TORRENTS = config.checkbox_to_value(use_torrents)
@@ -1664,7 +1673,7 @@ class ConfigSearch(MainHandler):
         sickbeard.NZBGET_CATEGORY = nzbget_category
         sickbeard.NZBGET_HOST = config.clean_host(nzbget_host)
         sickbeard.NZBGET_USE_HTTPS = config.checkbox_to_value(nzbget_use_https)
-        sickbeard.NZBGET_PRIORITY = int(nzbget_priority)
+        sickbeard.NZBGET_PRIORITY = config.to_int(nzbget_priority, default=100)
 
         sickbeard.TORRENT_USERNAME = torrent_username
         sickbeard.TORRENT_PASSWORD = torrent_password
@@ -4305,10 +4314,9 @@ class Home(MainHandler):
             root_ep_obj.rename()
 
         redirect("/home/displayShow?show=" + show)
-
-
+    
     def searchEpisode(self, show=None, season=None, episode=None):
-
+        
         # retrieve the episode object and fail if we can't get one
         ep_obj = _getEpisode(show, season, episode)
         if isinstance(ep_obj, str):
@@ -4316,28 +4324,87 @@ class Home(MainHandler):
 
         # make a queue item for it and put it on the queue
         ep_queue_item = search_queue.ManualSearchQueueItem(ep_obj.show, ep_obj)
+
         sickbeard.searchQueueScheduler.action.add_item(ep_queue_item)  # @UndefinedVariable
-
-        # wait until the queue item tells us whether it worked or not
-        while ep_queue_item.success is None:  # @UndefinedVariable
-            time.sleep(cpu_presets[sickbeard.CPU_PRESET])
-
-        # return the correct json value
+        
         if ep_queue_item.success:
-            # Find the quality class for the episode
-            quality_class = Quality.qualityStrings[Quality.UNKNOWN]
-            ep_status, ep_quality = Quality.splitCompositeStatus(ep_obj.status)
-            for x in (SD, HD720p, HD1080p):
-                if ep_quality in Quality.splitQuality(x)[0]:
-                    quality_class = qualityPresetStrings[x]
-                    break
+            return returnManualSearchResult(ep_queue_item)
+        if not ep_queue_item.started and ep_queue_item.success is None:
+            return json.dumps({'result': 'success'}) #I Actually want to call it queued, because the search hasnt been started yet!
+        if ep_queue_item.started and ep_queue_item.success is None:
+            return json.dumps({'result': 'success'})
+        else:
+            return json.dumps({'result': 'failure'})
 
-            return json.dumps({'result': statusStrings[ep_obj.status],
-                               'quality': quality_class
-            })
+    ### Returns the current ep_queue_item status for the current viewed show.
+    # Possible status: Downloaded, Snatched, etc...
+    # Returns {'show': 279530, 'episodes' : ['episode' : 6, 'season' : 1, 'searchstatus' : 'queued', 'status' : 'running', 'quality': '4013']
+    def getManualSearchStatus(self, show=None, season=None):
 
-        return json.dumps({'result': 'failure'})
+        episodes = []
+        currentManualSearchThreadsQueued = []
+        currentManualSearchThreadActive = []
+        finishedManualSearchThreadItems= []
+        
+        # Queued Searches
+        currentManualSearchThreadsQueued = sickbeard.searchQueueScheduler.action.get_all_ep_from_queue(show)
+        # Running Searches
+        if (sickbeard.searchQueueScheduler.action.is_manualsearch_in_progress()):
+            currentManualSearchThreadActive = sickbeard.searchQueueScheduler.action.currentItem
+            
+        # Finished Searches
+        finishedManualSearchThreadItems =  sickbeard.search_queue.MANUAL_SEARCH_HISTORY
+        
+        if currentManualSearchThreadsQueued:
+            for searchThread in currentManualSearchThreadsQueued:
+                searchstatus = 'queued'
+                    
+                episodes.append({'episode': searchThread.segment.episode,
+                                 'episodeindexid': searchThread.segment.indexerid, 
+                                 'season' : searchThread.segment.season, 
+                                 'searchstatus' : searchstatus, 
+                                 'status' : statusStrings[searchThread.segment.status], 
+                                 'quality': self.getQualityClass(searchThread.segment)})
+        
+        if currentManualSearchThreadActive:
+            searchThread = currentManualSearchThreadActive
+            searchstatus = 'searching'
+            if searchThread.success:
+                searchstatus = 'finished'
+            episodes.append({'episode': searchThread.segment.episode,
+                             'episodeindexid': searchThread.segment.indexerid,
+                         'season' : searchThread.segment.season, 
+                         'searchstatus' : searchstatus, 
+                         'status' : statusStrings[searchThread.segment.status], 
+                         'quality': self.getQualityClass(searchThread.segment)})
+        
+        if finishedManualSearchThreadItems:
+            for searchThread in finishedManualSearchThreadItems:
+                if str(searchThread.show.indexerid) == show and not [x for x in episodes if x['episodeindexid'] == searchThread.segment.indexerid]:
+                    searchstatus = 'finished'
+                    episodes.append({'episode': searchThread.segment.episode,
+                                     'episodeindexid': searchThread.segment.indexerid,
+                             'season' : searchThread.segment.season, 
+                             'searchstatus' : searchstatus, 
+                             'status' : statusStrings[searchThread.segment.status], 
+                             'quality': self.getQualityClass(searchThread.segment)})
+        
+        return json.dumps({'show': show, 'episodes' : episodes})
 
+        #return json.dumps()
+    
+    def getQualityClass(self, ep_obj):
+        # return the correct json value
+    
+        # Find the quality class for the episode
+        quality_class = Quality.qualityStrings[Quality.UNKNOWN]
+        ep_status, ep_quality = Quality.splitCompositeStatus(ep_obj.status)
+        for x in (SD, HD720p, HD1080p):
+            if ep_quality in Quality.splitQuality(x)[0]:
+                quality_class = qualityPresetStrings[x]
+                break
+
+        return quality_class
 
     def searchEpisodeSubtitles(self, show=None, season=None, episode=None):
 
@@ -4450,26 +4517,15 @@ class Home(MainHandler):
         ep_queue_item = search_queue.FailedQueueItem(ep_obj.show, ep_obj)
         sickbeard.searchQueueScheduler.action.add_item(ep_queue_item)  # @UndefinedVariable
 
-        # wait until the queue item tells us whether it worked or not
-        while ep_queue_item.success is None:  # @UndefinedVariable
-            time.sleep(cpu_presets[sickbeard.CPU_PRESET])
-
-        # return the correct json value
         if ep_queue_item.success:
-            # Find the quality class for the episode
-            quality_class = Quality.qualityStrings[Quality.UNKNOWN]
-            ep_status, ep_quality = Quality.splitCompositeStatus(ep_obj.status)
-            for x in (SD, HD720p, HD1080p):
-                if ep_quality in Quality.splitQuality(x)[0]:
-                    quality_class = qualityPresetStrings[x]
-                    break
-
-            return json.dumps({'result': statusStrings[ep_obj.status],
-                               'quality': quality_class
-            })
-
-        return json.dumps({'result': 'failure'})
-
+            return returnManualSearchResult(ep_queue_item)
+        if not ep_queue_item.started and ep_queue_item.success is None:
+            return json.dumps({'result': 'success'}) #I Actually want to call it queued, because the search hasnt been started yet!
+        if ep_queue_item.started and ep_queue_item.success is None:
+            return json.dumps({'result': 'success'})
+        else:
+            return json.dumps({'result': 'failure'})
+        
 
 class UI(MainHandler):
     def add_message(self):
