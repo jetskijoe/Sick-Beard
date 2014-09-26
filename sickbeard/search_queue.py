@@ -84,9 +84,9 @@ class SearchQueue(generic_queue.GenericQueue):
         return self.min_priority >= generic_queue.QueuePriorities.NORMAL
 
     def is_manualsearch_in_progress(self):
-        for cur_item in self.queue + [self.currentItem]:
-            if isinstance(cur_item, (ManualSearchQueueItem, FailedQueueItem)):
-                return True
+        # Only referenced in webserve.py, only current running manualsearch or failedsearch is needed!!
+        if isinstance(self.currentItem, (ManualSearchQueueItem, FailedQueueItem)):
+            return True
         return False
     
     def is_backlog_in_progress(self):
@@ -154,6 +154,7 @@ class DailySearchQueueItem(generic_queue.QueueItem):
             generic_queue.QueueItem.finish(self)
         except Exception:
             logger.log(traceback.format_exc(), logger.DEBUG)
+
         if self.success is None:
             self.success = False
 
