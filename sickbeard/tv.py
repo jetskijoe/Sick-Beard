@@ -272,6 +272,7 @@ class TVShow(object):
 
     def should_update(self, update_date=datetime.date.today()):
         
+        cur_indexerid = self.indexerid
         # In some situations self.status = None.. need to figure out where that is!
         if not self.status:
             self.status = ''
@@ -283,7 +284,6 @@ class TVShow(object):
             return True
 
         # run logic against the current show latest aired and next unaired data to see if we should bypass 'Ended' status
-        cur_indexerid = self.indexerid
 
         graceperiod = datetime.timedelta(days=30)
 
