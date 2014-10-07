@@ -16,6 +16,7 @@
 
 <script type="text/javascript" src="$sbRoot/js/configPostProcessing.js?$sbPID"></script>
 <script type="text/javascript" src="$sbRoot/js/config.js?$sbPID"></script>
+<div id="content960">
 #if $varExists('header') 
 	<h1 class="header">$header</h1>
 #else 
@@ -86,8 +87,12 @@
                             <input type="checkbox" name="skip_removed_files" id="skip_removed_files" #if $sickbeard.SKIP_REMOVED_FILES == True then "checked=\"checked\"" else ""# />
                             <label class="clearfix" for="skip_removed_files">
                                 <span class="component-title">Skip Remove Detection</span>
-                                <span class="component-desc">Skip detection of removed files, so they don't get set to ignored?<br /><b>NOTE:</b> This may mean SickRage misses renames as well</span>
+                                <span class="component-desc">Skip detection of removed files, so they don't get set to ignored?</span>
                             </label>
+							<label class="nocheck clearfix">
+						        <span class="component-title">&nbsp;</span>
+						        <span class="component-desc"><b>NOTE:</b> This may mean SickRage misses renames as well</span>
+						    </label>	
                         </div>
 						<div class="field-pair">
 						    <label class="nocheck clearfix">
@@ -111,7 +116,7 @@
                                 <span class="component-desc">Move srr/srt/sfv/etc files with the episode when processed?</span>
                             </label>
                         </div>
-
+						
                         <div class="field-pair">
                             <input type="checkbox" name="postpone_if_sync_files" id="postpone_if_sync_files" #if $sickbeard.POSTPONE_IF_SYNC_FILES == True then "checked=\"checked\"" else ""# />
                             <label class="clearfix" for="postpone_if_sync_files">
@@ -244,8 +249,8 @@
                         </div>
 
                         <div id="metadataLegend">
-                            <div style="width: 190px; float: left;">Create:</div>
-                            <div style="width: 260px; float: left;">Results:</div>
+                            <div style="width: 50%; float: left;">Create:</div>
+                            <div style="width: 50%; float: left;">Results:</div>
                         </div>
                         <div class="clearfix"></div>
 
@@ -477,7 +482,7 @@
                             <br/>
                         </div>
 
-                        <div class="field-pair">
+                        <div class="field-pair">                                                                                                                          
                             <input type="checkbox" id="naming_strip_year"  name="naming_strip_year" #if $sickbeard.NAMING_STRIP_YEAR then "checked=\"checked\"" else ""#/> 
                             <label class="clearfix" for="naming_strip_year">                                                                                              
                                 <span class="component-title">Strip Show Year</span>                                                                                      
@@ -702,7 +707,7 @@
                                         </span>
                                         <span class="component-desc">
                                             <input type="text" size="45" name="naming_sports_pattern" id="naming_sports_pattern" class="custom-pattern" value="$sickbeard.NAMING_SPORTS_PATTERN" style="font-size: 13px; height: 18px; margin-top: -8px"/>
-                                            <img src="$sbRoot/images/legend16.png" width="16" height="16" alt="[Toggle Key]" id="show_naming_sports_key" title="Toggle sports Naming Legend" style="padding: 0 0 0 3px; margin-top: -2px;" />
+                                            <img src="$sbRoot/images/legend16.png" width="16" height="16" alt="[Toggle Key]" id="show_naming_sports_key" title="Toggle Sports Naming Legend" style="padding: 0 0 0 3px; margin-top: -2px;" />
                                         </span>
                                     </label>
                                 </div>
@@ -880,7 +885,7 @@
                                         </span>
                                         <span class="component-desc">
                                             <input type="text" size="45" name="naming_anime_pattern" id="naming_anime_pattern" class="custom-pattern" value="$sickbeard.NAMING_ANIME_PATTERN" style="font-size: 13px; height: 18px; margin-top: -8px"/>
-                                            <img src="$sbRoot/images/legend16.png" width="16" height="16" alt="[Toggle Key]" id="show_naming_anime_key" title="Toggle anime Naming Legend" style="padding: 0 0 0 3px; margin-top: -2px;" />
+                                            <img src="$sbRoot/images/legend16.png" width="16" height="16" alt="[Toggle Key]" id="show_naming_anime_key" title="Toggle Anime Naming Legend" style="padding: 0 0 0 3px; margin-top: -2px;" />
                                         </span>
                                     </label>
                                 </div>
@@ -916,24 +921,44 @@
                                               <td>Show_Name</td>
                                             </tr>
                                             <tr class="even">
-                                              <td class="align-right"><b>Anime Air Date:</b></td>
-                                              <td>%AD</td>
-                                              <td>9 Mar 2011</td>
+                                              <td class="align-right"><b>Season Number:</b></td>
+                                              <td>%S</td>
+                                              <td>2</td>
                                             </tr>
                                             <tr>
                                               <td>&nbsp;</td>
-                                              <td>%A.D</td>
-                                              <td>9.Mar.2011</td>
+                                              <td>%0S</td>
+                                              <td>02</td>
                                             </tr>
                                             <tr class="even">
-                                              <td>&nbsp;</td>
-                                              <td>%A_D</td>
-                                              <td>9_Mar_2011</td>
+                                              <td class="align-right"><b>XEM Season Number:</b></td>
+                                              <td>%XMS</td>
+                                              <td>2</td>
                                             </tr>
                                             <tr>
                                               <td>&nbsp;</td>
-                                              <td>%A-D</td>
-                                              <td>9-Mar-2011</td>
+                                              <td>%0XMS</td>
+                                              <td>02</td>
+                                            </tr>
+                                            <tr class="even">
+                                              <td class="align-right"><b>Episode Number:</b></td>
+                                              <td>%E</td>
+                                              <td>3</td>
+                                            </tr>
+                                            <tr>
+                                              <td>&nbsp;</td>
+                                              <td>%0E</td>
+                                              <td>03</td>
+                                            </tr>
+                                            <tr class="even">
+                                              <td class="align-right"><b>XEM Episode Number:</b></td>
+                                              <td>%XME</td>
+                                              <td>3</td>
+                                            </tr>
+                                            <tr>
+                                              <td>&nbsp;</td>
+                                              <td>%0XME</td>
+                                              <td>03</td>
                                             </tr>
                                             <tr class="even">
                                               <td class="align-right"><b>Episode Name:</b></td>
@@ -966,36 +991,11 @@
                                               <td>720p_BluRay</td>
                                             </tr>
                                             <tr class="even">
-                                              <td class="align-right"><b>Year:</b></td>
-                                              <td>%Y</td>
-                                              <td>2010</td>
-                                            </tr>
-                                            <tr>
-                                              <td class="align-right"><b>Month:</b></td>
-                                              <td>%M</td>
-                                              <td>3</td>
-                                            </tr>
-                                            <tr class="even">
-                                              <td class="align-right">&nbsp;</td>
-                                              <td>%0M</td>
-                                              <td>03</td>
-                                            </tr>
-                                            <tr>
-                                              <td class="align-right"><b>Day:</b></td>
-                                              <td>%D</td>
-                                              <td>9</td>
-                                            </tr>
-                                            <tr class="even">
-                                              <td class="align-right">&nbsp;</td>
-                                              <td>%0D</td>
-                                              <td>09</td>
-                                            </tr>
-                                            <tr>
                                               <td class="align-right"><i class="icon-info-sign" title="Multi-EP style is ignored"></i> <b>Release Name:</b></td>
                                               <td>%RN</td>
-                                              <td>Show.Name.9th.Mar.2011.HDTV.XviD-RLSGROUP</td>
+                                              <td>Show.Name.S02E03.HDTV.XviD-RLSGROUP</td>
                                             </tr>
-                                            <tr class="even">
+                                            <tr>
                                               <td class="align-right"><i class="icon-info-sign" title="'SiCKRAGE' is used in place of RLSGROUP if it could not be properly detected"></i> <b>Release Group:</b></td>
                                               <td>%RG</td>
                                               <td>RLSGROUP</td>
@@ -1089,7 +1089,7 @@
 			<input type="submit" class="btn config_submitter button" value="Save Changes" /><br/>
 
 </form>
-</div></div>
+</div></div></div></div>
 <div class="clearfix"></div>
 
 <script type="text/javascript" charset="utf-8">

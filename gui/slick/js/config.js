@@ -47,7 +47,7 @@ $(document).ready(function(){
         beforeSubmit: function(){
             $('.config_submitter').each(function(){
                 $(this).attr("disabled", "disabled");
-                $(this).after('<span><img src="'+sbRoot+'/images/loading16.gif"> Saving...</span>');
+                $(this).after('<div id="wrap"><div class="spinner"></div><div class="item"> Saving...</div></div>');
                 $(this).hide();
             });
         },
@@ -56,9 +56,7 @@ $(document).ready(function(){
         }
     });
 
-    $('#api_key').click(function () {
-        $('#api_key').select()
-    });
+    $('#api_key').click(function(){ $('#api_key').select() });
     $("#generate_new_apikey").click(function(){
         $.get(sbRoot + '/config/general/generateKey', 
             function(data){
@@ -72,8 +70,9 @@ $(document).ready(function(){
 
     $('#branchCheckout').click(function () {
         url = sbRoot+'/home/branchCheckout?branch='+$("#branchVersion").val();
-        window.location.href = url;
+		window.location.href = url;
     });
+	
 });
 
 function config_success(){

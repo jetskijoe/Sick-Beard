@@ -468,7 +468,7 @@ class MainHandler(RequestHandler):
                     ical = ical + 'DESCRIPTION:' + show['airs'] + ' on ' + show['network'] + '\\n\\n' + \
                            episode['description'].splitlines()[0] + '\r\n'
                 else:
-                    ical = ical + 'DESCRIPTION:' + show['airs'] + ' on ' + show['network'] + '\r\n'
+                    ical = ical + 'DESCRIPTION:' + (show['airs'] or '(Unknown airs)') + ' on ' + (show['network'] or 'Unknown network') + '\r\n'
                 ical = ical + 'LOCATION:' + 'Episode ' + str(episode['episode']) + ' - Season ' + str(
                     episode['season']) + '\r\n'
                 ical = ical + 'END:VEVENT\r\n'
@@ -1425,7 +1425,9 @@ class ConfigGeneral(MainHandler):
 
     def saveRootDirs(self, rootDirString=None):
         sickbeard.ROOT_DIRS = rootDirString
-
+        
+    def saveImdbWatchlists(self, imdbWatchlistString=None):
+        sickbeard.IMDB_WATCHLISTCSV = imdbWatchlistString
 
     def saveAddShowDefaults(self, defaultStatus, anyQualities, bestQualities, defaultFlattenFolders, subtitles=False,
                             anime=False, scene=False):
@@ -1485,7 +1487,7 @@ class ConfigGeneral(MainHandler):
                     handle_reverse_proxy=None, sort_article=None, auto_update=None, notify_on_update=None,
                     proxy_setting=None, anon_redirect=None, git_path=None, calendar_unprotected=None,
                     fuzzy_dating=None, trim_zero=None, date_preset=None, date_preset_na=None, time_preset=None,
-                    indexer_timeout=None, play_videos=None, rootDir=None):
+                    indexer_timeout=None, play_videos=None, rootDir=None, use_imdbwl=None, imdbWatchlistCsv=None):
 
         results = []
 
@@ -1495,6 +1497,7 @@ class ConfigGeneral(MainHandler):
         config.change_VERSION_NOTIFY(config.checkbox_to_value(version_notify))
         sickbeard.AUTO_UPDATE = config.checkbox_to_value(auto_update)
         sickbeard.NOTIFY_ON_UPDATE = config.checkbox_to_value(notify_on_update)
+        sickbeard.USE_IMDBWATCHLIST = config.checkbox_to_value(use_imdbwl)
         # sickbeard.LOG_DIR is set in config.change_LOG_DIR()
 
         sickbeard.UPDATE_SHOWS_ON_START = config.checkbox_to_value(update_shows_on_start)
@@ -1629,7 +1632,7 @@ class ConfigSearch(MainHandler):
                    backlog_startup=None, dailysearch_startup=None,
                    torrent_dir=None, torrent_username=None, torrent_password=None, torrent_host=None,
                    torrent_label=None, torrent_path=None, torrent_verify_cert=None,
-                   torrent_seed_time=None, torrent_paused=None, torrent_high_bandwidth=None, ignore_words=None):
+                   torrent_seed_time=None, torrent_paused=None, torrent_high_bandwidth=None, ignore_words=None, require_words=None):
 
         results = []
 
@@ -1652,6 +1655,7 @@ class ConfigSearch(MainHandler):
         sickbeard.USENET_RETENTION = config.to_int(usenet_retention, default=500)
 
         sickbeard.IGNORE_WORDS = ignore_words if ignore_words else ""
+        sickbeard.REQUIRE_WORDS = require_words if require_words else ""
 
         sickbeard.DOWNLOAD_PROPERS = config.checkbox_to_value(download_propers)
         sickbeard.CHECK_PROPERS_INTERVAL = check_propers_interval

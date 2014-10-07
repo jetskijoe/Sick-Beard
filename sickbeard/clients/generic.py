@@ -48,7 +48,7 @@ class GenericClient(object):
             return False
         try:
             self.response = self.session.__getattribute__(method)(self.url, params=params, data=data, files=files,
-                                                                  timeout=20, verify=False)
+                                                                  timeout=120, verify=False)
         except requests.exceptions.ConnectionError, e:
             logger.log(self.name + u': Unable to connect ' + ex(e), logger.ERROR)
             return False
@@ -207,7 +207,7 @@ class GenericClient(object):
     def testAuthentication(self):
 
         try:
-            self.response = self.session.get(self.url, timeout=20, verify=False)
+            self.response = self.session.get(self.url, timeout=120, verify=False)
         except requests.exceptions.ConnectionError, e:
             return False, 'Error: ' + self.name + ' Connection Error'
         except (requests.exceptions.MissingSchema, requests.exceptions.InvalidURL):
