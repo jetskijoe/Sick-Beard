@@ -95,9 +95,11 @@ def authenticated(handler_class):
             try:
                 if not (sickbeard.WEB_USERNAME and sickbeard.WEB_PASSWORD):
                     return True
-                elif (handler.request.uri.startswith('/api') and '/api/builder' not in handler.request.uri):
+                elif (handler.request.uri.startswith(sickbeard.WEB_ROOT + '/api') and
+                              '/api/builder' not in handler.request.uri):
                     return True
-                elif (handler.request.uri.startswith('/calendar') and sickbeard.CALENDAR_UNPROTECTED):
+                elif (handler.request.uri.startswith(sickbeard.WEB_ROOT + '/calendar') and
+                        sickbeard.CALENDAR_UNPROTECTED):
                     return True
 
                 auth_hdr = handler.request.headers.get('Authorization')
@@ -290,6 +292,14 @@ class MainHandler(RequestHandler):
 
         redirect("/home/")
 
+    def setPosterSortBy(self, sort):
+        if sort not in ('name', 'date', 'network', 'progress'):
+            sort = 'name'
+        sickbeard.POSTER_SORTBY = sort
+        sickbeard.save_config()
+    def setPosterSortDir(self, direction):
+        sickbeard.POSTER_SORTDIR = int(direction)
+        sickbeard.save_config()
     def setHistoryLayout(self, layout):
 
         if layout not in ('compact', 'detailed'):
@@ -500,6 +510,7 @@ class PageTemplate(Template):
         self.sbHttpsPort = sickbeard.WEB_PORT
         self.sbHttpsEnabled = sickbeard.ENABLE_HTTPS
         self.sbHandleReverseProxy = sickbeard.HANDLE_REVERSE_PROXY
+        self.sbThemeName = sickbeard.THEME_NAME
 
         if headers['Host'][0] == '[':
             self.sbHost = re.match("^\[.*\]", headers['Host'], re.X | re.M | re.S).group(0)
@@ -948,6 +959,8 @@ class Manage(MainHandler):
             if showObj:
                 showList.append(showObj)
 
+        archive_firstmatch_all_same = True
+        last_archive_firstmatch = None
         flatten_folders_all_same = True
         last_flatten_folders = None
 
@@ -979,6 +992,11 @@ class Manage(MainHandler):
             cur_root_dir = ek.ek(os.path.dirname, curShow._location)
             if cur_root_dir not in root_dir_list:
                 root_dir_list.append(cur_root_dir)
+            if archive_firstmatch_all_same:
+                if last_archive_firstmatch not in (None, curShow.archive_firstmatch):
+                    archive_firstmatch_all_same = False
+                else:
+                    last_archive_firstmatch = curShow.archive_firstmatch
 
             # if we know they're not all the same then no point even bothering
             if paused_all_same:
@@ -1032,6 +1050,7 @@ class Manage(MainHandler):
                     last_air_by_date = curShow.air_by_date
 
         t.showList = toEdit
+        t.archive_firstmatch_value = last_archive_firstmatch if archive_firstmatch_all_same else None
         t.paused_value = last_paused if paused_all_same else None
         t.anime_value = last_anime if anime_all_same else None
         t.flatten_folders_value = last_flatten_folders if flatten_folders_all_same else None
@@ -1045,7 +1064,7 @@ class Manage(MainHandler):
         return _munge(t)
 
 
-    def massEditSubmit(self, paused=None, anime=None, sports=None, scene=None, flatten_folders=None,
+    def massEditSubmit(self, archive_firstmatch=None, paused=None, anime=None, sports=None, scene=None, flatten_folders=None,
                        quality_preset=False,
                        subtitles=None, air_by_date=None, anyQualities=[], bestQualities=[], toEdit=None, *args,
                        **kwargs):
@@ -1074,6 +1093,11 @@ class Manage(MainHandler):
                     u"For show " + showObj.name + " changing dir from " + showObj._location + " to " + new_show_dir)
             else:
                 new_show_dir = showObj._location
+            if archive_firstmatch == 'keep':
+                new_archive_firstmatch = showObj.archive_firstmatch
+            else:
+                new_archive_firstmatch = True if archive_firstmatch == 'enable' else False
+            new_archive_firstmatch = 'on' if new_archive_firstmatch else 'off'
 
             if paused == 'keep':
                 new_paused = showObj.paused
@@ -1125,6 +1149,7 @@ class Manage(MainHandler):
 
             curErrors += Home(self.application, self.request).editShow(curShow, new_show_dir, anyQualities,
                                                                        bestQualities, exceptions_list,
+                                                                       archive_firstmatch=new_archive_firstmatch,
                                                                        flatten_folders=new_flatten_folders,
                                                                        paused=new_paused, sports=new_sports,
                                                                        subtitles=new_subtitles, anime=new_anime,
@@ -1427,8 +1452,6 @@ class ConfigGeneral(MainHandler):
     def saveRootDirs(self, rootDirString=None):
         sickbeard.ROOT_DIRS = rootDirString
         
-    def saveImdbWatchlists(self, imdbWatchlistString=None):
-        sickbeard.IMDB_WATCHLISTCSV = imdbWatchlistString
 
     def saveAddShowDefaults(self, defaultStatus, anyQualities, bestQualities, defaultFlattenFolders, subtitles=False,
                             anime=False, scene=False):
@@ -1482,13 +1505,13 @@ class ConfigGeneral(MainHandler):
 
 
     def saveGeneral(self, log_dir=None, web_port=None, web_log=None, encryption_version=None, web_ipv6=None,
-                    update_shows_on_start=None, update_frequency=None, launch_browser=None, web_username=None,
+                    update_shows_on_start=None, trash_remove_show=None, trash_rotate_logs=None, update_frequency=None, launch_browser=None, web_username=None,
                     use_api=None, api_key=None, indexer_default=None, timezone_display=None, cpu_preset=None,
                     web_password=None, version_notify=None, enable_https=None, https_cert=None, https_key=None,
                     handle_reverse_proxy=None, sort_article=None, auto_update=None, notify_on_update=None,
-                    proxy_setting=None, proxy_indexers=None, anon_redirect=None, git_path=None, calendar_unprotected=None,
+                    proxy_setting=None, proxy_indexers=None, anon_redirect=None, git_path=None, git_remote=None, calendar_unprotected=None,
                     fuzzy_dating=None, trim_zero=None, date_preset=None, date_preset_na=None, time_preset=None,
-                    indexer_timeout=None, play_videos=None, rootDir=None, use_imdbwl=None, imdbWatchlistCsv=None, theme_name=None):
+                    indexer_timeout=None, play_videos=None, rootDir=None, theme_name=None):
 
         results = []
 
@@ -1498,10 +1521,11 @@ class ConfigGeneral(MainHandler):
         config.change_VERSION_NOTIFY(config.checkbox_to_value(version_notify))
         sickbeard.AUTO_UPDATE = config.checkbox_to_value(auto_update)
         sickbeard.NOTIFY_ON_UPDATE = config.checkbox_to_value(notify_on_update)
-        sickbeard.USE_IMDBWATCHLIST = config.checkbox_to_value(use_imdbwl)
         # sickbeard.LOG_DIR is set in config.change_LOG_DIR()
 
         sickbeard.UPDATE_SHOWS_ON_START = config.checkbox_to_value(update_shows_on_start)
+        sickbeard.TRASH_REMOVE_SHOW = config.checkbox_to_value(trash_remove_show)
+        sickbeard.TRASH_ROTATE_LOGS = config.checkbox_to_value(trash_rotate_logs)
         config.change_UPDATE_FREQUENCY(update_frequency)
         sickbeard.LAUNCH_BROWSER = config.checkbox_to_value(launch_browser)
         sickbeard.SORT_ARTICLE = config.checkbox_to_value(sort_article)
@@ -1510,6 +1534,7 @@ class ConfigGeneral(MainHandler):
         sickbeard.PROXY_SETTING = proxy_setting
         sickbeard.PROXY_INDEXERS = config.checkbox_to_value(proxy_indexers)
         sickbeard.GIT_PATH = git_path
+        sickbeard.GIT_REMOTE = git_remote
         sickbeard.CALENDAR_UNPROTECTED = config.checkbox_to_value(calendar_unprotected)
         # sickbeard.LOG_DIR is set in config.change_LOG_DIR()
 
@@ -2955,6 +2980,10 @@ class NewHomeAddShows(MainHandler):
 
         t.trending_shows = TraktCall("shows/trending.json/%API%", sickbeard.TRAKT_API_KEY)
 
+        if None is not t.trending_shows:
+            for item in t.trending_shows:
+                if helpers.findCertainShow(sickbeard.showList, int(item['tvdb_id'])):
+                    item['tvdb_id'] = u'ExistsInLibrary'
         return _munge(t)
 
     def existingShows(self, *args, **kwargs):
@@ -3678,9 +3707,6 @@ class Home(MainHandler):
         if not sickbeard.showQueueScheduler.action.isBeingAdded(showObj):  # @UndefinedVariable
             if not sickbeard.showQueueScheduler.action.isBeingUpdated(showObj):  # @UndefinedVariable
                 t.submenu.append(
-                    {'title': 'Delete', 'path': 'home/deleteShow?show=%d&amp;full=1' % showObj.indexerid,
-                     'confirm': True})
-                t.submenu.append(
                     {'title': 'Remove', 'path': 'home/deleteShow?show=%d' % showObj.indexerid, 'confirm': True})
                 t.submenu.append({'title': 'Re-scan files', 'path': 'home/refreshShow?show=%d' % showObj.indexerid})
                 t.submenu.append(
@@ -3848,7 +3874,10 @@ class Home(MainHandler):
         anime = config.checkbox_to_value(anime)
         subtitles = config.checkbox_to_value(subtitles)
 
-        indexer_lang = indexerLang
+        if indexerLang and indexerLang in sickbeard.indexerApi(showObj.indexer).indexer().config['valid_languages']:
+            indexer_lang = indexerLang
+        else:
+            indexer_lang = showObj.lang
 
         # if we changed the language then kick off an update
         if indexer_lang == showObj.lang:
@@ -3933,6 +3962,7 @@ class Home(MainHandler):
         with showObj.lock:
             newQuality = Quality.combineQualities(map(int, anyQualities), map(int, bestQualities))
             showObj.quality = newQuality
+            showObj.archive_firstmatch = archive_firstmatch
 
             # reversed for now
             if bool(showObj.flatten_folders) != bool(flatten_folders):
@@ -3952,7 +3982,6 @@ class Home(MainHandler):
             if not directCall:
                 showObj.lang = indexer_lang
                 showObj.dvdorder = dvdorder
-                showObj.archive_firstmatch = archive_firstmatch
                 showObj.rls_ignore_words = rls_ignore_words.strip()
                 showObj.rls_require_words = rls_require_words.strip()
 
@@ -4033,7 +4062,10 @@ class Home(MainHandler):
 
         showObj.deleteShow(bool(full))
 
-        ui.notifications.message('<b>%s</b> has been deleted' % showObj.name)
+        ui.notifications.message('<b>%s</b> has been %s %s' %
+                                 (showObj.name,
+                                 ('deleted', 'trashed')[sickbeard.TRASH_REMOVE_SHOW],
+                                 ('(media untouched)', '(with all related media)')[bool(full)]))
         redirect("/home/")
 
 
