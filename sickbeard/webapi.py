@@ -164,14 +164,14 @@ class Api(webserve.MainHandler):
         self.set_header("Content-Type", "application/json")
         try:
             out = json.dumps(dict, indent=self.intent, sort_keys=True)
-            callback = self.request.headers.get('callback', None) or self.request.headers.get('jsonp', None)
-            if callback != None:
-                out = callback + '(' + out + ');'  # wrap with JSONP call if requested
+            if 'jsonp' in self.request.query_arguments:
+                out = self.request.arguments['jsonp'] + '(' + out + ');'  # wrap with JSONP call if requested
         except Exception, e:  # if we fail to generate the output fake an error
             logger.log(u"API :: " + traceback.format_exc(), logger.DEBUG)
             out = '{"result":"' + result_type_map[RESULT_ERROR] + '", "message": "error while composing output: "' + ex(
                 e) + '"}'
-        return out
+        tornado_write_hack_dict = {'unwrap_json': out}
+        return tornado_write_hack_dict
 
     def _grand_access(self, realKey, args, kwargs):
         """ validate api key and log result """
@@ -776,7 +776,7 @@ class CMD_ComingEpisodes(ApiCall):
                 continue
 
             ep['airs'] = str(ep['airs']).replace('am', ' AM').replace('pm', ' PM').replace('  ', ' ')
-            dtEpisodeAirs = network_timezones.parse_date_time(int(ep['airdate']), ep['airs'], ep['network'])
+            dtEpisodeAirs = sbdatetime.sbdatetime.convert_to_setting(network_timezones.parse_date_time(int(ep['airdate']), ep['airs'], ep['network']))
             ep['airdate'] = dtEpisodeAirs.toordinal()
             status = "soon"
             if ep["airdate"] < today:
@@ -865,7 +865,7 @@ class CMD_Episode(ApiCall):
         elif not showPath:  # show dir is broken ... episode path will be empty
             episode["location"] = ""
         # convert stuff to human form
-        episode['airdate'] = sbdatetime.sbdatetime.sbfdate(network_timezones.parse_date_time(int(episode['airdate']), showObj.airs, showObj.network), d_preset=dateFormat)
+        episode['airdate'] = sbdatetime.sbdatetime.sbfdate(sbdatetime.sbdatetime.convert_to_setting(network_timezones.parse_date_time(int(episode['airdate']), showObj.airs, showObj.network)), d_preset=dateFormat)
         status, quality = Quality.splitCompositeStatus(int(episode["status"]))
         episode["status"] = _get_status_Strings(status)
         episode["quality"] = _get_quality_string(quality)
@@ -1810,7 +1810,7 @@ class CMD_Show(ApiCall):
         showDict["status"] = showObj.status
 
         if showObj.nextaired:
-            dtEpisodeAirs = network_timezones.parse_date_time(showObj.nextaired, showDict['airs'], showDict['network'])
+            dtEpisodeAirs = sbdatetime.sbdatetime.convert_to_setting(network_timezones.parse_date_time(showObj.nextaired, showDict['airs'], showDict['network']))
             showDict['airs'] = sbdatetime.sbdatetime.sbftime(dtEpisodeAirs, t_preset=timeFormat).lstrip('0').replace(' 0', ' ')
             showDict['next_ep_airdate'] = sbdatetime.sbdatetime.sbfdate(dtEpisodeAirs, d_preset=dateFormat)
         else:
@@ -2318,7 +2318,7 @@ class CMD_ShowSeasons(ApiCall):
                 status, quality = Quality.splitCompositeStatus(int(row["status"]))
                 row["status"] = _get_status_Strings(status)
                 row["quality"] = _get_quality_string(quality)
-                dtEpisodeAirs = network_timezones.parse_date_time(row['airdate'],showObj.airs,showObj.network)
+                dtEpisodeAirs = sbdatetime.sbdatetime.convert_to_setting(network_timezones.parse_date_time(row['airdate'],showObj.airs,showObj.network))
                 row['airdate'] = sbdatetime.sbdatetime.sbfdate(dtEpisodeAirs, d_preset=dateFormat)
                 curSeason = int(row["season"])
                 curEpisode = int(row["episode"])
@@ -2341,7 +2341,7 @@ class CMD_ShowSeasons(ApiCall):
                 status, quality = Quality.splitCompositeStatus(int(row["status"]))
                 row["status"] = _get_status_Strings(status)
                 row["quality"] = _get_quality_string(quality)
-                dtEpisodeAirs = network_timezones.parse_date_time(row['airdate'], showObj.airs, showObj.network)
+                dtEpisodeAirs = sbdatetime.sbdatetime.convert_to_setting(network_timezones.parse_date_time(row['airdate'], showObj.airs, showObj.network))
                 row['airdate'] = sbdatetime.sbdatetime.sbfdate(dtEpisodeAirs, d_preset=dateFormat)
                 if not curEpisode in seasons:
                     seasons[curEpisode] = {}
@@ -2586,7 +2586,7 @@ class CMD_Shows(ApiCall):
             }
 
             if curShow.nextaired:
-                dtEpisodeAirs = network_timezones.parse_date_time(curShow.nextaired, curShow.airs, showDict['network'])
+                dtEpisodeAirs = sbdatetime.sbdatetime.convert_to_setting(network_timezones.parse_date_time(curShow.nextaired, curShow.airs, showDict['network']))
                 showDict['next_ep_airdate'] = sbdatetime.sbdatetime.sbfdate(dtEpisodeAirs, d_preset=dateFormat)
             else:
                 showDict['next_ep_airdate'] = ''

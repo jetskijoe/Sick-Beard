@@ -130,7 +130,7 @@ class CheckVersion():
 
 class UpdateManager():
     def get_github_repo_user(self):
-        return 'echel0n'
+        return 'SiCKRAGETV'
 
     def get_github_repo(self):
         return 'SickRage'
@@ -442,8 +442,9 @@ class GitUpdateManager(UpdateManager):
         self._num_commits_behind = 0
         self._num_commits_ahead = 0
 
+        self.update_remote_origin()
         # get all new info from github
-        output, err, exit_status = self._run_git(self._git_path, 'fetch origin')
+        output, err, exit_status = self._run_git(self._git_path, 'fetch %s' % sickbeard.GIT_REMOTE)
 
         if not exit_status == 0:
             logger.log(u"Unable to contact github, can't check for update", logger.ERROR)
@@ -537,8 +538,9 @@ class GitUpdateManager(UpdateManager):
         on the call's success.
         """
 
+        self.update_remote_origin()
         if self.branch == self._find_installed_branch():
-            output, err, exit_status = self._run_git(self._git_path, 'pull -f origin ' + self.branch)  # @UnusedVariable
+            output, err, exit_status = self._run_git(self._git_path, 'pull -f %s %s' % (sickbeard.GIT_REMOTE, self.branch))  # @UnusedVariable
         else:
             output, err, exit_status = self._run_git(self._git_path, 'checkout -f ' + self.branch)  # @UnusedVariable
 
@@ -553,11 +555,14 @@ class GitUpdateManager(UpdateManager):
         return False
 
     def list_remote_branches(self):
-        branches, err, exit_status = self._run_git(self._git_path, 'ls-remote --heads origin')  # @UnusedVariable
+        self.update_remote_origin()
+        branches, err, exit_status = self._run_git(self._git_path, 'ls-remote --heads %s' % sickbeard.GIT_REMOTE)  # @UnusedVariable
         if exit_status == 0 and branches:
             return re.findall('\S+\Wrefs/heads/(.*)', branches)
         return []
 
+    def update_remote_origin(self):
+        self._run_git(self._git_path, 'config remote.origin.url %s' % sickbeard.GIT_REMOTE_URL)
 
 class SourceUpdateManager(UpdateManager):
     def __init__(self):

@@ -1,4 +1,4 @@
-### 0.x.x (2014-11-10 xx:xx:xx UTC)
+### 0.x.x (2014-11-11 xx:xx:xx UTC)
 
 * Add Bootstrap for UI features
 * Change UI to resize fluidly on different display sizes, fixes the issue where top menu items would disappear on smaller screens
@@ -47,9 +47,14 @@
 * Add handler for when Trakt returns no results for Add Show/Add Trending Show page
 * Fix image links when anchor child images are not found at Trakt on Add Show/Add Trending Show page
 * Add image to be used when Trakt posters are void on Add Show/Add Trending Show page
-* Fix growl registration not sending sickrage update notification registration.
+* Fix growl registration not sending sickrage an update notification registration
+* Add an anonymous redirect builder for external links
+* Update xbmc link to Kodi at Config Notifications
 * Fix missing url for kickasstorrents in config_providers
 * Fix post processing when using tvrage indexer and mediabrowser metadata generation
+* Change reporting failed network_timezones.txt updates from an error to a warning
+* Fix missing header and "on <missing text>" when network is none and Layout "Poster" with Sort By "Network" on coming episodes page.
+* Change how the "local/network" setting is handled to address some issues
 
 [develop changelog]
 * Change improve display of progress bars in the Downloads columns of the show list page
@@ -68,18 +73,24 @@
 * Fix progress sort direction for poster layout view on home page
 * Fix invalid use of str() in the Send2Trash library for platforms other
 * Fix dropdown confirm dialogs for restart and shutdown
-
+* Fix parsing utf8 data from tvdb and tvrage
+* Fix display show status and subtitle searches to use new column class names
+* Fix API response header for JSON content type and the return of JSONP data
+* Update PNotify to version [2.0.1]
+* Change the notification popups to always show the close button.
+* Fix issue where popups did not show if multiple tabs are used. Popups now queue and display when a tab is brought into focus.
+* Fix missing HTML in notifications resulting in incorrect formatting.
 
 ### 0.2.1 (2014-10-22 06:41:00 UTC)
 
-[full changelog](https://github.com/SickragePVR/SickRage/compare/release_0.2.0...release_0.2.1)
+[full changelog](https://github.com/SiCKRAGETV/SickRage/compare/release_0.2.0...release_0.2.1)
 
 * Fix HDtorrents provider screen scraping
 
 
 ### 0.2.0 (2014-10-21 12:36:50 UTC)
 
-[full changelog](https://github.com/SickragePVR/SickRage/compare/release_0.1.0...release_0.2.0)
+[full changelog](https://github.com/SiCKRAGETV/SickRage/compare/release_0.1.0...release_0.2.0)
 
 * Fix for failed episodes not counted in total
 * Fix for custom newznab providers with leading integer in name

@@ -215,15 +215,15 @@ class Quality:
             return Quality.HDTV
         elif (checkName(["HR", "WS"], all) or checkName(["720p", "[xh]\.?264"], all)):
             return Quality.HDTV
-        elif checkName(["720p|1080i", "hdtv", "mpeg-?2"], all):
-            return Quality.RAWHDTV
+        elif checkName(["720p|1080i", "hdtv", "mpeg-?2"], all) or checkName(["1080[pi].hdtv", "h.?264"], all):
+           return Quality.RAWHDTV
         elif checkName(["1080p", "hdtv", "x264"], all):
             return Quality.FULLHDTV
         elif (checkName(["720p", "web.dl|webrip"], all) or checkName(["720p", "(webhd|itunes)", "h.?264"], all) or checkName(["720p", "(webhd|itunes)", "avc"], all)) and not checkName(["TrollHD"], all):
             return Quality.HDWEBDL
         elif checkName(["1080p", "web.dl|webrip"], all) or checkName(["1080p", "itunes", "h.?264"], all):
             return Quality.FULLHDWEBDL
-        elif checkName(["720p", "bluray|hddvd", "x264"], all):
+        elif checkName(["720p", "bluray|hddvd|b[r|d]rip", "x264"], all):
             return Quality.HDBLURAY
         elif checkName(["1080p", "bluray|hddvd|b[r|d]rip", "x264"], all):
             return Quality.FULLHDBLURAY
