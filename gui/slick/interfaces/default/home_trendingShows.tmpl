@@ -14,12 +14,18 @@
 #import os.path
 #include $os.path.join($sickbeard.PROG_DIR, 'gui/slick/interfaces/default/inc_top.tmpl')
 
+<script type="text/javascript" src="$sbRoot/js/rootDirs.js?$sbPID"></script>
 <script type="text/javascript" src="$sbRoot/js/plotTooltip.js?$sbPID"></script>
 
 <script type="text/javascript" charset="utf-8">
 <!--
 
 \$(document).ready(function(){
+    \$( "#tabs" ).tabs({
+        collapsible: true,
+        selected: #if $sickbeard.ROOT_DIRS then '-1' else '0'#
+    });
+
     // initialise combos for dirty page refreshes
     \$('#showsort').val('original');
     \$('#showsortdirection').val('asc');
@@ -85,7 +91,19 @@
 #end if
 
 #if $trending_shows
-<div class="pull-right" style="margin-top: -40px;">
+<div id="tabs">
+    <ul>
+        <li><a href="#tabs-1">Manage Directories</a></li>
+        <li><a href="#tabs-2">Customize Options</a></li>
+    </ul>
+    <div id="tabs-1" class="existingtabs">
+        #include $os.path.join($sickbeard.PROG_DIR, "gui/slick/interfaces/default/inc_rootDirs.tmpl")
+    </div>
+    <div id="tabs-2" class="existingtabs">
+        #include $os.path.join($sickbeard.PROG_DIR, "gui/slick/interfaces/default/inc_addShowOptions.tmpl")
+    </div>
+    <br>
+
 	<span>Sort By:</span>
 	<select id="showsort" class="form-control form-control-inline input-sm">
 		<option value="name">Name</option>
@@ -112,8 +130,9 @@
 	</div>
 #else
 #for $cur_show in $trending_shows:
+#if not 'ExistsInLibrary' in $cur_show['tvdb_id']:
 
-#set $image = re.sub(r'(.*)(\..*?)$', r'\1-300\2', $cur_show['images']['poster'], 0, re.IGNORECASE | re.MULTILINE)
+#set $image = re.sub(r'(?im)(.*)(\..*?)$', r'\1-300\2', $cur_show['images']['poster'], 0)
 
 	<div class="trakt_show" data-name="$cur_show['title']" data-rating="$cur_show['ratings']['percentage']" data-votes="$cur_show['ratings']['votes']">
 		<div class="traktContainer">
@@ -130,16 +149,13 @@
 			<i>$cur_show['ratings']['votes'] votes</i>
 
 			<div class="traktShowTitleIcons">
-#if 'ExistsInLibrary' in $cur_show['tvdb_id']:
-				<p style="line-height: 1.5; padding: 2px 5px 3px">In library</p>
-#else
 				<a href="$sbRoot/home/addTraktShow?indexer_id=${cur_show['tvdb_id']}&amp;showName=${cur_show['title']}" class="btn btn-xs">Add Show</a>
-#end if
 			</div>
 		</div>
 		</div>
 	</div>
 
+#end if
 #end for
 #end if
 </div>

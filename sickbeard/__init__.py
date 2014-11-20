@@ -23,13 +23,13 @@ import datetime
 import socket
 import os
 import re
+import sys
+import os.path
 
 from threading import Lock
 
-# apparently py2exe won't build these unless they're imported somewhere
-import sys
-import os.path
-sys.path.append(os.path.abspath('../lib'))
+from github import Github
+
 from sickbeard import providers, metadata, config, webserveInit
 from sickbeard.providers.generic import GenericProvider
 from providers import ezrss, tvtorrents, btn, newznab, womble, thepiratebay, torrentleech, kat, iptorrents, \
@@ -78,6 +78,10 @@ NO_RESIZE = False
 # system events
 events = None
 
+# github
+gh = None
+
+# schedualers
 dailySearchScheduler = None
 backlogSearchScheduler = None
 showUpdateScheduler = None
@@ -107,6 +111,9 @@ BRANCH = ''
 GIT_REMOTE = ''
 GIT_REMOTE_URL = ''
 CUR_COMMIT_BRANCH = ''
+
+GIT_ORG = 'SiCKRAGETV'
+GIT_REPO = 'SickRage'
 
 INIT_LOCK = Lock()
 started = False
@@ -507,7 +514,7 @@ def initialize(consoleLogging=True):
             USE_FAILED_DOWNLOADS, DELETE_FAILED, ANON_REDIRECT, LOCALHOST_IP, TMDB_API_KEY, DEBUG, PROXY_SETTING, PROXY_INDEXERS, \
             AUTOPOSTPROCESSER_FREQUENCY, DEFAULT_AUTOPOSTPROCESSER_FREQUENCY, MIN_AUTOPOSTPROCESSER_FREQUENCY, \
             ANIME_DEFAULT, NAMING_ANIME, ANIMESUPPORT, USE_ANIDB, ANIDB_USERNAME, ANIDB_PASSWORD, ANIDB_USE_MYLIST, \
-            ANIME_SPLIT_HOME, SCENE_DEFAULT, PLAY_VIDEOS, BACKLOG_DAYS
+            ANIME_SPLIT_HOME, SCENE_DEFAULT, PLAY_VIDEOS, BACKLOG_DAYS, GIT_ORG, GIT_REPO, gh
 
         if __INITIALIZED__:
             return False
@@ -534,7 +541,9 @@ def initialize(consoleLogging=True):
         CheckSection(CFG, 'Pushbullet')
         CheckSection(CFG, 'Subtitles')
 
-        # wanted branch
+        # github api
+        gh = Github().get_organization(GIT_ORG).get_repo(GIT_REPO)  # wanted branch
+
         BRANCH = check_setting_str(CFG, 'General', 'branch', '')
 
         # git_remote
