@@ -96,7 +96,7 @@ class TVShow(object):
         self._scene = 0
         self._rls_ignore_words = ""
         self._rls_require_words = ""
-
+        self._default_ep_status = ""
         self.dirty = True
 
         self._location = ""
@@ -138,6 +138,7 @@ class TVShow(object):
     scene = property(lambda self: self._scene, dirty_setter("_scene"))
     rls_ignore_words = property(lambda self: self._rls_ignore_words, dirty_setter("_rls_ignore_words"))
     rls_require_words = property(lambda self: self._rls_require_words, dirty_setter("_rls_require_words"))
+    default_ep_status = property(lambda self: self._default_ep_status, dirty_setter("_default_ep_status"))
 
     @property
     def is_anime(self):
@@ -823,6 +824,9 @@ class TVShow(object):
 
             self.rls_ignore_words = sqlResults[0]["rls_ignore_words"]
             self.rls_require_words = sqlResults[0]["rls_require_words"]
+            self.default_ep_status = sqlResults[0]["default_ep_status"]
+            if not self.default_ep_status:
+                self.default_ep_status = ""
 
             if not self.imdbid:
                 self.imdbid = sqlResults[0]["imdb_id"]
@@ -1151,7 +1155,8 @@ class TVShow(object):
                         "imdb_id": self.imdbid,
                         "last_update_indexer": self.last_update_indexer,
                         "rls_ignore_words": self.rls_ignore_words,
-                        "rls_require_words": self.rls_require_words
+                        "rls_require_words": self.rls_require_words,
+                        "default_ep_status": self.default_ep_status
         }
 
         myDB = db.DBConnection()
@@ -1738,7 +1743,7 @@ class TVEpisode(object):
 
                 # if we somehow are still UNKNOWN then just skip it
                 elif self.status == UNKNOWN:
-                    self.status = SKIPPED
+                    self.status = self.show.default_ep_status
 
                 else:
                     logger.log(
@@ -2489,7 +2494,7 @@ class TVEpisode(object):
         if airs:
             hr = int(airs.group(1))
             hr = (12 + hr, hr)[None is airs.group(3)]
-            hr = (hr, hr - 12)[0 == hr % 12]
+            hr = (hr, hr - 12)[0 == hr % 12 and 0 != hr]
             min = int((airs.group(2), min)[None is airs.group(2)])
         airtime = datetime.time(hr, min)
 

@@ -871,9 +871,12 @@ class Tvdb:
             else:
                 url = self.config['url_epInfo'] % (sid, language)
 
-            epsEt = self._getetsrc(url, language=language)
+            try:
+                epsEt = self._getetsrc(url, language=language)
 
-            episodes =  epsEt["episode"]
+                episodes = epsEt["episode"]
+            except:
+                return False
             if not isinstance(episodes, list):
                 episodes = [episodes]
 
@@ -937,7 +940,7 @@ class Tvdb:
             # Item is integer, treat as show id
             if key not in self.shows:
                 self._getShowData(key, self.config['language'], True)
-            return self.shows[key]
+            return (None, self.shows[key])[key in self.shows]
 
         key = str(key).lower()
         self.config['searchterm'] = key

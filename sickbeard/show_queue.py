@@ -293,6 +293,8 @@ class QueueItemAdd(ShowQueueItem):
             self.show.scene = self.scene if self.scene != None else sickbeard.SCENE_DEFAULT
             self.show.paused = self.paused if self.paused != None else False
 
+            self.show.default_ep_status = self.default_status
+            logger.log(u"Setting all episodes to the specified default status: " + str(self.show.default_ep_status))
             # be smartish about this
             if self.show.genre and "talk show" in self.show.genre.lower():
                 self.show.air_by_date = 1
@@ -365,14 +367,9 @@ class QueueItemAdd(ShowQueueItem):
             logger.log(traceback.format_exc(), logger.DEBUG)
 
         # if they gave a custom status then change all the eps to it
-        if self.default_status != SKIPPED:
-            logger.log(u"Setting all episodes to the specified default status: " + str(self.default_status))
-            myDB = db.DBConnection()
-            myDB.action("UPDATE tv_episodes SET status = ? WHERE status = ? AND showid = ? AND season != 0",
-                        [self.default_status, SKIPPED, self.show.indexerid])
 
         # if they started with WANTED eps then run the backlog
-        if self.default_status == WANTED:
+        if self.show.default_ep_status == WANTED:
             logger.log(u"Launching backlog for this show since its episodes are WANTED")
             sickbeard.backlogSearchScheduler.action.searchBacklog([self.show])  #@UndefinedVariable
 
@@ -539,6 +536,7 @@ class QueueItemUpdate(ShowQueueItem):
                 self.show.indexer).name + ", the show info will not be refreshed: " + ex(e), logger.ERROR)
             IndexerEpList = None
 
+        foundMissingEps = False
         if IndexerEpList == None:
             logger.log(u"No data returned from " + sickbeard.indexerApi(
                 self.show.indexer).name + ", unable to update this show", logger.ERROR)
@@ -550,6 +548,8 @@ class QueueItemUpdate(ShowQueueItem):
                                logger.DEBUG)
                     if curSeason in DBEpList and curEpisode in DBEpList[curSeason]:
                         del DBEpList[curSeason][curEpisode]
+                    else:
+                        foundMissingEps = True
 
             # for the remaining episodes in the DB list just delete them from the DB
             for curSeason in DBEpList:
@@ -562,6 +562,9 @@ class QueueItemUpdate(ShowQueueItem):
                     except exceptions.EpisodeDeletedException:
                         pass
 
+        if foundMissingEps and self.show.default_ep_status == WANTED:
+            logger.log(u"Launching backlog for this show since we found missing episodes")
+            sickbeard.backlogSearchScheduler.action.searchBacklog([self.show])
         sickbeard.showQueueScheduler.action.refreshShow(self.show, self.force)
 
 

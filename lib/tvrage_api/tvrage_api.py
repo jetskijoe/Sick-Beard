@@ -604,9 +604,12 @@ class TVRage:
             log().debug('Getting all episodes of %s' % (sid))
 
             self.config['params_epInfo']['sid'] = sid
-            epsEt = self._getetsrc(self.config['url_epInfo'], self.config['params_epInfo'])
+            try:
+                epsEt = self._getetsrc(self.config['url_epInfo'], self.config['params_epInfo'])
 
-            seasons = epsEt['episodelist']['season']
+                seasons = epsEt['episodelist']['season']
+            except:
+                return False
             if not isinstance(seasons, list):
                 seasons = [seasons]
 
@@ -659,7 +662,7 @@ class TVRage:
             # Item is integer, treat as show id
             if key not in self.shows:
                 self._getShowData(key, True)
-            return self.shows[key]
+            return (None, self.shows[key])[key in self.shows]
 
         key = key.lower()
         self.config['searchterm'] = key
