@@ -11,7 +11,7 @@
 __author__ = "dbr/Ben"
 __version__ = "1.9"
 
-__all__ = ["tvdb_error", "tvdb_userabort", "tvdb_shownotfound",
+__all__ = ["tvdb_error", "tvdb_userabort", "tvdb_shownotfound", "tvdb_showincomplete",
 "tvdb_seasonnotfound", "tvdb_episodenotfound", "tvdb_attributenotfound"]
 
 class tvdb_exception(Exception):
@@ -35,6 +35,10 @@ class tvdb_shownotfound(tvdb_exception):
     """
     pass
 
+class tvdb_showincomplete(tvdb_exception):
+    """Show found but incomplete on thetvdb.com (incomplete show)
+    """
+    pass
 class tvdb_seasonnotfound(tvdb_exception):
     """Season cannot be found on thetvdb.com
     """

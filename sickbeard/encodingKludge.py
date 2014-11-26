@@ -11,63 +11,77 @@
 # SickRage is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#  GNU General Public License for more details.
+# GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
 # along with SickRage.  If not, see <http://www.gnu.org/licenses/>.
 
 import os
+import traceback
 
-from sickbeard import logger
 import sickbeard
+from sickbeard import logger
+
+import six
+import chardet
+
 
 # This module tries to deal with the apparently random behavior of python when dealing with unicode <-> utf-8
 # encodings. It tries to just use unicode, but if that fails then it tries forcing it to utf-8. Any functions
 # which return something should always return unicode.
 
-def fixStupidEncodings(x, silent=False):
-    if type(x) == str:
+def toUnicode(x):
+    try:
+        if isinstance(x, unicode):
+            return x
+        else:
+            try:
+                return six.text_type(x)
+            except:
+                try:
+                    if chardet.detect(x).get('encoding') == 'utf-8':
+                        return x.decode('utf-8')
+                    if isinstance(x, str):
+                        try:
+                            return x.decode(sickbeard.SYS_ENCODING)
+                        except UnicodeDecodeError:
+                            raise
+                    return x
+                except:
+                    raise
+    except:
+        logger.log('Unable to decode value "%s..." : %s ' % (repr(x)[:20], traceback.format_exc()), logger.WARNING)
+        ascii_text = str(x).encode('string_escape')
+        return toUnicode(ascii_text)
+
+def ss(x):
+    u_x = toUnicode(x)
+
+    try:
+        return u_x.encode(sickbeard.SYS_ENCODING)
+    except Exception as e:
+        logger.log('Failed ss encoding char, force UTF8: %s' % e, logger.WARNING)
         try:
-            return x.decode(sickbeard.SYS_ENCODING)
-        except UnicodeDecodeError:
-            logger.log(u"Unable to decode value: " + repr(x), logger.ERROR)
-            return None
-    elif type(x) == unicode:
-        return x
-    else:
-        logger.log(
-            u"Unknown value passed in, ignoring it: " + str(type(x)) + " (" + repr(x) + ":" + repr(type(x)) + ")",
-            logger.DEBUG if silent else logger.ERROR)
-        return None
-
-
+            return u_x.encode(sickbeard.SYS_ENCODING, 'replace')
+        except:
+            return u_x.encode('utf-8', 'replace')
 
 def fixListEncodings(x):
-    if type(x) != list and type(x) != tuple:
+    if not isinstance(x, (list, tuple)):
         return x
     else:
-        return filter(lambda x: x != None, map(fixStupidEncodings, x))
-
-
-def callPeopleStupid(x):
-    try:
-        return x.encode(sickbeard.SYS_ENCODING)
-    except UnicodeEncodeError:
-        logger.log(
-            u"YOUR COMPUTER SUCKS! Your data is being corrupted by a bad locale/encoding setting. Report this error on the forums or IRC please: " + repr(
-                x) + ", " + sickbeard.SYS_ENCODING, logger.ERROR)
-        return x.encode(sickbeard.SYS_ENCODING, 'ignore')
+        return filter(lambda x: x != None, map(toUnicode, x))
 
 
 def ek(func, *args, **kwargs):
     if os.name == 'nt':
         result = func(*args, **kwargs)
     else:
-        result = func(*[callPeopleStupid(x) if type(x) in (str, unicode) else x for x in args], **kwargs)
+        result = func(*[ss(x) if isinstance(x, (str, unicode)) else x for x in args], **kwargs)
 
-    if type(result) in (list, tuple):
+    if isinstance(result, (list, tuple)):
         return fixListEncodings(result)
-    elif type(result) == str:
-        return fixStupidEncodings(result)
+    elif isinstance(result, str):
+        return toUnicode(result)
     else:
         return result

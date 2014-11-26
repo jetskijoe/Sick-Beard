@@ -25,6 +25,7 @@ import sqlite3
 
 import sys
 import os.path
+
 sys.path.append(os.path.abspath('..'))
 sys.path.append(os.path.abspath('../lib'))
 
@@ -50,7 +51,6 @@ EPISODE = 2
 FILENAME = u"show name - s0" + str(SEASON) + "e0" + str(EPISODE) + ".mkv"
 FILEDIR = os.path.join(TESTDIR, SHOWNAME)
 FILEPATH = os.path.join(FILEDIR, FILENAME)
-
 SHOWDIR = os.path.join(TESTDIR, SHOWNAME + " final")
 
 #sickbeard.logger.sb_log_instance = sickbeard.logger.SBRotatingLogHandler(os.path.join(TESTDIR, 'sickbeard.log'), sickbeard.logger.NUM_LOGS, sickbeard.logger.LOG_SIZE)
@@ -190,14 +190,25 @@ def tearDown_test_db():
         although this seams not to work on my system it leaves me with an zero kb file
     """
     # uncomment next line so leave the db intact between test and at the end
-    #return False
-    if os.path.exists(os.path.join(TESTDIR, TESTDBNAME)):
-        os.remove(os.path.join(TESTDIR, TESTDBNAME))
-    if os.path.exists(os.path.join(TESTDIR, TESTCACHEDBNAME)):
-        os.remove(os.path.join(TESTDIR, TESTCACHEDBNAME))
-    if os.path.exists(os.path.join(TESTDIR, TESTFAILEDDBNAME)):
-        os.remove(os.path.join(TESTDIR, TESTFAILEDDBNAME))
+    # return False
 
+    try:
+        if os.path.exists(os.path.join(TESTDIR, TESTDBNAME)):
+            os.remove(os.path.join(TESTDIR, TESTDBNAME))
+    except:
+        pass
+
+    try:
+        if os.path.exists(os.path.join(TESTDIR, TESTCACHEDBNAME)):
+            os.remove(os.path.join(TESTDIR, TESTCACHEDBNAME))
+    except:
+        pass
+
+    try:
+        if os.path.exists(os.path.join(TESTDIR, TESTFAILEDDBNAME)):
+            os.remove(os.path.join(TESTDIR, TESTFAILEDDBNAME))
+    except:
+        pass
 
 def setUp_test_episode_file():
     if not os.path.exists(FILEDIR):
