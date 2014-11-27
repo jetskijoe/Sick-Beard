@@ -83,6 +83,7 @@ from tornado.web import RequestHandler, HTTPError, asynchronous
 
 from bug_tracker import BugTracker
 
+
 def authenticated(handler_class):
     def wrap_execute(handler_execute):
         def basicauth(handler, transforms, *args, **kwargs):
@@ -424,7 +425,7 @@ class MainHandler(RequestHandler):
         t.sql_results = sql_results
 
         # Allow local overriding of layout parameter
-        if layout and layout in ('poster', 'banner', 'list','calendar'):
+        if layout and layout in ('poster', 'banner', 'list', 'calendar'):
             t.layout = layout
         else:
             t.layout = sickbeard.COMING_EPS_LAYOUT
@@ -1668,14 +1669,14 @@ class ConfigSearch(MainHandler):
 
 
     def saveSearch(self, use_nzbs=None, use_torrents=None, nzb_dir=None, sab_username=None, sab_password=None,
-                   sab_apikey=None, sab_category=None, sab_host=None, nzbget_username=None, nzbget_password=None,
-                   nzbget_category=None, nzbget_priority=None, nzbget_host=None, nzbget_use_https=None,
-                   backlog_days=None, backlog_frequency=None, dailysearch_frequency=None,
-                   nzb_method=None, torrent_method=None, usenet_retention=None,
+                   sab_apikey=None, sab_category=None, sab_category_anime=None, sab_host=None, nzbget_username=None,
+                   nzbget_password=None, nzbget_category=None, nzbget_category_anime=None, nzbget_priority=None,
+                   nzbget_host=None, nzbget_use_https=None, backlog_days=None, backlog_frequency=None,
+                   dailysearch_frequency=None, nzb_method=None, torrent_method=None, usenet_retention=None,
                    download_propers=None, check_propers_interval=None, allow_high_priority=None,
                    backlog_startup=None, dailysearch_startup=None,
                    torrent_dir=None, torrent_username=None, torrent_password=None, torrent_host=None,
-                   torrent_label=None, torrent_path=None, torrent_verify_cert=None,
+                   torrent_label=None, torrent_label_anime=None, torrent_path=None, torrent_verify_cert=None,
                    torrent_seed_time=None, torrent_paused=None, torrent_high_bandwidth=None, ignore_words=None,
                    require_words=None):
 
@@ -1714,11 +1715,13 @@ class ConfigSearch(MainHandler):
         sickbeard.SAB_PASSWORD = sab_password
         sickbeard.SAB_APIKEY = sab_apikey.strip()
         sickbeard.SAB_CATEGORY = sab_category
+        sickbeard.SAB_CATEGORY_ANIME = sab_category_anime
         sickbeard.SAB_HOST = config.clean_url(sab_host)
 
         sickbeard.NZBGET_USERNAME = nzbget_username
         sickbeard.NZBGET_PASSWORD = nzbget_password
         sickbeard.NZBGET_CATEGORY = nzbget_category
+        sickbeard.NZBGET_CATEGORY_ANIME = nzbget_category_anime
         sickbeard.NZBGET_HOST = config.clean_host(nzbget_host)
         sickbeard.NZBGET_USE_HTTPS = config.checkbox_to_value(nzbget_use_https)
         sickbeard.NZBGET_PRIORITY = config.to_int(nzbget_priority, default=100)
@@ -1726,6 +1729,7 @@ class ConfigSearch(MainHandler):
         sickbeard.TORRENT_USERNAME = torrent_username
         sickbeard.TORRENT_PASSWORD = torrent_password
         sickbeard.TORRENT_LABEL = torrent_label
+        sickbeard.TORRENT_LABEL_ANIME = torrent_label_anime
         sickbeard.TORRENT_VERIFY_CERT = config.checkbox_to_value(torrent_verify_cert)
         sickbeard.TORRENT_PATH = torrent_path
         sickbeard.TORRENT_SEED_TIME = torrent_seed_time
@@ -1789,7 +1793,6 @@ class ConfigPostProcessing(MainHandler):
                 sickbeard.autoPostProcesserScheduler.join(5)
             except:
                 pass
-
 
         if unpack:
             if self.isRarSupported() != 'not supported':
@@ -2011,17 +2014,17 @@ class ConfigProviders(MainHandler):
             error += "\nNo Provider Api key specified"
 
         if error <> "":
-            return json.dumps({'success' : False, 'error': error})
+            return json.dumps({'success': False, 'error': error})
 
-        #Get list with Newznabproviders
-        #providerDict = dict(zip([x.getID() for x in sickbeard.newznabProviderList], sickbeard.newznabProviderList))
+        # Get list with Newznabproviders
+        # providerDict = dict(zip([x.getID() for x in sickbeard.newznabProviderList], sickbeard.newznabProviderList))
 
-        #Get newznabprovider obj with provided name
-        tempProvider= newznab.NewznabProvider(name, url, key)
+        # Get newznabprovider obj with provided name
+        tempProvider = newznab.NewznabProvider(name, url, key)
 
         success, tv_categories, error = tempProvider.get_newznab_categories()
 
-        return json.dumps({'success' : success,'tv_categories' : tv_categories, 'error' : error})
+        return json.dumps({'success': success, 'tv_categories': tv_categories, 'error': error})
 
     def deleteNewznabProvider(self, nnid):
 
@@ -2317,14 +2320,14 @@ class ConfigProviders(MainHandler):
                     curTorrentProvider.enable_daily = config.checkbox_to_value(
                         kwargs[curTorrentProvider.getID() + '_enable_daily'])
                 except:
-                    curTorrentProvider.enable_daily = 0 # these exceptions are actually catching unselected checkboxes
+                    curTorrentProvider.enable_daily = 0  # these exceptions are actually catching unselected checkboxes
 
             if hasattr(curTorrentProvider, 'enable_backlog'):
                 try:
                     curTorrentProvider.enable_backlog = config.checkbox_to_value(
                         kwargs[curTorrentProvider.getID() + '_enable_backlog'])
                 except:
-                    curTorrentProvider.enable_backlog = 0 # these exceptions are actually catching unselected checkboxes
+                    curTorrentProvider.enable_backlog = 0  # these exceptions are actually catching unselected checkboxes
 
         for curNzbProvider in [curProvider for curProvider in sickbeard.providers.sortedProviderList() if
                                curProvider.providerType == sickbeard.GenericProvider.NZB]:
@@ -2886,11 +2889,11 @@ class NewHomeAddShows(MainHandler):
                     if not (indexer_id and show_name):
                         (indexer_id, show_name, indexer) = cur_provider.retrieveShowMetadata(cur_path)
 
-                    # default to TVDB if indexer was not detected
+                        # default to TVDB if indexer was not detected
                         if show_name and not (indexer or indexer_id):
                             (sn, idx, id) = helpers.searchIndexerForShowID(show_name, indexer, indexer_id)
 
-                        # set indexer and indexer_id from found info
+                            # set indexer and indexer_id from found info
                             if not indexer and idx:
                                 indexer = idx
 
@@ -2967,10 +2970,8 @@ class NewHomeAddShows(MainHandler):
         recommendedlist = TraktCall("recommendations/shows.json/%API%", sickbeard.TRAKT_API, sickbeard.TRAKT_USERNAME,
                                     sickbeard.TRAKT_PASSWORD)
 
-
         if recommendedlist:
             indexers = ['tvdb_id', 'tvrage_id']
-
             map(final_results.append, (
                 [int(show[indexers[sickbeard.TRAKT_DEFAULT_INDEXER - 1]]), show['url'], show['title'], show['overview'],
                  datetime.date.fromtimestamp(int(show['first_aired']) / 1000.0).strftime('%Y%m%d')]
@@ -3005,8 +3006,8 @@ class NewHomeAddShows(MainHandler):
         t.submenu = HomeMenu()
 
         t.trending_shows = []
-        trending_shows = TraktCall("shows/trending.json/%API%", sickbeard.TRAKT_API_KEY)
 
+        trending_shows = TraktCall("shows/trending.json/%API%", sickbeard.TRAKT_API_KEY)
         if trending_shows:
             for show in trending_shows:
                 try:
@@ -4430,16 +4431,17 @@ class Home(MainHandler):
         episodes = []
         currentManualSearchThreadsQueued = []
         currentManualSearchThreadActive = []
-        finishedManualSearchThreadItems= []
+        finishedManualSearchThreadItems = []
 
         # Queued Searches
         currentManualSearchThreadsQueued = sickbeard.searchQueueScheduler.action.get_all_ep_from_queue(show)
+
         # Running Searches
         if (sickbeard.searchQueueScheduler.action.is_manualsearch_in_progress()):
             currentManualSearchThreadActive = sickbeard.searchQueueScheduler.action.currentItem
 
         # Finished Searches
-        finishedManualSearchThreadItems =  sickbeard.search_queue.MANUAL_SEARCH_HISTORY
+        finishedManualSearchThreadItems = sickbeard.search_queue.MANUAL_SEARCH_HISTORY
 
         if currentManualSearchThreadsQueued:
             for searchThread in currentManualSearchThreadsQueued:
@@ -4447,9 +4449,9 @@ class Home(MainHandler):
                 if isinstance(searchThread, sickbeard.search_queue.ManualSearchQueueItem):
                     episodes.append({'episode': searchThread.segment.episode,
                                      'episodeindexid': searchThread.segment.indexerid,
-                                     'season' : searchThread.segment.season,
-                                     'searchstatus' : searchstatus,
-                                     'status' : statusStrings[searchThread.segment.status],
+                                     'season': searchThread.segment.season,
+                                     'searchstatus': searchstatus,
+                                     'status': statusStrings[searchThread.segment.status],
                                      'quality': self.getQualityClass(searchThread.segment)})
                 else:
                     for epObj in searchThread.segment:
@@ -4469,9 +4471,9 @@ class Home(MainHandler):
                 searchstatus = 'searching'
             episodes.append({'episode': searchThread.segment.episode,
                              'episodeindexid': searchThread.segment.indexerid,
-                             'season' : searchThread.segment.season,
-                             'searchstatus' : searchstatus,
-                             'status' : statusStrings[searchThread.segment.status],
+                             'season': searchThread.segment.season,
+                             'searchstatus': searchstatus,
+                             'status': statusStrings[searchThread.segment.status],
                              'quality': self.getQualityClass(searchThread.segment)})
 
         if finishedManualSearchThreadItems:
@@ -4499,9 +4501,7 @@ class Home(MainHandler):
                                                  'status': statusStrings[epObj.status],
                                                  'quality': self.getQualityClass(epObj)})
 
-        return json.dumps({'show': show, 'episodes' : episodes})
-
-        #return json.dumps()
+        return json.dumps({'show': show, 'episodes': episodes})
 
     def getQualityClass(self, ep_obj):
         # return the correct json value

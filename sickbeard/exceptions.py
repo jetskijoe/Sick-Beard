@@ -18,7 +18,6 @@
 
 from sickbeard.encodingKludge import toUnicode
 
-
 def ex(e):
     """
     Returns a unicode string from the exception text if it exists.
@@ -33,11 +32,11 @@ def ex(e):
 
         if arg is not None:
             if isinstance(arg, (str, unicode)):
-                fixed_arg = toUnicode(arg, True)
+                fixed_arg = toUnicode(arg)
 
             else:
                 try:
-                    fixed_arg = u"error " + toUnicode(str(arg), True)
+                    fixed_arg = u"error " + toUnicode(str(arg))
 
                 except:
                     fixed_arg = None
