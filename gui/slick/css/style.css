@@ -434,7 +434,7 @@ inc_top.tmpl
 	background-position: -357px 0px;
 }
 
-.menu-icon-xbmc {
+.menu-icon-kodi {
 	background-position: -378px 0px;
 }
 
@@ -468,7 +468,7 @@ inc_top.tmpl
 	background-position: -294px 0px;
 }
 
-.submenu-icon-xbmc {
+.submenu-icon-kodi {
 	background-position: -378px 0px;
 }
 
@@ -2727,9 +2727,10 @@ div.formpaginate .prev, div.formpaginate .next {
 	font-size: 12px;
 	font-weight: normal;
 	display: block;
-	width:475px;
+	width: 475px;
 	margin-left: 182px;
 }
+
 div.field-pair input {
 	margin-right: 6px;
 	float: left;
