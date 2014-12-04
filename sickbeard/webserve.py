@@ -940,7 +940,7 @@ class Manage(MainHandler):
                 [curShow.indexerid])
 
             for curResult in sqlResults:
-                curEpCat = curShow.getOverview(int(curResult["status"]))
+                curEpCat = curShow.getOverview(int(curResult["status"] or -1))
                 if curEpCat:
                     epCats[str(curResult["season"]) + "x" + str(curResult["episode"])] = curEpCat
                     epCounts[curEpCat] += 1
@@ -1678,7 +1678,7 @@ class ConfigSearch(MainHandler):
                    nzbget_host=None, nzbget_use_https=None, backlog_days=None, backlog_frequency=None,
                    dailysearch_frequency=None, nzb_method=None, torrent_method=None, usenet_retention=None,
                    download_propers=None, check_propers_interval=None, allow_high_priority=None,
-                   backlog_startup=None, dailysearch_startup=None,
+                   randomize_providers=None, backlog_startup=None, dailysearch_startup=None,
                    torrent_dir=None, torrent_username=None, torrent_password=None, torrent_host=None,
                    torrent_label=None, torrent_label_anime=None, torrent_path=None, torrent_verify_cert=None,
                    torrent_seed_time=None, torrent_paused=None, torrent_high_bandwidth=None, ignore_words=None,
@@ -1706,6 +1706,8 @@ class ConfigSearch(MainHandler):
 
         sickbeard.IGNORE_WORDS = ignore_words if ignore_words else ""
         sickbeard.REQUIRE_WORDS = require_words if require_words else ""
+
+        sickbeard.RANDOMIZE_PROVIDERS = config.checkbox_to_value(randomize_providers)
 
         sickbeard.DOWNLOAD_PROPERS = config.checkbox_to_value(download_propers)
         sickbeard.CHECK_PROPERS_INTERVAL = check_propers_interval
@@ -2608,7 +2610,9 @@ class ConfigSubtitles(MainHandler):
 
 
     def saveSubtitles(self, use_subtitles=None, subtitles_plugins=None, subtitles_languages=None, subtitles_dir=None,
-                      service_order=None, subtitles_history=None, subtitles_finder_frequency=None):
+                      service_order=None, subtitles_history=None, subtitles_finder_frequency=None,
+                      subtitles_multi=None):
+
         results = []
 
         if subtitles_finder_frequency == '' or subtitles_finder_frequency is None:
@@ -2634,6 +2638,7 @@ class ConfigSubtitles(MainHandler):
         sickbeard.SUBTITLES_DIR = subtitles_dir
         sickbeard.SUBTITLES_HISTORY = config.checkbox_to_value(subtitles_history)
         sickbeard.SUBTITLES_FINDER_FREQUENCY = config.to_int(subtitles_finder_frequency, default=1)
+        sickbeard.SUBTITLES_MULTI = config.checkbox_to_value(subtitles_multi)
 
         # Subtitles services
         services_str_list = service_order.split()
@@ -3784,7 +3789,7 @@ class Home(MainHandler):
         epCounts[Overview.SNATCHED] = 0
 
         for curResult in sqlResults:
-            curEpCat = showObj.getOverview(int(curResult["status"]))
+            curEpCat = showObj.getOverview(int(curResult["status"] or -1))
             if curEpCat:
                 epCats[str(curResult["season"]) + "x" + str(curResult["episode"])] = curEpCat
                 epCounts[curEpCat] += 1

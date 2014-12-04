@@ -45,10 +45,12 @@ class DailySearcher():
 
         if not network_timezones.network_dict:
             network_timezones.update_network_dict()
+
         if network_timezones.network_dict:
             curDate = (datetime.date.today() + datetime.timedelta(days=1)).toordinal()
         else:
             curDate = (datetime.date.today() - datetime.timedelta(days=2)).toordinal()
+
         curTime = datetime.datetime.now(network_timezones.sb_timezone)
 
         myDB = db.DBConnection()
@@ -70,11 +72,16 @@ class DailySearcher():
             except exceptions.MultipleShowObjectsException:
                 logger.log(u"ERROR: expected to find a single show matching " + str(sqlEp['showid']))
                 continue
+
             try:
-                end_time = network_timezones.parse_date_time(sqlEp['airdate'], show.airs, show.network) + datetime.timedelta(minutes=helpers.tryInt(show.runtime, 60))
+                end_time = network_timezones.parse_date_time(sqlEp['airdate'], show.airs,
+                                                             show.network) + datetime.timedelta(
+                    minutes=helpers.tryInt(show.runtime, 60))
+                # filter out any episodes that haven't aried yet
                 if end_time > curTime:
                     continue
             except:
+                # if an error occured assume the episode hasn't aired yet
                 continue
 
             ep = show.getEpisode(int(sqlEp["season"]), int(sqlEp["episode"]))

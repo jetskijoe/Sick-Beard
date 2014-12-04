@@ -213,8 +213,10 @@ def _remove_file_failed(file):
 def findCertainShow(showList, indexerid):
 
     results = []
+
     if not isinstance(indexerid, list):
         indexerid = [indexerid]
+
     if showList and len(indexerid):
         results = filter(lambda x: int(x.indexerid) in indexerid, showList)
 
@@ -961,6 +963,8 @@ def anon_url(*url):
     Return a URL string consisting of the Anonymous redirect URL and an arbitrary number of values appended.
     """
     return '' if None in url else '%s%s' % (sickbeard.ANON_REDIRECT, ''.join(str(s) for s in url))
+
+
 """
 Encryption
 ==========
@@ -1165,6 +1169,7 @@ def mapIndexersToShow(showObj):
     # for each mapped entry
     for curResult in sqlResults:
         nlist = [i for i in curResult if i is not None]
+        # Check if its mapped with both tvdb and tvrage.
         if len(nlist) >= 4:
             logger.log(u"Found indexer mapping in cache for show: " + showObj.name, logger.DEBUG)
             mapped[int(curResult['mindexer'])] = int(curResult['mindexer_id'])
@@ -1182,7 +1187,7 @@ def mapIndexersToShow(showObj):
 
             try:
                 mapped_show = t[showObj.name]
-            except sickbeard.indexer_shownotfound:
+            except Exception:
                 logger.log(u"Unable to map " + sickbeard.indexerApi(showObj.indexer).name + "->" + sickbeard.indexerApi(
                     indexer).name + " for show: " + showObj.name + ", skipping it", logger.DEBUG)
                 continue

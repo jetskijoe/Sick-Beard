@@ -25,6 +25,9 @@ SickRage
 - Your tvshow.nfo files are now tagged with a indexer key so that SickBeard can easily tell if the shows info comes from TheTVDB or TVRage.
 - Sports shows are now able to be searched for..
 
+## Screenshots
+[Desktop (Full-HD)](http://imgur.com/a/4fpBk)<br>
+[Mobile](http://imgur.com/a/WPyG6)
 ## Dependencies
 
 To run SickRage from source you will need Python 2.6+ and Cheetah 2.1.0+.

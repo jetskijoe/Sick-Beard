@@ -189,13 +189,13 @@ class Api(webserve.MainHandler):
             msg = u"API :: " + remoteIp + " - SR API Disabled. ACCESS DENIED"
             return False, msg, args, kwargs
         elif apiKey == realKey:
-            msg = u"API :: " + remoteIp + " - gave correct API KEY. ACCESS GRANTED"
+            msg = u"API :: " + remoteIp + " - gave correct API KEY - [" + apiKey + "] - ACCESS GRANTED"
             return True, msg, args, kwargs
         elif not apiKey:
             msg = u"API :: " + remoteIp + " - gave NO API KEY. ACCESS DENIED"
             return False, msg, args, kwargs
         else:
-            msg = u"API :: " + remoteIp + " - gave WRONG API KEY " + apiKey + ". ACCESS DENIED"
+            msg = u"API :: " + remoteIp + " - gave WRONG API KEY - [" + apiKey + "] - ACCESS DENIED"
             return False, msg, args, kwargs
 
 
@@ -1309,7 +1309,7 @@ class CMD_Backlog(ApiCall):
 
             for curResult in sqlResults:
 
-                curEpCat = curShow.getOverview(int(curResult["status"]))
+                curEpCat = curShow.getOverview(int(curResult["status"] or -1))
                 if curEpCat and curEpCat in (Overview.WANTED, Overview.QUAL):
                     showEps.append(curResult)
 
@@ -2827,7 +2827,7 @@ class CMD_Shows(ApiCall):
                 showDict['next_ep_airdate'] = ''
 
             showDict["cache"] = \
-                CMD_ShowCache(self.handler, (), {"indexerid or tvdbid or tvrageid": curShow.indexerid}).run()["data"]
+                CMD_ShowCache(self.handler, (), {"indexerid": curShow.indexerid}).run()["data"]
             if not showDict["network"]:
                 showDict["network"] = ""
             if self.sort == "name":

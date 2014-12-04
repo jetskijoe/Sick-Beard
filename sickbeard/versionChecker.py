@@ -40,29 +40,30 @@ class CheckVersion():
     """
 
     def __init__(self):
-        self.install_type = self.find_install_type()
+        self.updater = None
 
-        if self.install_type == 'win':
-            self.updater = WindowsUpdateManager()
-        elif self.install_type == 'git':
-            self.updater = GitUpdateManager()
-        elif self.install_type == 'source':
-            self.updater = SourceUpdateManager()
-        else:
-            self.updater = None
+        if sickbeard.gh:
+            self.install_type = self.find_install_type()
+            if self.install_type == 'win':
+                self.updater = WindowsUpdateManager()
+            elif self.install_type == 'git':
+                self.updater = GitUpdateManager()
+            elif self.install_type == 'source':
+                self.updater = SourceUpdateManager()
 
     def run(self, force=False):
-        # set current branch version
-        sickbeard.BRANCH = self.get_branch()
+        if self.updater:
+            # set current branch version
+            sickbeard.BRANCH = self.get_branch()
 
-        if self.check_for_new_version(force):
-            if sickbeard.AUTO_UPDATE:
-                logger.log(u"New update found for SickRage, starting auto-updater ...")
-                ui.notifications.message('New update found for SickRage, starting auto-updater')
-                if sickbeard.versionCheckScheduler.action.update():
-                    logger.log(u"Update was successful!")
-                    ui.notifications.message('Update was successful')
-                    sickbeard.events.put(sickbeard.events.SystemEvent.RESTART)
+            if self.check_for_new_version(force):
+                if sickbeard.AUTO_UPDATE:
+                    logger.log(u"New update found for SickRage, starting auto-updater ...")
+                    ui.notifications.message('New update found for SickRage, starting auto-updater')
+                    if sickbeard.versionCheckScheduler.action.update():
+                        logger.log(u"Update was successful!")
+                        ui.notifications.message('Update was successful')
+                        sickbeard.events.put(sickbeard.events.SystemEvent.RESTART)
 
     def find_install_type(self):
         """
@@ -93,7 +94,7 @@ class CheckVersion():
         force: if true the VERSION_NOTIFY setting will be ignored and a check will be forced
         """
 
-        if not sickbeard.VERSION_NOTIFY and not sickbeard.AUTO_UPDATE and not force:
+        if not self.updater or not sickbeard.VERSION_NOTIFY and not sickbeard.AUTO_UPDATE and not force:
             logger.log(u"Version checking is disabled, not checking for the newest version")
             return False
 
@@ -112,18 +113,21 @@ class CheckVersion():
         return True
 
     def update(self):
-        # update branch with current config branch value
-        self.updater.branch = sickbeard.BRANCH
+        if self.updater:
+            # update branch with current config branch value
+            self.updater.branch = sickbeard.BRANCH
 
-        # check for updates
-        if self.updater.need_update():
-            return self.updater.update()
+            # check for updates
+            if self.updater.need_update():
+                return self.updater.update()
 
     def list_remote_branches(self):
-        return self.updater.list_remote_branches()
+        if self.updater:
+            return self.updater.list_remote_branches()
 
     def get_branch(self):
-        return self.updater.branch
+        if self.updater:
+            return self.updater.branch
 
 
 class UpdateManager():
@@ -618,9 +622,7 @@ class SourceUpdateManager(UpdateManager):
         # try to get newest commit hash and commits behind directly by comparing branch and current commit
         if self._cur_commit_hash:
             branch_compared = sickbeard.gh.compare(base=self.branch, head=self._cur_commit_hash)
-
             self._newest_commit_hash = branch_compared.base_commit.sha
-
             self._num_commits_behind = branch_compared.behind_by
 
         # fall back and iterate over last 100 (items per page in gh_api) commits

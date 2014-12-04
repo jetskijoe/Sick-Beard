@@ -1,6 +1,6 @@
 # !/usr/bin/env python2
-#encoding:utf-8
-#author:dbr/Ben
+# encoding:utf-8
+# author:dbr/Ben
 #project:tvdb_api
 #repository:http://github.com/dbr/tvdb_api
 #license:unlicense (http://unlicense.org/)
@@ -571,9 +571,10 @@ class Tvdb:
                         "https": self.config['proxy'],
                     }
 
-                resp = session.get(url, cache_auto=True, params=params)
+                resp = session.get(url.strip(), cache_auto=True, params=params)
             else:
-                resp = requests.get(url, params=params)
+                resp = requests.get(url.strip(), params=params)
+
             resp.raise_for_status()
         except requests.exceptions.HTTPError, e:
             raise tvdb_error("HTTP error " + str(e.errno) + " while loading URL " + str(url))
@@ -599,9 +600,9 @@ class Tvdb:
                         value = parse(value, fuzzy=True).date()
                         value = value.strftime("%Y-%m-%d")
 
-                    #if key == 'airs_time':
-                    #    value = parse(value).time()
-                    #    value = value.strftime("%I:%M %p")
+                        #if key == 'airs_time':
+                        #    value = parse(value).time()
+                        #    value = value.strftime("%I:%M %p")
                 except:
                     pass
 
@@ -609,7 +610,6 @@ class Tvdb:
 
         if 'application/zip' in resp.headers.get("Content-Type", ''):
             try:
-                    # TODO: The zip contains actors.xml and banners.xml, which are currently ignored [GH-20]
                 log().debug("We recived a zip file unpacking now ...")
                 zipdata = StringIO.StringIO()
                 zipdata.write(resp.content)
@@ -619,10 +619,9 @@ class Tvdb:
                 raise tvdb_error("Bad zip file received from thetvdb.com, could not read it")
         else:
             try:
-                return xmltodict.parse(resp.content.strip(), postprocessor=process)
+                return xmltodict.parse(resp.text.rstrip("\r"), postprocessor=process)
             except:
                 return dict([(u'data', None)])
-
 
     def _getetsrc(self, url, params=None, language=None):
         """Loads a URL using caching, returns an ElementTree of the source
@@ -693,9 +692,9 @@ class Tvdb:
         if not allSeries:
             log().debug('Series result returned zero')
             raise tvdb_shownotfound("Show search returned zero results (cannot find show on TVDB)")
+
         if not isinstance(allSeries, list):
             allSeries = [allSeries]
-
 
         if self.config['custom_ui'] is not None:
             log().debug("Using custom UI %s" % (repr(self.config['custom_ui'])))
@@ -731,11 +730,12 @@ class Tvdb:
         """
         log().debug('Getting season banners for %s' % (sid))
         bannersEt = self._getetsrc(self.config['url_seriesBanner'] % (sid))
+
         if not bannersEt:
             log().debug('Banners result returned zero')
             return
-        banners = {}
 
+        banners = {}
         for cur_banner in bannersEt['banner']:
             bid = cur_banner['id']
             btype = cur_banner['bannertype']
@@ -795,6 +795,7 @@ class Tvdb:
         if not actorsEt:
             log().debug('Actors result returned zero')
             return
+
         cur_actors = Actors()
         for curActorItem in actorsEt["actor"]:
             curActor = Actor()
@@ -841,7 +842,6 @@ class Tvdb:
             raise tvdb_error("Series result returned zero")
 
         # get series data
-
         for k, v in seriesInfoEt['series'].items():
             if v is not None:
                 if k in ['banner', 'fanart', 'poster']:
@@ -851,6 +851,7 @@ class Tvdb:
 
             self._setShowData(sid, k, v)
 
+        # get episode data
         if getEpInfo:
             # Parse banners
             if self.config['banners_enabled']:
@@ -862,7 +863,6 @@ class Tvdb:
 
             # Parse episode data
             log().debug('Getting all episodes of %s' % (sid))
-
             if self.config['useZip']:
                 url = self.config['url_epInfo_zip'] % (sid, language)
             else:
@@ -946,13 +946,9 @@ class Tvdb:
             selected_series = [selected_series]
         [[self._setShowData(show['id'], k, v) for k, v in show.items()] for show in selected_series]
         return selected_series
-        #test = self._getSeries(key)
-        #sids = self._nameToSid(key)
-        #return list(self.shows[sid] for sid in sids)
 
     def __repr__(self):
         return str(self.shows)
-
 
 def main():
     """Simple example of using tvdb_api - it just
