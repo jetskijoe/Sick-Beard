@@ -158,7 +158,7 @@ class IPTorrentsProvider(generic.TorrentProvider):
         freeleech = '&free=on' if self.freeleech else ''
 
         if not self._doLogin():
-            return []
+            return results
 
         for mode in search_params.keys():
             for search_string in search_params[mode]:
@@ -279,7 +279,7 @@ class IPTorrentsCache(tvcache.TVCache):
 
     def _getRSSData(self):
         search_params = {'RSS': ['']}
-        return self.provider._doSearch(search_params)
+        return {'entries': self.provider._doSearch(search_params)}
 
 
 provider = IPTorrentsProvider()

@@ -1,17 +1,16 @@
 import os
-import socket
-import time
 import threading
 import sys
 import sickbeard
-import webserve
-import webapi
 
+from sickbeard.webserve import LoginHandler, LogoutHandler, KeyHandler
+from sickbeard.webapi import ApiHandler
 from sickbeard import logger
-from sickbeard.helpers import create_https_certificates
-from tornado.web import Application, StaticFileHandler, RedirectHandler, HTTPError
+from sickbeard.helpers import create_https_certificates, generateApiKey
+from tornado.web import Application, StaticFileHandler, HTTPError, RedirectHandler
 from tornado.httpserver import HTTPServer
 from tornado.ioloop import IOLoop
+from tornado.routes import route
 
 
 class MultiStaticFileHandler(StaticFileHandler):
@@ -62,8 +61,13 @@ class SRWebServer(threading.Thread):
             self.video_root = None
 
         # web root
-        self.options['web_root'] = ('/' + self.options['web_root'].lstrip('/')) if self.options[
-            'web_root'] else ''
+        self.options['web_root'] = ('/' + self.options['web_root'].lstrip('/')).strip('/')
+        sickbeard.WEB_ROOT = self.options['web_root']
+
+        # api root
+        if not sickbeard.API_KEY:
+            sickbeard.API_KEY = generateApiKey()
+        self.options['api_root'] = r'%s/api/%s/' % (sickbeard.WEB_ROOT, sickbeard.API_KEY)
 
         # tornado setup
         self.enable_https = self.options['enable_https']
@@ -73,7 +77,7 @@ class SRWebServer(threading.Thread):
         if self.enable_https:
             # If either the HTTPS certificate or key do not exist, make some self-signed ones.
             if not (self.https_cert and os.path.exists(self.https_cert)) or not (
-                self.https_key and os.path.exists(self.https_key)):
+                        self.https_key and os.path.exists(self.https_key)):
                 if not create_https_certificates(self.https_cert, self.https_key):
                     logger.log(u"Unable to create CERT/KEY files, disabling HTTPS")
                     sickbeard.ENABLE_HTTPS = False
@@ -90,17 +94,21 @@ class SRWebServer(threading.Thread):
                                  autoreload=False,
                                  gzip=True,
                                  xheaders=sickbeard.HANDLE_REVERSE_PROXY,
-                                 cookie_secret='61oETzKXQAGaYdkL5gEmGeJJFuYh7EQnp2XdTP1o/Vo='
+                                 cookie_secret='61oETzKXQAGaYdkL5gEmGeJJFuYh7EQnp2XdTP1o/Vo=',
+                                 login_url='%slogin/' % self.options['web_root'],
         )
 
-        # Main Handler
+        # Main Handlers
         self.app.add_handlers(".*$", [
-            (r'%s/api/(.*)(/?)' % self.options['web_root'], webapi.Api),
-            (r'%s/(.*)(/?)' % self.options['web_root'], webserve.MainHandler),
-            (r'(.*)', webserve.MainHandler)
-        ])
+            (r'%s(/?)' % self.options['api_root'], ApiHandler),
+            (r'%s/getkey(/?)' % self.options['web_root'], KeyHandler),
+            (r'%s/api/builder' % self.options['web_root'], RedirectHandler,
+             {"url": self.options['web_root'] + '/apibuilder/'}),
+            (r'%s/login(/?)' % self.options['web_root'], LoginHandler),
+            (r'%s/logout(/?)' % self.options['web_root'], LogoutHandler),
+        ] + route.get_routes())
 
-        # Static Path Handler
+        # Static Path Handlers
         self.app.add_handlers(".*$", [
             (r'%s/(favicon\.ico)' % self.options['web_root'], MultiStaticFileHandler,
              {'paths': [os.path.join(self.options['data_root'], 'images/ico/favicon.ico')]}),
@@ -116,7 +124,7 @@ class SRWebServer(threading.Thread):
         # Static Videos Path
         if self.video_root:
             self.app.add_handlers(".*$", [
-                (r'%s/%s/(.*)' % (self.options['web_root'], 'videos'), MultiStaticFileHandler,
+                (r'%s%s/(.*)' % (self.options['web_root'], 'videos'), MultiStaticFileHandler,
                  {'paths': [self.video_root]}),
             ])
 

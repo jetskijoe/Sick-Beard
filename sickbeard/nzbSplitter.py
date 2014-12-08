@@ -23,14 +23,12 @@ import xml.etree.cElementTree as etree
 import xml.etree
 import re
 
-
 from sickbeard import logger, classes, helpers
 from sickbeard.common import Quality
 from sickbeard import encodingKludge as ek
 from sickbeard.exceptions import ex
-from name_parser.parser import NameParser, InvalidNameException, InvalidShowException
-from sickbeard.encodingKludge import toUnicode
 
+from name_parser.parser import NameParser, InvalidNameException, InvalidShowException
 
 def getSeasonNZBs(name, urlData, season):
     try:
@@ -85,7 +83,7 @@ def createNZBString(fileElements, xmlns):
     for curFile in fileElements:
         rootElement.append(stripNS(curFile, xmlns))
 
-    return xml.etree.ElementTree.tostring(toUnicode(rootElement))
+    return xml.etree.ElementTree.tostring(ek.ss(rootElement))
 
 
 def saveNZB(nzbName, nzbString):
@@ -107,7 +105,6 @@ def stripNS(element, ns):
 
 def splitResult(result):
     urlData = helpers.getURL(result.url)
-
     if urlData is None:
         logger.log(u"Unable to load url " + result.url + ", can't download season NZB", logger.ERROR)
         return False

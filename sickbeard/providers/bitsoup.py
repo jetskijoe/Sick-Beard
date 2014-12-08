@@ -157,7 +157,7 @@ class BitSoupProvider(generic.TorrentProvider):
         items = {'Season': [], 'Episode': [], 'RSS': []}
 
         if not self._doLogin():
-            return []
+            return results
 
         for mode in search_params.keys():
             for search_string in search_params[mode]:
@@ -246,10 +246,7 @@ class BitSoupProvider(generic.TorrentProvider):
             ' OR (e.status IN (' + ','.join([str(x) for x in Quality.SNATCHED]) + ')))'
         )
 
-        if not sqlResults:
-            return []
-
-        for sqlshow in sqlResults:
+        for sqlshow in sqlResults or []:
             self.show = helpers.findCertainShow(sickbeard.showList, int(sqlshow["showid"]))
             if self.show:
                 curEp = self.show.getEpisode(int(sqlshow["season"]), int(sqlshow["episode"]))
@@ -276,7 +273,7 @@ class BitSoupCache(tvcache.TVCache):
 
     def _getRSSData(self):
         search_params = {'RSS': ['']}
-        return self.provider._doSearch(search_params)
+        return {'entries': self.provider._doSearch(search_params)}
 
 
 provider = BitSoupProvider()
