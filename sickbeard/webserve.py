@@ -75,14 +75,30 @@ except ImportError:
 
 from Cheetah.Template import Template
 
+from functools import wraps
 from tornado.routes import route
 from tornado.web import RequestHandler, authenticated, asynchronous
 
 from bug_tracker import BugTracker
 
+route_locks = {}
 
+def run_async(func):
+    @wraps(func)
+    def async_func(*args, **kwargs):
+        func_hl = threading.Thread(target = func, args = args, kwargs = kwargs)
+        func_hl.start()
 
+    return async_func
 
+@run_async
+def run_handler(route, kwargs, callback = None):
+    try:
+        res = route(**kwargs)
+        callback(res, route)
+    except:
+        logger.log('Failed doing api request "%s": %s' % (route, traceback.format_exc()), logger.ERROR)
+        callback({'success': False, 'error': 'Failed returning results'}, route)
 
 def page_not_found(rh):
     index_url = sickbeard.WEB_ROOT
@@ -94,19 +110,6 @@ def page_not_found(rh):
     else:
         rh.set_status(404)
         rh.write('Wrong API key used')
-class Worker(threading.Thread):
-    def __init__(self, func, params=None, callback=None, *args, **kwargs):
-        super(Worker, self).__init__(*args, **kwargs)
-        self.callback = callback
-        self.func = func
-        self.params = params
-    def run(self):
-        resp = self.func(**self.params)
-        if resp:
-            try:
-                self.callback(ek.ss(resp).encode('utf-8', 'xmlcharrefreplace'))
-            except:
-                self.callback(resp)
 
 class PageTemplate(Template):
     def __init__(self, rh, *args, **kwargs):
@@ -260,37 +263,53 @@ class WebHandler(BaseHandler):
         route = route.strip('/')
 
         try:
-            route = getattr(self, route, self.index)
-            if not callable(route):
-                self.set_status(404)
-                self.write('Could not load webui module')
-                return
+            route = getattr(self, route)
         except:
-            page_not_found(self)
+            route = getattr(self, 'index')
 
-            return
+        # acquire route lock
+        route_locks[route] = threading.Lock()
+        route_locks[route].acquire()
 
+        try:
 
             # Sanitize argument lists:
-        params = self.request.arguments
-        for arg, value in params.items():
-            if len(value) == 1:
-                params[arg] = value[0]
+            kwargs = self.request.arguments
+            for arg, value in kwargs.items():
+                if len(value) == 1:
+                    kwargs[arg] = value[0]
 
-        Worker(route, params, self.worker_done).start()
+            run_handler(route, kwargs, callback=self.taskFinished)
+        except:
+            route_locks[route].release()
+            page_not_found(self)
 
-    def worker_done(self, value):
+    def taskFinished(self, result, route):
         try:
                 # encode result data
+            try:result = ek.ss(result).encode('utf-8', 'xmlcharrefreplace') if result else None
+            except:pass
 
+            if result:
                 # Check JSONP callback
+                jsonp_callback = self.get_argument('callback_func', default=None)
 
-            self.write(value)
+                if jsonp_callback:
+                    self.write(str(jsonp_callback) + '(' + json.dumps(result) + ')')
+                    self.set_header("Content-Type", "text/javascript")
+                    self.finish()
+                else:
+                    self.write(result)
+                    self.finish()
+        except UnicodeDecodeError:
+            logger.log('Failed proper encode: %s' % traceback.format_exc(), logger.ERROR)
         except:
             logger.log("Failed doing web request '%s': %s" % (route, traceback.format_exc()), logger.ERROR)
-            self.write({'success': False, 'error': 'Failed returning results'})
+            try:self.finish({'success': False, 'error': 'Failed returning results'})
+            except:pass
 
-        self.finish()
+        # release route lock
+        route_locks[route].release()
 
     # link post to get
     post = get
@@ -2089,8 +2108,11 @@ class NewHomeAddShows(Home):
 
             for cur_file in file_list:
 
-                cur_path = ek.ek(os.path.normpath, ek.ek(os.path.join, root_dir, cur_file))
-                if not ek.ek(os.path.isdir, cur_path):
+                try:
+                    cur_path = ek.ek(os.path.normpath, ek.ek(os.path.join, root_dir, cur_file))
+                    if not ek.ek(os.path.isdir, cur_path):
+                        continue
+                except:
                     continue
 
                 cur_dir = {
