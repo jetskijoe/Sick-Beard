@@ -17,8 +17,8 @@
 # along with SickRage.  If not, see <http://www.gnu.org/licenses/>.
 
 from __future__ import with_statement
+import inspect
 
-import threading
 import traceback
 import os
 import time
@@ -54,7 +54,6 @@ from sickbeard.scene_numbering import get_scene_numbering, set_scene_numbering, 
     get_xem_numbering_for_show, get_scene_absolute_numbering_for_show, get_xem_absolute_numbering_for_show, \
     get_scene_absolute_numbering
 
-
 from lib.dateutil import tz
 from lib.unrar2 import RarFile
 
@@ -75,41 +74,16 @@ except ImportError:
 
 from Cheetah.Template import Template
 
-from functools import wraps
 from tornado.routes import route
-from tornado.web import RequestHandler, authenticated, asynchronous
+from tornado.web import RequestHandler, HTTPError, authenticated, asynchronous, addslash
+from tornado.gen import coroutine
+from tornado.concurrent import run_on_executor
+from concurrent.futures import ThreadPoolExecutor
 
 from bug_tracker import BugTracker
 
 route_locks = {}
 
-def run_async(func):
-    @wraps(func)
-    def async_func(*args, **kwargs):
-        func_hl = threading.Thread(target = func, args = args, kwargs = kwargs)
-        func_hl.start()
-
-    return async_func
-
-@run_async
-def run_handler(route, kwargs, callback = None):
-    try:
-        res = route(**kwargs)
-        callback(res, route)
-    except:
-        logger.log('Failed doing api request "%s": %s' % (route, traceback.format_exc()), logger.ERROR)
-        callback({'success': False, 'error': 'Failed returning results'}, route)
-
-def page_not_found(rh):
-    index_url = sickbeard.WEB_ROOT
-    url = rh.request.uri[len(index_url):]
-
-    if url[:3] != 'api':
-        r = index_url + url.lstrip('/')
-        rh.redirect(r)
-    else:
-        rh.set_status(404)
-        rh.write('Wrong API key used')
 
 class PageTemplate(Template):
     def __init__(self, rh, *args, **kwargs):
@@ -159,9 +133,41 @@ class PageTemplate(Template):
         kwargs['cacheDirForModuleFiles'] = os.path.join(sickbeard.CACHE_DIR, 'cheetah')
         return super(PageTemplate, self).compile(*args, **kwargs)
 
+
 class BaseHandler(RequestHandler):
-    def __init__(self, *args, **kwargs):
-        super(BaseHandler, self).__init__(*args, **kwargs)
+    def write_error(self, status_code, **kwargs):
+        # handle 404 http errors
+        if status_code == 404:
+            index_url = sickbeard.WEB_ROOT
+            url = self.request.uri[len(index_url):]
+
+            if url[:3] != 'api':
+                self.redirect(url)
+            else:
+                self.write('Wrong API key used')
+        elif self.settings.get("debug") and "exc_info" in kwargs:
+            exc_info = kwargs["exc_info"]
+            trace_info = ''.join(["%s<br/>" % line for line in traceback.format_exception(*exc_info)])
+            request_info = ''.join(["<strong>%s</strong>: %s<br/>" % (k, self.request.__dict__[k] ) for k in
+                                    self.request.__dict__.keys()])
+            error = exc_info[1]
+
+            self.set_header('Content-Type', 'text/html')
+            self.finish("""<html>
+                                 <title>%s</title>
+                                 <body>
+                                    <h2>Error</h2>
+                                    <p>%s</p>
+                                    <h2>Traceback</h2>
+                                    <p>%s</p>
+                                    <h2>Request Info</h2>
+                                    <p>%s</p>
+                                 </body>
+                               </html>""" % (error, error,
+                                             trace_info, request_info))
+
+    def redirect(self, url, permanent=True, status=None):
+        super(BaseHandler, self).redirect(sickbeard.WEB_ROOT + url, permanent, status)
 
     def get_current_user(self, *args, **kwargs):
         if not isinstance(self, UI) and sickbeard.WEB_USERNAME and sickbeard.WEB_PASSWORD:
@@ -169,9 +175,58 @@ class BaseHandler(RequestHandler):
         else:
             return True
 
+class WebHandler(BaseHandler):
+    executor = ThreadPoolExecutor(10)
+
+    @coroutine
+    @asynchronous
+    @authenticated
+    def get(self, route, *args, **kwargs):
+        try:
+            route = route.strip('/').replace('.', '_') or 'index'
+
+            # get route
+            subclasses = self.__class__.__subclasses__()
+
+            try:
+                method = getattr(self, route)
+            except:
+                method = [getattr(cls, route) for cls in subclasses if getattr(cls, route, None)][0]
+
+            # process request async
+            self.async_worker(method, self.async_done)
+        except:
+            raise HTTPError(404)
+
+
+    @run_on_executor
+    def async_worker(self, method, callback):
+        kwargs = self.request.arguments
+        for arg, value in kwargs.items():
+            if len(value) == 1:
+                kwargs[arg] = value[0]
+
+        try:
+            callback(method(**kwargs))
+        except Exception as e:
+            callback()
+
+    def async_done(self, result=None):
+        if result:
+            try:
+                result = ek.ss(result).encode('utf-8', 'xmlcharrefreplace')
+            except:
+                result = str(result)
+
+            try:
+                self.write(result)
+                self.finish()
+            except:
+                pass
+
     def _genericMessage(self, subject, message):
         t = PageTemplate(rh=self, file="genericMessage.tmpl")
-        t.submenu = Home().HomeMenu()
+        t.submenu = self.HomeMenu()
         t.subject = subject
         t.message = message
         return t
@@ -211,6 +266,42 @@ class BaseHandler(RequestHandler):
         else:
             return False
 
+    # post and get use same method
+    post = get
+
+class LoginHandler(BaseHandler):
+    def get(self, *args, **kwargs):
+
+        if self.get_current_user():
+            self.redirect('/home/')
+        else:
+            t = PageTemplate(rh=self, file="login.tmpl")
+            self.write(ek.ss(t).encode('utf-8', 'xmlcharrefreplace'))
+
+    def post(self, *args, **kwargs):
+
+        api_key = None
+
+        username = sickbeard.WEB_USERNAME
+        password = sickbeard.WEB_PASSWORD
+
+        if (self.get_argument('username') == username or not username) and (
+                        self.get_argument('password') == password or not password):
+            api_key = sickbeard.API_KEY
+
+        if api_key:
+            remember_me = int(self.get_argument('remember_me', default=0) or 0)
+            self.set_secure_cookie('user', api_key, expires_days=30 if remember_me > 0 else None)
+
+        self.redirect('/home/')
+
+
+class LogoutHandler(BaseHandler):
+    def get(self, *args, **kwargs):
+        self.clear_cookie("user")
+        self.redirect('/login/')
+
+
 class KeyHandler(RequestHandler):
     def get(self, *args, **kwargs):
         api_key = None
@@ -231,118 +322,6 @@ class KeyHandler(RequestHandler):
             logger.log('Failed doing key request: %s' % (traceback.format_exc()), logger.ERROR)
             self.write({'success': False, 'error': 'Failed returning results'})
 
-class WebHandler(BaseHandler):
-    def write_error(self, status_code, **kwargs):
-        if status_code == 404:
-            self.redirect(sickbeard.WEB_ROOT + '/home/')
-            return
-        elif self.settings.get("debug") and "exc_info" in kwargs:
-            exc_info = kwargs["exc_info"]
-            trace_info = ''.join(["%s<br/>" % line for line in traceback.format_exception(*exc_info)])
-            request_info = ''.join(["<strong>%s</strong>: %s<br/>" % (k, self.request.__dict__[k] ) for k in
-                                    self.request.__dict__.keys()])
-            error = exc_info[1]
-
-            self.set_header('Content-Type', 'text/html')
-            self.finish("""<html>
-                                 <title>%s</title>
-                                 <body>
-                                    <h2>Error</h2>
-                                    <p>%s</p>
-                                    <h2>Traceback</h2>
-                                    <p>%s</p>
-                                    <h2>Request Info</h2>
-                                    <p>%s</p>
-                                 </body>
-                               </html>""" % (error, error,
-                                             trace_info, request_info))
-
-    @asynchronous
-    @authenticated
-    def get(self, route, *args, **kwargs):
-        route = route.strip('/')
-
-        try:
-            route = getattr(self, route)
-        except:
-            route = getattr(self, 'index')
-
-        # acquire route lock
-        route_locks[route] = threading.Lock()
-        route_locks[route].acquire()
-
-        try:
-
-            # Sanitize argument lists:
-            kwargs = self.request.arguments
-            for arg, value in kwargs.items():
-                if len(value) == 1:
-                    kwargs[arg] = value[0]
-
-            run_handler(route, kwargs, callback=self.taskFinished)
-        except:
-            route_locks[route].release()
-            page_not_found(self)
-
-    def taskFinished(self, result, route):
-        try:
-                # encode result data
-            try:result = ek.ss(result).encode('utf-8', 'xmlcharrefreplace') if result else None
-            except:pass
-
-            if result:
-                # Check JSONP callback
-                jsonp_callback = self.get_argument('callback_func', default=None)
-
-                if jsonp_callback:
-                    self.write(str(jsonp_callback) + '(' + json.dumps(result) + ')')
-                    self.set_header("Content-Type", "text/javascript")
-                    self.finish()
-                else:
-                    self.write(result)
-                    self.finish()
-        except UnicodeDecodeError:
-            logger.log('Failed proper encode: %s' % traceback.format_exc(), logger.ERROR)
-        except:
-            logger.log("Failed doing web request '%s': %s" % (route, traceback.format_exc()), logger.ERROR)
-            try:self.finish({'success': False, 'error': 'Failed returning results'})
-            except:pass
-
-        # release route lock
-        route_locks[route].release()
-
-    # link post to get
-    post = get
-
-class LoginHandler(BaseHandler):
-    def get(self, *args, **kwargs):
-
-        if self.get_current_user():
-            self.redirect('%shome/' % sickbeard.WEB_ROOT)
-        else:
-            t = PageTemplate(rh=self, file="login.tmpl")
-            self.write(ek.ss(t).encode('utf-8', 'xmlcharrefreplace'))
-
-    def post(self, *args, **kwargs):
-
-        api_key = None
-
-        username = sickbeard.WEB_USERNAME
-        password = sickbeard.WEB_PASSWORD
-
-        if (self.get_argument('username') == username or not username) and (self.get_argument('password') == password or not password):
-            api_key = sickbeard.API_KEY
-
-        if api_key:
-            remember_me = int(self.get_argument('remember_me', default=0) or 0)
-            self.set_secure_cookie('user', api_key, expires_days=30 if remember_me > 0 else None)
-
-        self.redirect('%shome/' % sickbeard.WEB_ROOT)
-
-class LogoutHandler(BaseHandler):
-    def get(self, *args, **kwargs):
-        self.clear_cookie("user")
-        self.redirect('%slogin/' % sickbeard.WEB_ROOT)
 
 @route('(.*)(/?)')
 class WebRoot(WebHandler):
@@ -400,7 +379,8 @@ class WebRoot(WebHandler):
         else:
             default_image_name = 'banner.png'
 
-        image_path = ek.ek(os.path.join, sickbeard.PROG_DIR, 'gui', 'slick', 'images', default_image_name)
+        #image_path = ek.ek(os.path.join, sickbeard.PROG_DIR, 'gui', 'slick', 'images', default_image_name)
+        static_image_path = '/images/' + default_image_name
         if show and sickbeard.helpers.findCertainShow(sickbeard.showList, int(show)):
             cache_obj = image_cache.ImageCache()
 
@@ -416,13 +396,9 @@ class WebRoot(WebHandler):
 
             if ek.ek(os.path.isfile, image_file_name):
                 image_path = image_file_name
+                static_image_path = '/cache' + image_path.replace(sickbeard.CACHE_DIR, '')
 
-        from mimetypes import MimeTypes
-
-        mime_type, encoding = MimeTypes().guess_type(image_path)
-        self.set_header('Content-Type', mime_type)
-        with file(image_path, 'rb') as img:
-            return img.read()
+        self.redirect(static_image_path)
 
     def setHomeLayout(self, layout):
 
@@ -638,6 +614,7 @@ class WebRoot(WebHandler):
 
         return ical
 
+
 @route('/ui/(.*)(/?)')
 class UI(WebRoot):
     def add_message(self, *args, **kwargs):
@@ -657,6 +634,7 @@ class UI(WebRoot):
 
         return json.dumps(messages)
 
+
 @route('/browser/(.*)(/?)')
 class WebFileBrowser(WebRoot):
     def index(self, path='', includeFiles=False, *args, **kwargs):
@@ -670,9 +648,10 @@ class WebFileBrowser(WebRoot):
 
         return json.dumps(paths)
 
+
 @route('/home/(.*)(/?)')
 class Home(WebRoot):
-    def HomeMenu(self, *args, **kwargs):
+    def HomeMenu(self):
         menu = [
             {'title': 'Add Shows', 'path': 'home/addShows/', },
             {'title': 'Manual Post-Processing', 'path': 'home/postprocess/'},
@@ -1979,10 +1958,11 @@ class Home(WebRoot):
             return json.dumps({'result': 'success'})
         else:
             return json.dumps({'result': 'failure'})
+
+
 @route('/home/postprocess/(.*)(/?)')
 class HomePostProcess(Home):
     def index(self, *args, **kwargs):
-
         t = PageTemplate(rh=self, file="home_postprocess.tmpl")
         t.submenu = self.HomeMenu()
         return t
@@ -2016,14 +1996,13 @@ class HomePostProcess(Home):
             result = result.replace("\n", "<br />\n")
             return self._genericMessage("Postprocessing results", result)
 
-@route('/home/addShows/(.*)(/?)')
-class NewHomeAddShows(Home):
-    def index(self, *args, **kwargs):
 
+@route('/home/addShows/(.*)(/?)')
+class HomeAddShows(Home):
+    def index(self, *args, **kwargs):
         t = PageTemplate(rh=self, file="home_addShows.tmpl")
         t.submenu = self.HomeMenu()
         return t
-
 
     def getIndexerLanguages(self, *args, **kwargs):
         result = sickbeard.indexerApi().config['valid_languages']
@@ -2516,9 +2495,10 @@ class NewHomeAddShows(Home):
         # for the remaining shows we need to prompt for each one, so forward this on to the newShow page
         return self.newShow(dirs_only[0], dirs_only[1:])
 
+
 @route('/manage/(.*)(/?)')
 class Manage(WebRoot):
-    def ManageMenu(self, *args, **kwargs):
+    def ManageMenu(self):
         menu = [
             {'title': 'Backlog Overview', 'path': 'manage/backlogOverview/'},
             {'title': 'Manage Searches', 'path': 'manage/manageSearches/'},
@@ -2644,7 +2624,7 @@ class Manage(WebRoot):
                 to_change[cur_indexer_id] = all_eps
 
             WebRoot.Home.setStatus(cur_indexer_id, '|'.join(to_change[cur_indexer_id]),
-                                                           newStatus, direct=True)
+                                   newStatus, direct=True)
 
         self.redirect('/manage/episodeStatuses/')
 
@@ -3020,13 +3000,13 @@ class Manage(WebRoot):
             exceptions_list = []
 
             curErrors += WebRoot.Home.editShow(curShow, new_show_dir, anyQualities,
-                                                                       bestQualities, exceptions_list,
-                                                                       archive_firstmatch=new_archive_firstmatch,
-                                                                       flatten_folders=new_flatten_folders,
-                                                                       paused=new_paused, sports=new_sports,
-                                                                       subtitles=new_subtitles, anime=new_anime,
-                                                                       scene=new_scene, air_by_date=new_air_by_date,
-                                                                       directCall=True)
+                                               bestQualities, exceptions_list,
+                                               archive_firstmatch=new_archive_firstmatch,
+                                               flatten_folders=new_flatten_folders,
+                                               paused=new_paused, sports=new_sports,
+                                               subtitles=new_subtitles, anime=new_anime,
+                                               scene=new_scene, air_by_date=new_air_by_date,
+                                               directCall=True)
 
             if curErrors:
                 logger.log(u"Errors: " + str(curErrors), logger.ERROR)
@@ -3211,6 +3191,7 @@ class Manage(WebRoot):
 
         return t
 
+
 @route('/manage/manageSearches/(.*)(/?)')
 class ManageSearches(Manage):
     def index(self, *args, **kwargs):
@@ -3272,6 +3253,7 @@ class ManageSearches(Manage):
             sickbeard.searchQueueScheduler.action.unpause_backlog()  # @UndefinedVariable
 
         self.redirect("/manage/manageSearches/")
+
 
 @route('/history/(.*)(/?)')
 class History(WebRoot):
@@ -3364,9 +3346,10 @@ class History(WebRoot):
         ui.notifications.message('Removed history entries greater than 30 days old')
         self.redirect("/history/")
 
+
 @route('/config/(.*)(/?)')
 class Config(WebRoot):
-    def ConfigMenu(self, *args, **kwargs):
+    def ConfigMenu(self):
         menu = [
             {'title': 'General', 'path': 'config/general/'},
             {'title': 'Backup/Restore', 'path': 'config/backuprestore/'},
@@ -3386,9 +3369,9 @@ class Config(WebRoot):
 
         return t
 
+
 @route('/config/general/(.*)(/?)')
 class ConfigGeneral(Config):
-
     def index(self, *args, **kwargs):
         t = PageTemplate(rh=self, file="config_general.tmpl")
         t.submenu = self.ConfigMenu()
@@ -3521,6 +3504,7 @@ class ConfigGeneral(Config):
 
         self.redirect("/config/general/")
 
+
 @route('/config/backuprestore/(.*)(/?)')
 class ConfigBackupRestore(Config):
     def index(self, *args, **kwargs):
@@ -3567,6 +3551,7 @@ class ConfigBackupRestore(Config):
         finalResult += "<br />\n"
 
         return finalResult
+
 
 @route('/config/search/(.*)(/?)')
 class ConfigSearch(Config):
@@ -3660,7 +3645,8 @@ class ConfigSearch(Config):
 
         self.redirect("/config/search/")
 
-@route('/config/postProcessing(.*)(/?)')
+
+@route('/config/postProcessing/(.*)(/?)')
 class ConfigPostProcessing(Config):
     def index(self, *args, **kwargs):
 
@@ -3858,6 +3844,7 @@ class ConfigPostProcessing(Config):
         except Exception, e:
             logger.log(u'Rar Not Supported: ' + ex(e), logger.ERROR)
             return 'not supported'
+
 
 @route('/config/providers/(.*)(/?)')
 class ConfigProviders(Config):
@@ -4297,6 +4284,7 @@ class ConfigProviders(Config):
 
         self.redirect("/config/providers/")
 
+
 @route('/config/notifications/(.*)(/?)')
 class ConfigNotifications(Config):
     def index(self, *args, **kwargs):
@@ -4506,6 +4494,7 @@ class ConfigNotifications(Config):
 
         self.redirect("/config/notifications/")
 
+
 @route('/config/subtitles/(.*)(/?)')
 class ConfigSubtitles(Config):
     def index(self, *args, **kwargs):
@@ -4569,6 +4558,7 @@ class ConfigSubtitles(Config):
 
         self.redirect("/config/subtitles/")
 
+
 @route('/config/anime/(.*)(/?)')
 class ConfigAnime(Config):
     def index(self, *args, **kwargs):
@@ -4601,9 +4591,10 @@ class ConfigAnime(Config):
 
         self.redirect("/config/anime/")
 
+
 @route('/errorlogs/(.*)(/?)')
 class ErrorLogs(WebRoot):
-    def ErrorLogsMenu(self, *args, **kwargs):
+    def ErrorLogsMenu(self):
         menu = [
             {'title': 'Clear Errors', 'path': 'errorlogs/clearerrors/'},
             # { 'title': 'View Log',  'path': 'errorlogs/viewlog'  },

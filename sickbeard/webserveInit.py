@@ -12,29 +12,6 @@ from tornado.httpserver import HTTPServer
 from tornado.ioloop import IOLoop
 from tornado.routes import route
 
-
-class MultiStaticFileHandler(StaticFileHandler):
-    def initialize(self, paths, default_filename=None):
-        self.paths = paths
-        self.default_filename = default_filename
-
-    def get(self, path, include_body=True):
-        for p in self.paths:
-            try:
-                # Initialize the Static file with a path
-                super(MultiStaticFileHandler, self).initialize(p)
-                # Try to get the file
-                return super(MultiStaticFileHandler, self).get(path)
-            except HTTPError as exc:
-                # File not found, carry on
-                if exc.status_code == 404:
-                    continue
-                raise
-
-        # Oops file not found anywhere!
-        raise HTTPError(404)
-
-
 class SRWebServer(threading.Thread):
     def __init__(self, options={}, io_loop=None):
         threading.Thread.__init__(self)
@@ -61,8 +38,8 @@ class SRWebServer(threading.Thread):
             self.video_root = None
 
         # web root
-        self.options['web_root'] = ('/' + self.options['web_root'].lstrip('/')).strip('/')
-        sickbeard.WEB_ROOT = self.options['web_root']
+        if self.options['web_root']:
+            sickbeard.WEB_ROOT = self.options['web_root'] = ('/' + self.options['web_root'].lstrip('/').strip('/'))
 
         # api root
         if not sickbeard.API_KEY:
@@ -95,38 +72,52 @@ class SRWebServer(threading.Thread):
                                  gzip=True,
                                  xheaders=sickbeard.HANDLE_REVERSE_PROXY,
                                  cookie_secret='61oETzKXQAGaYdkL5gEmGeJJFuYh7EQnp2XdTP1o/Vo=',
-                                 login_url='%slogin/' % self.options['web_root'],
+                                 login_url=r'%s/login' % self.options['web_root'],
         )
 
         # Main Handlers
-        self.app.add_handlers(".*$", [
+        self.app.add_handlers('.*$', [
+            # webapi handler
             (r'%s(/?)' % self.options['api_root'], ApiHandler),
+
+            # webapi key retrieval
             (r'%s/getkey(/?)' % self.options['web_root'], KeyHandler),
-            (r'%s/api/builder' % self.options['web_root'], RedirectHandler,
-             {"url": self.options['web_root'] + '/apibuilder/'}),
+
+            # webapi builder redirect
+            (r'%s/api/builder' % self.options['web_root'], RedirectHandler, {"url": self.options['web_root'] + '/apibuilder'}),
+
+            # webui login/logout handlers
             (r'%s/login(/?)' % self.options['web_root'], LoginHandler),
             (r'%s/logout(/?)' % self.options['web_root'], LogoutHandler),
-        ] + route.get_routes())
 
-        # Static Path Handlers
+            # webui handlers
+        ] + route.get_routes(self.options['web_root']))
+
+        # Static File Handlers
         self.app.add_handlers(".*$", [
-            (r'%s/(favicon\.ico)' % self.options['web_root'], MultiStaticFileHandler,
-             {'paths': [os.path.join(self.options['data_root'], 'images/ico/favicon.ico')]}),
-            (r'%s/%s/(.*)(/?)' % (self.options['web_root'], 'images'), MultiStaticFileHandler,
-             {'paths': [os.path.join(self.options['data_root'], 'images'),
-                        os.path.join(sickbeard.CACHE_DIR, 'images')]}),
-            (r'%s/%s/(.*)(/?)' % (self.options['web_root'], 'css'), MultiStaticFileHandler,
-             {'paths': [os.path.join(self.options['data_root'], 'css')]}),
-            (r'%s/%s/(.*)(/?)' % (self.options['web_root'], 'js'), MultiStaticFileHandler,
-             {'paths': [os.path.join(self.options['data_root'], 'js')]}),
-        ])
+            # favicon
+            (r'%s/(favicon\.ico)' % self.options['web_root'], StaticFileHandler,
+             {"path": os.path.join(self.options['data_root'], 'images/ico/favicon.ico')}),
 
-        # Static Videos Path
-        if self.video_root:
-            self.app.add_handlers(".*$", [
-                (r'%s%s/(.*)' % (self.options['web_root'], 'videos'), MultiStaticFileHandler,
-                 {'paths': [self.video_root]}),
-            ])
+            # images
+            (r'%s/images/(.*)' % self.options['web_root'], StaticFileHandler,
+             {"path": os.path.join(self.options['data_root'], 'images')}),
+
+            # cached images
+            (r'%s/cache/images/(.*)' % self.options['web_root'], StaticFileHandler,
+             {"path": os.path.join(sickbeard.CACHE_DIR, 'images')}),
+
+            # css
+            (r'%s/css/(.*)' % self.options['web_root'], StaticFileHandler,
+             {"path": os.path.join(self.options['data_root'], 'css')}),
+
+            # javascript
+            (r'%s/js/(.*)' % self.options['web_root'], StaticFileHandler,
+             {"path": os.path.join(self.options['data_root'], 'js')}),
+
+            # videos
+        ] + [(r'%s/videos/(.*)' % self.options['web_root'], StaticFileHandler,
+              {"path": self.video_root})])
 
     def run(self):
         if self.enable_https:
