@@ -902,11 +902,7 @@ class Home(WebRoot):
     def testTrakt(self, api=None, username=None, password=None):
         self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
 
-        result = notifiers.trakt_notifier.test_notify(api, username, password)
-        if result:
-            return "Test notice sent successfully to Trakt"
-        else:
-            return "Test notice failed to Trakt"
+        return notifiers.trakt_notifier.test_notify(api, username, password)
 
 
     def loadShowNotifyLists(self, *args, **kwargs):
@@ -2239,21 +2235,28 @@ class HomeAddShows(Home):
         t = PageTemplate(rh=self, file="home_trendingShows.tmpl")
         t.submenu = self.HomeMenu()
 
+        return t
+    def getTrendingShows(self, *args, **kwargs):
+        """
+        Display the new show page which collects a tvdb id, folder, and extra options and
+        posts them to addNewShow
+        """
+        t = PageTemplate(rh=self, file="trendingShows.tmpl")
+        t.submenu = self.HomeMenu()
         t.trending_shows = []
 
         trakt_api = TraktAPI(sickbeard.TRAKT_API, sickbeard.TRAKT_USERNAME, sickbeard.TRAKT_PASSWORD)
 
         try:
-            trending_shows = trakt_api.traktRequest("shows/trending.json/%APIKEY%")
+            shows = trakt_api.traktRequest("shows/trending.json/%APIKEY%") or []
 
-            if trending_shows:
-                for show in trending_shows:
-                    try:
-                        if not helpers.findCertainShow(sickbeard.showList,
-                                                       [int(show['tvdb_id']), int(show['tvrage_id'])]):
-                            t.trending_shows += [show]
-                    except exceptions.MultipleShowObjectsException:
-                        continue
+            for show in shows:
+                try:
+                    if not helpers.findCertainShow(sickbeard.showList,
+                                                   [int(show['tvdb_id']), int(show['tvrage_id'])]):
+                        t.trending_shows += [show]
+                except exceptions.MultipleShowObjectsException:
+                    continue
         except (traktException, traktAuthException, traktServerBusy) as e:
             logger.log(u"Could not connect to Trakt service: %s" % ex(e), logger.WARNING)
 
@@ -3148,7 +3151,7 @@ class Manage(WebRoot):
 
         if re.search('localhost', sickbeard.TORRENT_HOST):
 
-            if sickbeard.LOCALHOST_IP == '':
+            if not sickbeard.LOCALHOST_IP:
                 t.webui_url = re.sub('localhost', helpers.get_lan_ip(), sickbeard.TORRENT_HOST)
             else:
                 t.webui_url = re.sub('localhost', sickbeard.LOCALHOST_IP, sickbeard.TORRENT_HOST)

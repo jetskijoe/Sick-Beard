@@ -176,6 +176,8 @@ class Quality:
         """
         Return The quality from the scene episode File 
         """
+        if not name:
+            return Quality.UNKNOWN
         name = os.path.basename(name)
         checkName = lambda list, func: func([re.search(x, name, re.I) for x in list])
         if anime:
