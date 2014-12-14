@@ -17,7 +17,6 @@
 # along with SickRage.  If not, see <http://www.gnu.org/licenses/>.
 
 from __future__ import with_statement
-import inspect
 
 import traceback
 import os
@@ -27,7 +26,6 @@ import re
 import datetime
 
 import sickbeard
-
 from sickbeard import config, sab
 from sickbeard import clients
 from sickbeard import history, notifiers, processTV
@@ -41,7 +39,6 @@ from sickbeard import scene_exceptions
 from sickbeard import subtitles
 from sickbeard import network_timezones
 from sickbeard import sbdatetime
-
 from sickbeard.providers import newznab, rsstorrent
 from sickbeard.common import Quality, Overview, statusStrings, qualityPresetStrings, cpu_presets
 from sickbeard.common import SNATCHED, UNAIRED, IGNORED, ARCHIVED, WANTED, FAILED
@@ -56,9 +53,7 @@ from sickbeard.scene_numbering import get_scene_numbering, set_scene_numbering, 
 
 from lib.dateutil import tz
 from lib.unrar2 import RarFile
-
 from lib import adba, subliminal
-
 from lib.trakt import TraktAPI
 from lib.trakt.exceptions import traktException, traktAuthException, traktServerBusy
 
@@ -75,12 +70,11 @@ except ImportError:
 from Cheetah.Template import Template
 
 from tornado.routes import route
-from tornado.web import RequestHandler, HTTPError, authenticated, asynchronous, addslash
+from tornado.web import RequestHandler, HTTPError, authenticated, asynchronous
 from tornado.gen import coroutine
+from tornado.ioloop import IOLoop
 from tornado.concurrent import run_on_executor
 from concurrent.futures import ThreadPoolExecutor
-
-from bug_tracker import BugTracker
 
 route_locks = {}
 
@@ -135,16 +129,24 @@ class PageTemplate(Template):
 
 
 class BaseHandler(RequestHandler):
+    def __init__(self, *args, **kwargs):
+        super(BaseHandler, self).__init__(*args, **kwargs)
+
+    def set_default_headers(self):
+        self.set_header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+
     def write_error(self, status_code, **kwargs):
         # handle 404 http errors
         if status_code == 404:
-            index_url = sickbeard.WEB_ROOT
-            url = self.request.uri[len(index_url):]
+            url = self.request.uri
+            if self.request.uri.startswith(sickbeard.WEB_ROOT):
+                url = url[len(sickbeard.WEB_ROOT) + 1:]
 
             if url[:3] != 'api':
-                self.redirect(url)
+                return self.redirect(url)
             else:
-                self.write('Wrong API key used')
+                self.finish('Wrong API key used')
+
         elif self.settings.get("debug") and "exc_info" in kwargs:
             exc_info = kwargs["exc_info"]
             trace_info = ''.join(["%s<br/>" % line for line in traceback.format_exception(*exc_info)])
@@ -166,8 +168,11 @@ class BaseHandler(RequestHandler):
                                </html>""" % (error, error,
                                              trace_info, request_info))
 
-    def redirect(self, url, permanent=True, status=None):
-        super(BaseHandler, self).redirect(sickbeard.WEB_ROOT + url, permanent, status)
+    def redirect(self, url, permanent=False, status=None):
+        if not url.startswith(sickbeard.WEB_ROOT):
+            url = sickbeard.WEB_ROOT + url
+
+        super(BaseHandler, self).redirect(url, permanent, status)
 
     def get_current_user(self, *args, **kwargs):
         if not isinstance(self, UI) and sickbeard.WEB_USERNAME and sickbeard.WEB_PASSWORD:
@@ -175,108 +180,68 @@ class BaseHandler(RequestHandler):
         else:
             return True
 
+
 class WebHandler(BaseHandler):
-    executor = ThreadPoolExecutor(10)
+    def __init__(self, *args, **kwargs):
+        super(WebHandler, self).__init__(*args, **kwargs)
+
+    io_loop = IOLoop.current()
+    executor = ThreadPoolExecutor(50)
 
     @coroutine
     @asynchronous
     @authenticated
     def get(self, route, *args, **kwargs):
         try:
+            # route -> method obj
             route = route.strip('/').replace('.', '_') or 'index'
-
-            # get route
-            subclasses = self.__class__.__subclasses__()
-
-            try:
-                method = getattr(self, route)
-            except:
-                method = [getattr(cls, route) for cls in subclasses if getattr(cls, route, None)][0]
+            method = getattr(self, route)
 
             # process request async
-            self.async_worker(method, self.async_done)
+            self.async_call(method, callback=self.async_done)
         except:
+            logger.log('Failed doing webui request "%s": %s' % (route, traceback.format_exc()), logger.ERROR)
             raise HTTPError(404)
 
-
     @run_on_executor
-    def async_worker(self, method, callback):
-        kwargs = self.request.arguments
-        for arg, value in kwargs.items():
-            if len(value) == 1:
-                kwargs[arg] = value[0]
-
+    def async_call(self, function, callback=None):
         try:
-            callback(method(**kwargs))
-        except Exception as e:
-            callback()
+            kwargs = self.request.arguments
+            for arg, value in kwargs.items():
+                if len(value) == 1:
+                    kwargs[arg] = value[0]
 
-    def async_done(self, result=None):
-        if result:
-            try:
-                result = ek.ss(result).encode('utf-8', 'xmlcharrefreplace')
-            except:
-                result = str(result)
+            result = function(**kwargs)
+            if callback:
+                callback(result)
+            return result
+        except:
+            logger.log('Failed doing webui callback: %s' % (traceback.format_exc()), logger.ERROR)
+            raise
 
-            try:
-                self.write(result)
-                self.finish()
-            except:
-                pass
+    def async_done(self, results):
+        try:
+            if results:
+                results = ek.ss(results)
 
-    def _genericMessage(self, subject, message):
-        t = PageTemplate(rh=self, file="genericMessage.tmpl")
-        t.submenu = self.HomeMenu()
-        t.subject = subject
-        t.message = message
-        return t
+                self.finish(results)
+        except:
+            logger.log('Failed sending webui reponse: %s' % (traceback.format_exc()), logger.DEBUG)
+            raise
 
-    def _getEpisode(self, show, season=None, episode=None, absolute=None):
-        if show is None:
-            return "Invalid show parameters"
-
-        showObj = sickbeard.helpers.findCertainShow(sickbeard.showList, int(show))
-
-        if showObj is None:
-            return "Invalid show paramaters"
-
-        if absolute:
-            epObj = showObj.getEpisode(absolute_number=int(absolute))
-        elif season and episode:
-            epObj = showObj.getEpisode(int(season), int(episode))
-        else:
-            return "Invalid paramaters"
-
-        if epObj is None:
-            return "Episode couldn't be retrieved"
-
-        return epObj
-
-    def haveKODI(self):
-        return sickbeard.USE_KODI and sickbeard.KODI_UPDATE_LIBRARY
-
-    def havePLEX(self):
-        return sickbeard.USE_PLEX and sickbeard.PLEX_UPDATE_LIBRARY
-
-    def haveTORRENT(self):
-        if sickbeard.USE_TORRENTS and sickbeard.TORRENT_METHOD != 'blackhole' \
-                and (sickbeard.ENABLE_HTTPS and sickbeard.TORRENT_HOST[:5] == 'https'
-                     or not sickbeard.ENABLE_HTTPS and sickbeard.TORRENT_HOST[:5] == 'http:'):
-            return True
-        else:
-            return False
-
-    # post and get use same method
+    # post uses get method
     post = get
 
 class LoginHandler(BaseHandler):
-    def get(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
+        super(LoginHandler, self).__init__(*args, **kwargs)
 
+    def get(self, *args, **kwargs):
         if self.get_current_user():
             self.redirect('/home/')
         else:
             t = PageTemplate(rh=self, file="login.tmpl")
-            self.write(ek.ss(t).encode('utf-8', 'xmlcharrefreplace'))
+            self.finish(ek.ss(t))
 
     def post(self, *args, **kwargs):
 
@@ -297,12 +262,18 @@ class LoginHandler(BaseHandler):
 
 
 class LogoutHandler(BaseHandler):
+    def __init__(self, *args, **kwargs):
+        super(LogoutHandler, self).__init__(*args, **kwargs)
+
     def get(self, *args, **kwargs):
         self.clear_cookie("user")
         self.redirect('/login/')
 
 
-class KeyHandler(RequestHandler):
+class KeyHandler(BaseHandler):
+    def __init__(self, *args, **kwargs):
+        super(KeyHandler, self).__init__(*args, **kwargs)
+
     def get(self, *args, **kwargs):
         api_key = None
 
@@ -314,45 +285,41 @@ class KeyHandler(RequestHandler):
                     and (self.get_argument('p', None) == password or not password):
                 api_key = sickbeard.API_KEY
 
-            self.write({
+            self.finish({
                 'success': api_key is not None,
                 'api_key': api_key
             })
         except:
             logger.log('Failed doing key request: %s' % (traceback.format_exc()), logger.ERROR)
-            self.write({'success': False, 'error': 'Failed returning results'})
+            self.finish({'success': False, 'error': 'Failed returning results'})
 
 
 @route('(.*)(/?)')
 class WebRoot(WebHandler):
-    def index(self, *args, **kwargs):
-        self.redirect('/home/')
+    def __init__(self, *args, **kwargs):
+        super(WebRoot, self).__init__(*args, **kwargs)
 
-    def robots_txt(self, *args, **kwargs):
+    def index(self):
+        return self.redirect('/home/')
+
+    def robots_txt(self):
         """ Keep web crawlers out """
         self.set_header('Content-Type', 'text/plain')
         return "User-agent: *\nDisallow: /"
 
-    def apibuilder(self, *args, **kwargs):
+    def apibuilder(self):
         t = PageTemplate(rh=self, file="apiBuilder.tmpl")
 
         def titler(x):
-            if not x or sickbeard.SORT_ARTICLE:
-                return x
-            if x.lower().startswith('a '):
-                x = x[2:]
-            elif x.lower().startswith('an '):
-                x = x[3:]
-            elif x.lower().startswith('the '):
-                x = x[4:]
-            return x
+            return (helpers.remove_article(x), x)[not x or sickbeard.SORT_ARTICLE]
 
         t.sortedShowList = sorted(sickbeard.showList, lambda x, y: cmp(titler(x.name), titler(y.name)))
+
+        myDB = db.DBConnection(row_type="dict")
 
         seasonSQLResults = {}
         episodeSQLResults = {}
 
-        myDB = db.DBConnection(row_type="dict")
         for curShow in t.sortedShowList:
             seasonSQLResults[curShow.indexerid] = myDB.select(
                 "SELECT DISTINCT season FROM tv_episodes WHERE showid = ? ORDER BY season DESC", [curShow.indexerid])
@@ -379,8 +346,8 @@ class WebRoot(WebHandler):
         else:
             default_image_name = 'banner.png'
 
-        #image_path = ek.ek(os.path.join, sickbeard.PROG_DIR, 'gui', 'slick', 'images', default_image_name)
-        static_image_path = '/images/' + default_image_name
+        # image_path = ek.ek(os.path.join, sickbeard.PROG_DIR, 'gui', 'slick', 'images', default_image_name)
+        static_image_path = os.path.join('/images', default_image_name)
         if show and sickbeard.helpers.findCertainShow(sickbeard.showList, int(show)):
             cache_obj = image_cache.ImageCache()
 
@@ -395,10 +362,10 @@ class WebRoot(WebHandler):
                 image_file_name = cache_obj.banner_thumb_path(show)
 
             if ek.ek(os.path.isfile, image_file_name):
-                image_path = image_file_name
-                static_image_path = '/cache' + image_path.replace(sickbeard.CACHE_DIR, '')
+                static_image_path = os.path.normpath(image_file_name.replace(sickbeard.CACHE_DIR, '/cache'))
 
-        self.redirect(static_image_path)
+        static_image_path = static_image_path.replace('\\', '/')
+        return self.redirect(static_image_path)
 
     def setHomeLayout(self, layout):
 
@@ -407,7 +374,7 @@ class WebRoot(WebHandler):
 
         sickbeard.HOME_LAYOUT = layout
 
-        self.redirect("/home/")
+        return self.redirect("/home/")
 
     def setPosterSortBy(self, sort):
 
@@ -429,13 +396,13 @@ class WebRoot(WebHandler):
 
         sickbeard.HISTORY_LAYOUT = layout
 
-        self.redirect("/history/")
+        return self.redirect("/history/")
 
     def toggleDisplayShowSpecials(self, show):
 
         sickbeard.DISPLAY_SHOW_SPECIALS = not sickbeard.DISPLAY_SHOW_SPECIALS
 
-        self.redirect("/home/displayShow?show=" + show)
+        return self.redirect("/home/displayShow?show=" + show)
 
     def setComingEpsLayout(self, layout):
         if layout not in ('poster', 'banner', 'list', 'calendar'):
@@ -446,13 +413,13 @@ class WebRoot(WebHandler):
 
         sickbeard.COMING_EPS_LAYOUT = layout
 
-        self.redirect("/comingEpisodes/")
+        return self.redirect("/comingEpisodes/")
 
-    def toggleComingEpsDisplayPaused(self, *args, **kwargs):
+    def toggleComingEpsDisplayPaused(self):
 
         sickbeard.COMING_EPS_DISPLAY_PAUSED = not sickbeard.COMING_EPS_DISPLAY_PAUSED
 
-        self.redirect("/comingEpisodes/")
+        return self.redirect("/comingEpisodes/")
 
     def setComingEpsSort(self, sort):
         if sort not in ('date', 'network', 'show'):
@@ -464,7 +431,7 @@ class WebRoot(WebHandler):
 
         sickbeard.COMING_EPS_SORT = sort
 
-        self.redirect("/comingEpisodes/")
+        return self.redirect("/comingEpisodes/")
 
     def comingEpisodes(self, layout="None"):
 
@@ -552,7 +519,7 @@ class WebRoot(WebHandler):
     #
     # iCalendar (iCal) - Standard RFC 5545 <http://tools.ietf.org/html/rfc5546>
     # Works with iCloud, Google Calendar and Outlook.
-    def calendar(self, *args, **kwargs):
+    def calendar(self):
         """ Provides a subscribeable URL for iCal subscriptions
         """
 
@@ -614,16 +581,18 @@ class WebRoot(WebHandler):
 
         return ical
 
-
-@route('/ui/(.*)(/?)')
+@route('/ui(/?.*)')
 class UI(WebRoot):
-    def add_message(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
+        super(UI, self).__init__(*args, **kwargs)
+
+    def add_message(self):
         ui.notifications.message('Test 1', 'This is test number 1')
         ui.notifications.error('Test 2', 'This is test number 2')
 
         return "ok"
 
-    def get_messages(self, *args, **kwargs):
+    def get_messages(self):
         messages = {}
         cur_notification_num = 1
         for cur_notification in ui.notifications.get_notifications(self.request.remote_ip):
@@ -635,8 +604,11 @@ class UI(WebRoot):
         return json.dumps(messages)
 
 
-@route('/browser/(.*)(/?)')
+@route('/browser(/?.*)')
 class WebFileBrowser(WebRoot):
+    def __init__(self, *args, **kwargs):
+        super(WebFileBrowser, self).__init__(*args, **kwargs)
+
     def index(self, path='', includeFiles=False, *args, **kwargs):
         self.set_header("Content-Type", "application/json")
         return json.dumps(foldersAtPath(path, True, bool(int(includeFiles))))
@@ -649,22 +621,51 @@ class WebFileBrowser(WebRoot):
         return json.dumps(paths)
 
 
-@route('/home/(.*)(/?)')
+@route('/home(/?.*)')
 class Home(WebRoot):
+    def __init__(self, *args, **kwargs):
+        super(Home, self).__init__(*args, **kwargs)
+
     def HomeMenu(self):
         menu = [
             {'title': 'Add Shows', 'path': 'home/addShows/', },
             {'title': 'Manual Post-Processing', 'path': 'home/postprocess/'},
             {'title': 'Update KODI', 'path': 'home/updateKODI/', 'requires': self.haveKODI},
             {'title': 'Update Plex', 'path': 'home/updatePLEX/', 'requires': self.havePLEX},
-            {'title': 'Manage Torrents', 'path': 'manage/manageTorrents', 'requires': self.haveTORRENT},
-            {'title': 'Restart', 'path': 'home/restart/?pid=' + str(sickbeard.PID), 'confirm': True},
-            {'title': 'Shutdown', 'path': 'home/shutdown/?pid=' + str(sickbeard.PID), 'confirm': True},
+            {'title': 'Manage Torrents', 'path': 'manage/manageTorrents/', 'requires': self.haveTORRENT},
         ]
 
         return menu
 
-    def index(self, *args, **kwargs):
+    def _genericMessage(self, subject, message):
+        t = PageTemplate(rh=self, file="genericMessage.tmpl")
+        t.submenu = self.HomeMenu()
+        t.subject = subject
+        t.message = message
+        return t
+
+    def _getEpisode(self, show, season=None, episode=None, absolute=None):
+        if show is None:
+            return "Invalid show parameters"
+
+        showObj = sickbeard.helpers.findCertainShow(sickbeard.showList, int(show))
+
+        if showObj is None:
+            return "Invalid show paramaters"
+
+        if absolute:
+            epObj = showObj.getEpisode(absolute_number=int(absolute))
+        elif season and episode:
+            epObj = showObj.getEpisode(int(season), int(episode))
+        else:
+            return "Invalid paramaters"
+
+        if epObj is None:
+            return "Episode couldn't be retrieved"
+
+        return epObj
+
+    def index(self):
         t = PageTemplate(rh=self, file="home.tmpl")
         if sickbeard.ANIME_SPLIT_HOME:
             shows = []
@@ -689,7 +690,7 @@ class Home(WebRoot):
         else:
             return "Error: Unsupported Request. Send jsonp request with 'callback' variable in the query string."
 
-        self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
+        # self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
         self.set_header('Content-Type', 'text/javascript')
         self.set_header('Access-Control-Allow-Origin', '*')
         self.set_header('Access-Control-Allow-Headers', 'x-requested-with')
@@ -700,8 +701,22 @@ class Home(WebRoot):
         else:
             return callback + '(' + json.dumps({"msg": "nope"}) + ');'
 
+    def haveKODI(self):
+        return sickbeard.USE_KODI and sickbeard.KODI_UPDATE_LIBRARY
+
+    def havePLEX(self):
+        return sickbeard.USE_PLEX and sickbeard.PLEX_UPDATE_LIBRARY
+
+    def haveTORRENT(self):
+        if sickbeard.USE_TORRENTS and sickbeard.TORRENT_METHOD != 'blackhole' \
+                and (sickbeard.ENABLE_HTTPS and sickbeard.TORRENT_HOST[:5] == 'https'
+                     or not sickbeard.ENABLE_HTTPS and sickbeard.TORRENT_HOST[:5] == 'http:'):
+            return True
+        else:
+            return False
+
     def testSABnzbd(self, host=None, username=None, password=None, apikey=None):
-        self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
+        # self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
 
         host = config.clean_url(host)
 
@@ -717,7 +732,7 @@ class Home(WebRoot):
 
 
     def testTorrent(self, torrent_method=None, host=None, username=None, password=None):
-        self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
+        # self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
 
         host = config.clean_url(host)
 
@@ -729,7 +744,7 @@ class Home(WebRoot):
 
 
     def testGrowl(self, host=None, password=None):
-        self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
+        # self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
 
         host = config.clean_host(host, default_port=23053)
 
@@ -746,7 +761,7 @@ class Home(WebRoot):
 
 
     def testProwl(self, prowl_api=None, prowl_priority=0):
-        self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
+        # self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
 
         result = notifiers.prowl_notifier.test_notify(prowl_api, prowl_priority)
         if result:
@@ -756,7 +771,7 @@ class Home(WebRoot):
 
 
     def testBoxcar(self, username=None):
-        self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
+        # self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
 
         result = notifiers.boxcar_notifier.test_notify(username)
         if result:
@@ -766,7 +781,7 @@ class Home(WebRoot):
 
 
     def testBoxcar2(self, accesstoken=None):
-        self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
+        # self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
 
         result = notifiers.boxcar2_notifier.test_notify(accesstoken)
         if result:
@@ -776,7 +791,7 @@ class Home(WebRoot):
 
 
     def testPushover(self, userKey=None, apiKey=None):
-        self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
+        # self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
 
         result = notifiers.pushover_notifier.test_notify(userKey, apiKey)
         if result:
@@ -785,14 +800,14 @@ class Home(WebRoot):
             return "Error sending Pushover notification"
 
 
-    def twitterStep1(self, *args, **kwargs):
-        self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
+    def twitterStep1(self):
+        # self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
 
         return notifiers.twitter_notifier._get_authorization()
 
 
     def twitterStep2(self, key):
-        self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
+        # self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
 
         result = notifiers.twitter_notifier._get_credentials(key)
         logger.log(u"result: " + str(result))
@@ -802,8 +817,8 @@ class Home(WebRoot):
             return "Unable to verify key"
 
 
-    def testTwitter(self, *args, **kwargs):
-        self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
+    def testTwitter(self):
+        # self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
 
         result = notifiers.twitter_notifier.test_notify()
         if result:
@@ -813,7 +828,7 @@ class Home(WebRoot):
 
 
     def testKODI(self, host=None, username=None, password=None):
-        self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
+        # self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
 
         host = config.clean_hosts(host)
         finalResult = ''
@@ -829,7 +844,7 @@ class Home(WebRoot):
 
 
     def testPLEX(self, host=None, username=None, password=None):
-        self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
+        # self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
 
         finalResult = ''
         for curHost in [x.strip() for x in host.split(",")]:
@@ -843,8 +858,8 @@ class Home(WebRoot):
         return finalResult
 
 
-    def testLibnotify(self, *args, **kwargs):
-        self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
+    def testLibnotify(self):
+        # self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
 
         if notifiers.libnotify_notifier.test_notify():
             return "Tried sending desktop notification via libnotify"
@@ -853,7 +868,7 @@ class Home(WebRoot):
 
 
     def testNMJ(self, host=None, database=None, mount=None):
-        self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
+        # self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
 
         host = config.clean_host(host)
         result = notifiers.nmj_notifier.test_notify(urllib.unquote_plus(host), database, mount)
@@ -864,7 +879,7 @@ class Home(WebRoot):
 
 
     def settingsNMJ(self, host=None):
-        self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
+        # self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
 
         host = config.clean_host(host)
         result = notifiers.nmj_notifier.notify_settings(urllib.unquote_plus(host))
@@ -876,7 +891,7 @@ class Home(WebRoot):
 
 
     def testNMJv2(self, host=None):
-        self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
+        # self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
 
         host = config.clean_host(host)
         result = notifiers.nmjv2_notifier.test_notify(urllib.unquote_plus(host))
@@ -887,7 +902,7 @@ class Home(WebRoot):
 
 
     def settingsNMJv2(self, host=None, dbloc=None, instance=None):
-        self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
+        # self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
 
         host = config.clean_host(host)
         result = notifiers.nmjv2_notifier.notify_settings(urllib.unquote_plus(host), dbloc, instance)
@@ -900,13 +915,12 @@ class Home(WebRoot):
 
 
     def testTrakt(self, api=None, username=None, password=None):
-        self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
-
+        # self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
         return notifiers.trakt_notifier.test_notify(api, username, password)
 
 
-    def loadShowNotifyLists(self, *args, **kwargs):
-        self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
+    def loadShowNotifyLists(self):
+        # self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
 
         myDB = db.DBConnection()
         rows = myDB.select("SELECT show_id, show_name, notify_list FROM tv_shows ORDER BY show_name ASC")
@@ -921,7 +935,7 @@ class Home(WebRoot):
 
 
     def testEmail(self, host=None, port=None, smtp_from=None, use_tls=None, user=None, pwd=None, to=None):
-        self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
+        # self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
 
         host = config.clean_host(host)
         if notifiers.email_notifier.test_notify(host, port, smtp_from, use_tls, user, pwd, to):
@@ -931,7 +945,7 @@ class Home(WebRoot):
 
 
     def testNMA(self, nma_api=None, nma_priority=0):
-        self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
+        # self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
 
         result = notifiers.nma_notifier.test_notify(nma_api, nma_priority)
         if result:
@@ -941,7 +955,7 @@ class Home(WebRoot):
 
 
     def testPushalot(self, authorizationToken=None):
-        self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
+        # self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
 
         result = notifiers.pushalot_notifier.test_notify(authorizationToken)
         if result:
@@ -951,7 +965,7 @@ class Home(WebRoot):
 
 
     def testPushbullet(self, api=None):
-        self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
+        # self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
 
         result = notifiers.pushbullet_notifier.test_notify(api)
         if result:
@@ -961,7 +975,7 @@ class Home(WebRoot):
 
 
     def getPushbulletDevices(self, api=None):
-        self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
+        # self.set_header('Cache-Control', 'max-age=0,no-cache,no-store')
 
         result = notifiers.pushbullet_notifier.get_devices(api)
         if result:
@@ -970,10 +984,8 @@ class Home(WebRoot):
             return "Error sending Pushbullet notification"
 
     def shutdown(self, pid=None):
-
         if str(pid) != str(sickbeard.PID):
-            self.redirect("/home/")
-            return
+            return self.redirect("/home/")
 
         sickbeard.events.put(sickbeard.events.SystemEvent.SHUTDOWN)
 
@@ -983,10 +995,8 @@ class Home(WebRoot):
         return self._genericMessage(title, message)
 
     def restart(self, pid=None):
-
         if str(pid) != str(sickbeard.PID):
-            self.redirect("/home/")
-            return
+            return self.redirect("/home/")
 
         t = PageTemplate(rh=self, file="restart.tmpl")
         t.submenu = self.HomeMenu()
@@ -996,14 +1006,19 @@ class Home(WebRoot):
 
         return t
 
-    def update(self, pid=None):
-
+    def updateCheck(self, pid=None):
         if str(pid) != str(sickbeard.PID):
-            self.redirect("/home/")
-            return
+            return self.redirect('/home/')
 
-        updated = sickbeard.versionCheckScheduler.action.update()  # @UndefinedVariable
-        if updated:
+        sickbeard.versionCheckScheduler.action.check_for_new_version(force=True)
+
+        return self.redirect('/home/')
+
+    def update(self, pid=None):
+        if str(pid) != str(sickbeard.PID):
+            return self.redirect('/home/')
+
+        if sickbeard.versionCheckScheduler.action.update():
             # do a hard restart
             sickbeard.events.put(sickbeard.events.SystemEvent.RESTART)
 
@@ -1049,29 +1064,29 @@ class Home(WebRoot):
 
         show_message = ''
 
-        if sickbeard.showQueueScheduler.action.isBeingAdded(showObj):  # @UndefinedVariable
+        if sickbeard.showQueueScheduler.action.isBeingAdded(showObj):
             show_message = 'This show is in the process of being downloaded - the info below is incomplete.'
 
-        elif sickbeard.showQueueScheduler.action.isBeingUpdated(showObj):  # @UndefinedVariable
+        elif sickbeard.showQueueScheduler.action.isBeingUpdated(showObj):
             show_message = 'The information on this page is in the process of being updated.'
 
-        elif sickbeard.showQueueScheduler.action.isBeingRefreshed(showObj):  # @UndefinedVariable
+        elif sickbeard.showQueueScheduler.action.isBeingRefreshed(showObj):
             show_message = 'The episodes below are currently being refreshed from disk'
 
-        elif sickbeard.showQueueScheduler.action.isBeingSubtitled(showObj):  # @UndefinedVariable
+        elif sickbeard.showQueueScheduler.action.isBeingSubtitled(showObj):
             show_message = 'Currently downloading subtitles for this show'
 
-        elif sickbeard.showQueueScheduler.action.isInRefreshQueue(showObj):  # @UndefinedVariable
+        elif sickbeard.showQueueScheduler.action.isInRefreshQueue(showObj):
             show_message = 'This show is queued to be refreshed.'
 
-        elif sickbeard.showQueueScheduler.action.isInUpdateQueue(showObj):  # @UndefinedVariable
+        elif sickbeard.showQueueScheduler.action.isInUpdateQueue(showObj):
             show_message = 'This show is queued and awaiting an update.'
 
-        elif sickbeard.showQueueScheduler.action.isInSubtitleQueue(showObj):  # @UndefinedVariable
+        elif sickbeard.showQueueScheduler.action.isInSubtitleQueue(showObj):
             show_message = 'This show is queued and awaiting subtitles download.'
 
-        if not sickbeard.showQueueScheduler.action.isBeingAdded(showObj):  # @UndefinedVariable
-            if not sickbeard.showQueueScheduler.action.isBeingUpdated(showObj):  # @UndefinedVariable
+        if not sickbeard.showQueueScheduler.action.isBeingAdded(showObj):
+            if not sickbeard.showQueueScheduler.action.isBeingUpdated(showObj):
                 t.submenu.append(
                     {'title': 'Remove', 'path': 'home/deleteShow?show=%d' % showObj.indexerid, 'confirm': True})
                 t.submenu.append({'title': 'Re-scan files', 'path': 'home/refreshShow?show=%d' % showObj.indexerid})
@@ -1107,15 +1122,7 @@ class Home(WebRoot):
                 epCounts[curEpCat] += 1
 
         def titler(x):
-            if not x or sickbeard.SORT_ARTICLE:
-                return x
-            if x.lower().startswith('a '):
-                x = x[2:]
-            if x.lower().startswith('an '):
-                x = x[3:]
-            elif x.lower().startswith('the '):
-                x = x[4:]
-            return x
+            return (helpers.remove_article(x), x)[not x or sickbeard.SORT_ARTICLE]
 
         if sickbeard.ANIME_SPLIT_HOME:
             shows = []
@@ -1334,7 +1341,7 @@ class Home(WebRoot):
             if bool(showObj.flatten_folders) != bool(flatten_folders):
                 showObj.flatten_folders = flatten_folders
                 try:
-                    sickbeard.showQueueScheduler.action.refreshShow(showObj)  # @UndefinedVariable
+                    sickbeard.showQueueScheduler.action.refreshShow(showObj)
                 except exceptions.CantRefreshException, e:
                     errors.append("Unable to refresh this show: " + ex(e))
 
@@ -1364,7 +1371,7 @@ class Home(WebRoot):
                     try:
                         showObj.location = location
                         try:
-                            sickbeard.showQueueScheduler.action.refreshShow(showObj)  # @UndefinedVariable
+                            sickbeard.showQueueScheduler.action.refreshShow(showObj)
                         except exceptions.CantRefreshException, e:
                             errors.append("Unable to refresh this show:" + ex(e))
                             # grab updated info from TVDB
@@ -1380,7 +1387,7 @@ class Home(WebRoot):
         # force the update
         if do_update:
             try:
-                sickbeard.showQueueScheduler.action.updateShow(showObj, True)  # @UndefinedVariable
+                sickbeard.showQueueScheduler.action.updateShow(showObj, True)
                 time.sleep(cpu_presets[sickbeard.CPU_PRESET])
             except exceptions.CantUpdateException, e:
                 errors.append("Unable to force an update on the show.")
@@ -1394,7 +1401,7 @@ class Home(WebRoot):
 
         if do_update_scene_numbering:
             try:
-                sickbeard.scene_numbering.xem_refresh(showObj.indexerid, showObj.indexer)  # @UndefinedVariable
+                sickbeard.scene_numbering.xem_refresh(showObj.indexerid, showObj.indexer)
                 time.sleep(cpu_presets[sickbeard.CPU_PRESET])
             except exceptions.CantUpdateException, e:
                 errors.append("Unable to force an update on scene numbering of the show.")
@@ -1406,7 +1413,7 @@ class Home(WebRoot):
             ui.notifications.error('%d error%s while saving changes:' % (len(errors), "" if len(errors) == 1 else "s"),
                                    '<ul>' + '\n'.join(['<li>%s</li>' % error for error in errors]) + "</ul>")
 
-        self.redirect("/home/displayShow?show=" + show)
+        return self.redirect("/home/displayShow?show=" + show)
 
 
     def deleteShow(self, show=None, full=0):
@@ -1420,7 +1427,7 @@ class Home(WebRoot):
             return self._genericMessage("Error", "Unable to find the specified show")
 
         if sickbeard.showQueueScheduler.action.isBeingAdded(
-                showObj) or sickbeard.showQueueScheduler.action.isBeingUpdated(showObj):  # @UndefinedVariable
+                showObj) or sickbeard.showQueueScheduler.action.isBeingUpdated(showObj):
             return self._genericMessage("Error", "Shows can't be deleted while they're being added or updated.")
 
         if sickbeard.USE_TRAKT and sickbeard.TRAKT_SYNC:
@@ -1433,7 +1440,7 @@ class Home(WebRoot):
                                  (showObj.name,
                                   ('deleted', 'trashed')[sickbeard.TRASH_REMOVE_SHOW],
                                   ('(media untouched)', '(with all related media)')[bool(full)]))
-        self.redirect("/home/")
+        return self.redirect("/home/")
 
 
     def refreshShow(self, show=None):
@@ -1448,14 +1455,14 @@ class Home(WebRoot):
 
         # force the update from the DB
         try:
-            sickbeard.showQueueScheduler.action.refreshShow(showObj)  # @UndefinedVariable
+            sickbeard.showQueueScheduler.action.refreshShow(showObj)
         except exceptions.CantRefreshException, e:
             ui.notifications.error("Unable to refresh this show.",
                                    ex(e))
 
         time.sleep(cpu_presets[sickbeard.CPU_PRESET])
 
-        self.redirect("/home/displayShow?show=" + str(showObj.indexerid))
+        return self.redirect("/home/displayShow?show=" + str(showObj.indexerid))
 
 
     def updateShow(self, show=None, force=0):
@@ -1470,14 +1477,14 @@ class Home(WebRoot):
 
         # force the update
         try:
-            sickbeard.showQueueScheduler.action.updateShow(showObj, bool(force))  # @UndefinedVariable
+            sickbeard.showQueueScheduler.action.updateShow(showObj, bool(force))
         except exceptions.CantUpdateException, e:
             ui.notifications.error("Unable to update this show.", ex(e))
 
         # just give it some time
         time.sleep(cpu_presets[sickbeard.CPU_PRESET])
 
-        self.redirect("/home/displayShow?show=" + str(showObj.indexerid))
+        return self.redirect("/home/displayShow?show=" + str(showObj.indexerid))
 
     def subtitleShow(self, show=None, force=0):
 
@@ -1490,11 +1497,11 @@ class Home(WebRoot):
             return self._genericMessage("Error", "Unable to find the specified show")
 
         # search and download subtitles
-        sickbeard.showQueueScheduler.action.downloadSubtitles(showObj, bool(force))  # @UndefinedVariable
+        sickbeard.showQueueScheduler.action.downloadSubtitles(showObj, bool(force))
 
         time.sleep(cpu_presets[sickbeard.CPU_PRESET])
 
-        self.redirect("/home/displayShow?show=" + str(showObj.indexerid))
+        return self.redirect("/home/displayShow?show=" + str(showObj.indexerid))
 
 
     def updateKODI(self, showName=None):
@@ -1510,17 +1517,16 @@ class Home(WebRoot):
             ui.notifications.message("Library update command sent to KODI host(s): " + host)
         else:
             ui.notifications.error("Unable to contact one or more KODI host(s): " + host)
-        self.redirect('/home/')
+        return self.redirect('/home/')
 
 
-    def updatePLEX(self, *args, **kwargs):
+    def updatePLEX(self):
         if notifiers.plex_notifier.update_library():
             ui.notifications.message(
                 "Library update command sent to Plex Media Server host: " + sickbeard.PLEX_SERVER_HOST)
         else:
             ui.notifications.error("Unable to contact Plex Media Server host: " + sickbeard.PLEX_SERVER_HOST)
-        self.redirect('/home/')
-
+        return self.redirect('/home/')
 
     def setStatus(self, show=None, eps=None, status=None, direct=False):
 
@@ -1608,7 +1614,7 @@ class Home(WebRoot):
 
             for season, segment in segments.items():
                 cur_backlog_queue_item = search_queue.BacklogQueueItem(showObj, segment)
-                sickbeard.searchQueueScheduler.action.add_item(cur_backlog_queue_item)  # @UndefinedVariable
+                sickbeard.searchQueueScheduler.action.add_item(cur_backlog_queue_item)
 
                 msg += "<li>Season " + str(season) + "</li>"
                 logger.log(u"Sending backlog for " + showObj.name + " season " + str(
@@ -1625,7 +1631,7 @@ class Home(WebRoot):
 
             for season, segment in segments.items():
                 cur_failed_queue_item = search_queue.FailedQueueItem(showObj, [segment])
-                sickbeard.searchQueueScheduler.action.add_item(cur_failed_queue_item)  # @UndefinedVariable
+                sickbeard.searchQueueScheduler.action.add_item(cur_failed_queue_item)
 
                 msg += "<li>Season " + str(season) + "</li>"
                 logger.log(u"Retrying Search for " + showObj.name + " season " + str(
@@ -1639,7 +1645,7 @@ class Home(WebRoot):
         if direct:
             return json.dumps({'result': 'success'})
         else:
-            self.redirect("/home/displayShow?show=" + show)
+            return self.redirect("/home/displayShow?show=" + show)
 
 
     def testRename(self, show=None):
@@ -1706,8 +1712,7 @@ class Home(WebRoot):
             return self._genericMessage("Error", "Can't rename episodes when the show dir is missing.")
 
         if eps is None:
-            self.redirect("/home/displayShow?show=" + show)
-            return
+            return self.redirect("/home/displayShow?show=" + show)
 
         myDB = db.DBConnection()
         for curEp in eps.split('|'):
@@ -1734,7 +1739,7 @@ class Home(WebRoot):
 
             root_ep_obj.rename()
 
-        self.redirect("/home/displayShow?show=" + show)
+        return self.redirect("/home/displayShow?show=" + show)
 
     def searchEpisode(self, show=None, season=None, episode=None):
 
@@ -1746,7 +1751,7 @@ class Home(WebRoot):
         # make a queue item for it and put it on the queue
         ep_queue_item = search_queue.ManualSearchQueueItem(ep_obj.show, ep_obj)
 
-        sickbeard.searchQueueScheduler.action.add_item(ep_queue_item)  # @UndefinedVariable
+        sickbeard.searchQueueScheduler.action.add_item(ep_queue_item)
 
         if not ep_queue_item.started and ep_queue_item.success is None:
             return json.dumps(
@@ -1763,24 +1768,30 @@ class Home(WebRoot):
 
         episodes = []
 
-        # Queued Searches
-        for searchThread in sickbeard.searchQueueScheduler.action.get_all_ep_from_queue(show):
-            searchstatus = 'queued'
+        def getEpisodes(searchThread, searchstatus):
+            results = []
+
             if isinstance(searchThread, sickbeard.search_queue.ManualSearchQueueItem):
-                episodes.append({'episode': searchThread.segment.episode,
-                                 'episodeindexid': searchThread.segment.indexerid,
-                                 'season': searchThread.segment.season,
-                                 'searchstatus': searchstatus,
-                                 'status': statusStrings[searchThread.segment.status],
-                                 'quality': self.getQualityClass(searchThread.segment)})
+                results.append({'episode': searchThread.segment.episode,
+                                'episodeindexid': searchThread.segment.indexerid,
+                                'season': searchThread.segment.season,
+                                'searchstatus': searchstatus,
+                                'status': statusStrings[searchThread.segment.status],
+                                'quality': self.getQualityClass(searchThread.segment)})
             else:
                 for epObj in searchThread.segment:
-                    episodes.append({'episode': epObj.episode,
-                                     'episodeindexid': epObj.indexerid,
-                                     'season': epObj.season,
-                                     'searchstatus': searchstatus,
-                                     'status': statusStrings[epObj.status],
-                                     'quality': self.getQualityClass(epObj)})
+                    results.append({'episode': epObj.episode,
+                                    'episodeindexid': epObj.indexerid,
+                                    'season': epObj.season,
+                                    'searchstatus': searchstatus,
+                                    'status': statusStrings[epObj.status],
+                                    'quality': self.getQualityClass(epObj)})
+
+            return results
+
+        # Queued Searches
+        for searchThread in sickbeard.searchQueueScheduler.action.get_all_ep_from_queue(show):
+            episodes += getEpisodes(searchThread, 'queued')
 
         # Running Searches
         if (sickbeard.searchQueueScheduler.action.is_manualsearch_in_progress()):
@@ -1789,12 +1800,7 @@ class Home(WebRoot):
                 searchstatus = 'finished'
             else:
                 searchstatus = 'searching'
-            episodes.append({'episode': searchThread.segment.episode,
-                             'episodeindexid': searchThread.segment.indexerid,
-                             'season': searchThread.segment.season,
-                             'searchstatus': searchstatus,
-                             'status': statusStrings[searchThread.segment.status],
-                             'quality': self.getQualityClass(searchThread.segment)})
+            episodes += getEpisodes(searchThread, searchstatus)
 
         # Finished Searches
         for searchThread in sickbeard.search_queue.MANUAL_SEARCH_HISTORY:
@@ -1802,24 +1808,14 @@ class Home(WebRoot):
                 if str(searchThread.show.indexerid) == show and not [x for x in episodes if x[
                     'episodeindexid'] == searchThread.segment.indexerid]:
                     searchstatus = 'finished'
-                    episodes.append({'episode': searchThread.segment.episode,
-                                     'episodeindexid': searchThread.segment.indexerid,
-                                     'season': searchThread.segment.season,
-                                     'searchstatus': searchstatus,
-                                     'status': statusStrings[searchThread.segment.status],
-                                     'quality': self.getQualityClass(searchThread.segment)})
+                    episodes += getEpisodes(searchThread, searchstatus)
             else:
                 ### These are only Failed Downloads/Retry SearchThreadItems.. lets loop through the segement/episodes
                 if str(searchThread.show.indexerid) == show:
                     for epObj in searchThread.segment:
                         if not [x for x in episodes if x['episodeindexid'] == epObj.indexerid]:
                             searchstatus = 'finished'
-                            episodes.append({'episode': epObj.episode,
-                                             'episodeindexid': epObj.indexerid,
-                                             'season': epObj.season,
-                                             'searchstatus': searchstatus,
-                                             'status': statusStrings[epObj.status],
-                                             'quality': self.getQualityClass(epObj)})
+                            episodes += getEpisodes(searchThread, searchstatus)
 
         return json.dumps({'show': show, 'episodes': episodes})
 
@@ -1945,7 +1941,7 @@ class Home(WebRoot):
 
         # make a queue item for it and put it on the queue
         ep_queue_item = search_queue.FailedQueueItem(ep_obj.show, [ep_obj])
-        sickbeard.searchQueueScheduler.action.add_item(ep_queue_item)  # @UndefinedVariable
+        sickbeard.searchQueueScheduler.action.add_item(ep_queue_item)
 
         if not ep_queue_item.started and ep_queue_item.success is None:
             return json.dumps(
@@ -1956,9 +1952,12 @@ class Home(WebRoot):
             return json.dumps({'result': 'failure'})
 
 
-@route('/home/postprocess/(.*)(/?)')
+@route('/home/postprocess(/?.*)')
 class HomePostProcess(Home):
-    def index(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
+        super(HomePostProcess, self).__init__(*args, **kwargs)
+
+    def index(self):
         t = PageTemplate(rh=self, file="home_postprocess.tmpl")
         t.submenu = self.HomeMenu()
         return t
@@ -1982,7 +1981,7 @@ class HomePostProcess(Home):
             is_priority = False
 
         if not dir:
-            self.redirect("/home/postprocess/")
+            return self.redirect("/home/postprocess/")
         else:
             result = processTV.processDir(dir, nzbName, process_method=process_method, force=force,
                                           is_priority=is_priority, failed=failed, type=type)
@@ -1993,14 +1992,17 @@ class HomePostProcess(Home):
             return self._genericMessage("Postprocessing results", result)
 
 
-@route('/home/addShows/(.*)(/?)')
+@route('/home/addShows(/?.*)')
 class HomeAddShows(Home):
-    def index(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
+        super(HomeAddShows, self).__init__(*args, **kwargs)
+
+    def index(self):
         t = PageTemplate(rh=self, file="home_addShows.tmpl")
         t.submenu = self.HomeMenu()
         return t
 
-    def getIndexerLanguages(self, *args, **kwargs):
+    def getIndexerLanguages(self):
         result = sickbeard.indexerApi().config['valid_languages']
 
         # Make sure list is sorted alphabetically but 'en' is in front
@@ -2177,7 +2179,7 @@ class HomeAddShows(Home):
 
         return t
 
-    def recommendedShows(self, *args, **kwargs):
+    def recommendedShows(self):
         """
         Display the new show page which collects a tvdb id, folder, and extra options and
         posts them to addNewShow
@@ -2187,7 +2189,7 @@ class HomeAddShows(Home):
 
         return t
 
-    def getRecommendedShows(self, *args, **kwargs):
+    def getRecommendedShows(self):
         final_results = []
 
         logger.log(u"Getting recommended shows from Trakt.tv", logger.DEBUG)
@@ -2227,7 +2229,7 @@ class HomeAddShows(Home):
                                anyQualities, bestQualities, flatten_folders, subtitles, fullShowPath, other_shows,
                                skipShow, providedIndexer, anime, scene)
 
-    def trendingShows(self, *args, **kwargs):
+    def trendingShows(self):
         """
         Display the new show page which collects a tvdb id, folder, and extra options and
         posts them to addNewShow
@@ -2236,20 +2238,21 @@ class HomeAddShows(Home):
         t.submenu = self.HomeMenu()
 
         return t
-    def getTrendingShows(self, *args, **kwargs):
+
+    def getTrendingShows(self):
         """
         Display the new show page which collects a tvdb id, folder, and extra options and
         posts them to addNewShow
         """
         t = PageTemplate(rh=self, file="trendingShows.tmpl")
         t.submenu = self.HomeMenu()
+
         t.trending_shows = []
 
         trakt_api = TraktAPI(sickbeard.TRAKT_API, sickbeard.TRAKT_USERNAME, sickbeard.TRAKT_PASSWORD)
 
         try:
             shows = trakt_api.traktRequest("shows/trending.json/%APIKEY%") or []
-
             for show in shows:
                 try:
                     if not helpers.findCertainShow(sickbeard.showList,
@@ -2262,7 +2265,7 @@ class HomeAddShows(Home):
 
         return t
 
-    def existingShows(self, *args, **kwargs):
+    def existingShows(self):
         """
         Prints out the page to add existing shows from a root dir
         """
@@ -2304,7 +2307,7 @@ class HomeAddShows(Home):
             return "No root directories setup, please go back and add one."
 
         # done adding show
-        self.redirect('/home/')
+        return self.redirect('/home/')
 
     def addNewShow(self, whichSeries=None, indexerLang="en", rootDir=None, defaultStatus=None,
                    anyQualities=None, bestQualities=None, flatten_folders=None, subtitles=None,
@@ -2324,8 +2327,7 @@ class HomeAddShows(Home):
         def finishAddShow():
             # if there are no extra shows then go home
             if not other_shows:
-                self.redirect('/home/')
-                return
+                return self.redirect('/home/')
 
             # peel off the next one
             next_show_dir = other_shows[0]
@@ -2350,8 +2352,7 @@ class HomeAddShows(Home):
                 logger.log("Unable to add show due to show selection. Not anough arguments: %s" % (repr(series_pieces)),
                            logger.ERROR)
                 ui.notifications.error("Unknown error. Unable to add show due to problem with show selection.")
-                self.redirect('/home/addShows/existingShows/')
-                return
+                return self.redirect('/home/addShows/existingShows/')
 
             indexer = int(series_pieces[1])
             indexer_id = int(series_pieces[3])
@@ -2374,8 +2375,7 @@ class HomeAddShows(Home):
         # blanket policy - if the dir exists you should have used "add existing show" numbnuts
         if ek.ek(os.path.isdir, show_dir) and not fullShowPath:
             ui.notifications.error("Unable to add show", "Folder " + show_dir + " exists already")
-            self.redirect('/home/addShows/existingShows/')
-            return
+            return self.redirect('/home/addShows/existingShows/')
 
         # don't create show dir if config says not to
         if sickbeard.ADD_SHOWS_WO_DIR:
@@ -2386,8 +2386,7 @@ class HomeAddShows(Home):
                 logger.log(u"Unable to create the folder " + show_dir + ", can't add the show", logger.ERROR)
                 ui.notifications.error("Unable to add show",
                                        "Unable to create the folder " + show_dir + ", can't add the show")
-                self.redirect("/home/")
-                return
+                return self.redirect("/home/")
             else:
                 helpers.chmodAsParent(show_dir)
 
@@ -2410,7 +2409,7 @@ class HomeAddShows(Home):
         # add the show
         sickbeard.showQueueScheduler.action.addShow(indexer, indexer_id, show_dir, int(defaultStatus), newQuality,
                                                     flatten_folders, indexerLang, subtitles, anime,
-                                                    scene)  # @UndefinedVariable
+                                                    scene)
         ui.notifications.message('Show added', 'Adding the specified show into ' + show_dir)
 
         return finishAddShow()
@@ -2492,15 +2491,17 @@ class HomeAddShows(Home):
 
         # if we're done then go home
         if not dirs_only:
-            self.redirect('/home/')
-            return
+            return self.redirect('/home/')
 
         # for the remaining shows we need to prompt for each one, so forward this on to the newShow page
         return self.newShow(dirs_only[0], dirs_only[1:])
 
 
-@route('/manage/(.*)(/?)')
-class Manage(WebRoot):
+@route('/manage(/?.*)')
+class Manage(Home, WebRoot):
+    def __init__(self, *args, **kwargs):
+        super(Manage, self).__init__(*args, **kwargs)
+
     def ManageMenu(self):
         menu = [
             {'title': 'Backlog Overview', 'path': 'manage/backlogOverview/'},
@@ -2520,7 +2521,7 @@ class Manage(WebRoot):
 
         return menu
 
-    def index(self, *args, **kwargs):
+    def index(self):
         t = PageTemplate(rh=self, file="manage.tmpl")
         t.submenu = self.ManageMenu()
         return t
@@ -2626,10 +2627,9 @@ class Manage(WebRoot):
                 all_eps = [str(x["season"]) + 'x' + str(x["episode"]) for x in all_eps_results]
                 to_change[cur_indexer_id] = all_eps
 
-            WebRoot.Home.setStatus(cur_indexer_id, '|'.join(to_change[cur_indexer_id]),
-                                   newStatus, direct=True)
+            self.setStatus(cur_indexer_id, '|'.join(to_change[cur_indexer_id]), newStatus, direct=True)
 
-        self.redirect('/manage/episodeStatuses/')
+        return self.redirect('/manage/episodeStatuses/')
 
 
     def showSubtitleMissed(self, indexer_id, whichSubs):
@@ -2737,7 +2737,7 @@ class Manage(WebRoot):
                 show = sickbeard.helpers.findCertainShow(sickbeard.showList, int(cur_indexer_id))
                 subtitles = show.getEpisode(int(season), int(episode)).downloadSubtitles()
 
-        self.redirect('/manage/subtitleMissed/')
+        return self.redirect('/manage/subtitleMissed/')
 
 
     def backlogShow(self, indexer_id):
@@ -2745,12 +2745,12 @@ class Manage(WebRoot):
         show_obj = helpers.findCertainShow(sickbeard.showList, int(indexer_id))
 
         if show_obj:
-            sickbeard.backlogSearchScheduler.action.searchBacklog([show_obj])  # @UndefinedVariable
+            sickbeard.backlogSearchScheduler.action.searchBacklog([show_obj])
 
-        self.redirect("/manage/backlogOverview/")
+        return self.redirect("/manage/backlogOverview/")
 
 
-    def backlogOverview(self, *args, **kwargs):
+    def backlogOverview(self):
 
         t = PageTemplate(rh=self, file="manage_backlogOverview.tmpl")
         t.submenu = self.ManageMenu()
@@ -2798,8 +2798,7 @@ class Manage(WebRoot):
         t.submenu = self.ManageMenu()
 
         if not toEdit:
-            self.redirect("/manage/")
-            return
+            return self.redirect("/manage/")
 
         showIDs = toEdit.split("|")
         showList = []
@@ -3002,14 +3001,14 @@ class Manage(WebRoot):
 
             exceptions_list = []
 
-            curErrors += WebRoot.Home.editShow(curShow, new_show_dir, anyQualities,
-                                               bestQualities, exceptions_list,
-                                               archive_firstmatch=new_archive_firstmatch,
-                                               flatten_folders=new_flatten_folders,
-                                               paused=new_paused, sports=new_sports,
-                                               subtitles=new_subtitles, anime=new_anime,
-                                               scene=new_scene, air_by_date=new_air_by_date,
-                                               directCall=True)
+            curErrors += self.editShow(curShow, new_show_dir, anyQualities,
+                                       bestQualities, exceptions_list,
+                                       archive_firstmatch=new_archive_firstmatch,
+                                       flatten_folders=new_flatten_folders,
+                                       paused=new_paused, sports=new_sports,
+                                       subtitles=new_subtitles, anime=new_anime,
+                                       scene=new_scene, air_by_date=new_air_by_date,
+                                       directCall=True)
 
             if curErrors:
                 logger.log(u"Errors: " + str(curErrors), logger.ERROR)
@@ -3020,7 +3019,7 @@ class Manage(WebRoot):
             ui.notifications.error('%d error%s while saving changes:' % (len(errors), "" if len(errors) == 1 else "s"),
                                    " ".join(errors))
 
-        self.redirect("/manage/")
+        return self.redirect("/manage/")
 
 
     def massUpdate(self, toUpdate=None, toRefresh=None, toRename=None, toDelete=None, toRemove=None, toMetadata=None,
@@ -3089,7 +3088,7 @@ class Manage(WebRoot):
 
             if curShowID in toUpdate:
                 try:
-                    sickbeard.showQueueScheduler.action.updateShow(showObj, True)  # @UndefinedVariable
+                    sickbeard.showQueueScheduler.action.updateShow(showObj, True)
                     updates.append(showObj.name)
                 except exceptions.CantUpdateException, e:
                     errors.append("Unable to update show " + showObj.name + ": " + ex(e))
@@ -3097,17 +3096,17 @@ class Manage(WebRoot):
             # don't bother refreshing shows that were updated anyway
             if curShowID in toRefresh and curShowID not in toUpdate:
                 try:
-                    sickbeard.showQueueScheduler.action.refreshShow(showObj)  # @UndefinedVariable
+                    sickbeard.showQueueScheduler.action.refreshShow(showObj)
                     refreshes.append(showObj.name)
                 except exceptions.CantRefreshException, e:
                     errors.append("Unable to refresh show " + showObj.name + ": " + ex(e))
 
             if curShowID in toRename:
-                sickbeard.showQueueScheduler.action.renameShowEpisodes(showObj)  # @UndefinedVariable
+                sickbeard.showQueueScheduler.action.renameShowEpisodes(showObj)
                 renames.append(showObj.name)
 
             if curShowID in toSubtitle:
-                sickbeard.showQueueScheduler.action.downloadSubtitles(showObj)  # @UndefinedVariable
+                sickbeard.showQueueScheduler.action.downloadSubtitles(showObj)
                 subtitles.append(showObj.name)
 
         if len(errors) > 0:
@@ -3140,10 +3139,10 @@ class Manage(WebRoot):
             ui.notifications.message("The following actions were queued:",
                                      messageDetail)
 
-        self.redirect("/manage/")
+        return self.redirect("/manage/")
 
 
-    def manageTorrents(self, *args, **kwargs):
+    def manageTorrents(self):
 
         t = PageTemplate(rh=self, file="manage_torrents.tmpl")
         t.info_download_station = ''
@@ -3151,7 +3150,7 @@ class Manage(WebRoot):
 
         if re.search('localhost', sickbeard.TORRENT_HOST):
 
-            if not sickbeard.LOCALHOST_IP:
+            if sickbeard.LOCALHOST_IP == '':
                 t.webui_url = re.sub('localhost', helpers.get_lan_ip(), sickbeard.TORRENT_HOST)
             else:
                 t.webui_url = re.sub('localhost', sickbeard.LOCALHOST_IP, sickbeard.TORRENT_HOST)
@@ -3181,11 +3180,10 @@ class Manage(WebRoot):
         toRemove = toRemove.split("|") if toRemove is not None else []
 
         for release in toRemove:
-            myDB.action('DELETE FROM failed WHERE release = ?', [release])
+            myDB.action("DELETE FROM failed WHERE release = ?", [release])
 
         if toRemove:
-            self.redirect('/manage/failedDownloads/')
-            return
+            return self.redirect('/manage/failedDownloads/')
 
         t = PageTemplate(rh=self, file="manage_failedDownloads.tmpl")
         t.failedResults = sqlResults
@@ -3195,39 +3193,34 @@ class Manage(WebRoot):
         return t
 
 
-@route('/manage/manageSearches/(.*)(/?)')
+@route('/manage/manageSearches(/?.*)')
 class ManageSearches(Manage):
-    def index(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
+        super(ManageSearches, self).__init__(*args, **kwargs)
+
+    def index(self):
         t = PageTemplate(rh=self, file="manage_manageSearches.tmpl")
         # t.backlogPI = sickbeard.backlogSearchScheduler.action.getProgressIndicator()
-        t.backlogPaused = sickbeard.searchQueueScheduler.action.is_backlog_paused()  # @UndefinedVariable
-        t.backlogRunning = sickbeard.searchQueueScheduler.action.is_backlog_in_progress()  # @UndefinedVariable
-        t.dailySearchStatus = sickbeard.dailySearchScheduler.action.amActive  # @UndefinedVariable
-        t.findPropersStatus = sickbeard.properFinderScheduler.action.amActive  # @UndefinedVariable
+        t.backlogPaused = sickbeard.searchQueueScheduler.action.is_backlog_paused()
+        t.backlogRunning = sickbeard.searchQueueScheduler.action.is_backlog_in_progress()
+        t.dailySearchStatus = sickbeard.dailySearchScheduler.action.amActive
+        t.findPropersStatus = sickbeard.properFinderScheduler.action.amActive
         t.queueLength = sickbeard.searchQueueScheduler.action.queue_length()
 
         t.submenu = self.ManageMenu()
 
         return t
 
-
-    def forceVersionCheck(self, *args, **kwargs):
-        # force a check to see if there is a new version
-        if sickbeard.versionCheckScheduler.action.check_for_new_version(force=True):
-            logger.log(u"Forcing version check")
-
-        self.redirect("/home/")
-
-    def forceBacklog(self, *args, **kwargs):
+    def forceBacklog(self):
         # force it to run the next time it looks
         result = sickbeard.backlogSearchScheduler.forceRun()
         if result:
             logger.log(u"Backlog search forced")
             ui.notifications.message('Backlog search started')
 
-        self.redirect("/manage/manageSearches/")
+        return self.redirect("/manage/manageSearches/")
 
-    def forceSearch(self, *args, **kwargs):
+    def forceSearch(self):
 
         # force it to run the next time it looks
         result = sickbeard.dailySearchScheduler.forceRun()
@@ -3235,10 +3228,10 @@ class ManageSearches(Manage):
             logger.log(u"Daily search forced")
             ui.notifications.message('Daily search started')
 
-        self.redirect("/manage/manageSearches/")
+        return self.redirect("/manage/manageSearches/")
 
 
-    def forceFindPropers(self, *args, **kwargs):
+    def forceFindPropers(self):
 
         # force it to run the next time it looks
         result = sickbeard.properFinderScheduler.forceRun()
@@ -3246,20 +3239,23 @@ class ManageSearches(Manage):
             logger.log(u"Find propers search forced")
             ui.notifications.message('Find propers search started')
 
-        self.redirect("/manage/manageSearches/")
+        return self.redirect("/manage/manageSearches/")
 
 
     def pauseBacklog(self, paused=None):
         if paused == "1":
-            sickbeard.searchQueueScheduler.action.pause_backlog()  # @UndefinedVariable
+            sickbeard.searchQueueScheduler.action.pause_backlog()
         else:
-            sickbeard.searchQueueScheduler.action.unpause_backlog()  # @UndefinedVariable
+            sickbeard.searchQueueScheduler.action.unpause_backlog()
 
-        self.redirect("/manage/manageSearches/")
+        return self.redirect("/manage/manageSearches/")
 
 
-@route('/history/(.*)(/?)')
+@route('/history(/?.*)')
 class History(WebRoot):
+    def __init__(self, *args, **kwargs):
+        super(History, self).__init__(*args, **kwargs)
+
     def index(self, limit=100):
 
         # sqlResults = myDB.select("SELECT h.*, show_name, name FROM history h, tv_shows s, tv_episodes e WHERE h.showid=s.indexer_id AND h.showid=e.showid AND h.season=e.season AND h.episode=e.episode ORDER BY date DESC LIMIT "+str(numPerPage*(p-1))+", "+str(numPerPage))
@@ -3331,27 +3327,30 @@ class History(WebRoot):
         return t
 
 
-    def clearHistory(self, *args, **kwargs):
+    def clearHistory(self):
 
         myDB = db.DBConnection()
         myDB.action("DELETE FROM history WHERE 1=1")
 
         ui.notifications.message('History cleared')
-        self.redirect("/history/")
+        return self.redirect("/history/")
 
 
-    def trimHistory(self, *args, **kwargs):
+    def trimHistory(self):
 
         myDB = db.DBConnection()
         myDB.action("DELETE FROM history WHERE date < " + str(
             (datetime.datetime.today() - datetime.timedelta(days=30)).strftime(history.dateFormat)))
 
         ui.notifications.message('Removed history entries greater than 30 days old')
-        self.redirect("/history/")
+        return self.redirect("/history/")
 
 
-@route('/config/(.*)(/?)')
+@route('/config(/?.*)')
 class Config(WebRoot):
+    def __init__(self, *args, **kwargs):
+        super(Config, self).__init__(*args, **kwargs)
+
     def ConfigMenu(self):
         menu = [
             {'title': 'General', 'path': 'config/general/'},
@@ -3366,22 +3365,25 @@ class Config(WebRoot):
 
         return menu
 
-    def index(self, *args, **kwargs):
+    def index(self):
         t = PageTemplate(rh=self, file="config.tmpl")
         t.submenu = self.ConfigMenu()
 
         return t
 
 
-@route('/config/general/(.*)(/?)')
+@route('/config/general(/?.*)')
 class ConfigGeneral(Config):
-    def index(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
+        super(ConfigGeneral, self).__init__(*args, **kwargs)
+
+    def index(self):
         t = PageTemplate(rh=self, file="config_general.tmpl")
         t.submenu = self.ConfigMenu()
         return t
 
 
-    def generateApiKey(self, *args, **kwargs):
+    def generateApiKey(self):
         return helpers.generateApiKey()
 
     def saveRootDirs(self, rootDirString=None):
@@ -3505,12 +3507,15 @@ class ConfigGeneral(Config):
         else:
             ui.notifications.message('Configuration Saved', ek.ek(os.path.join, sickbeard.CONFIG_FILE))
 
-        self.redirect("/config/general/")
+        return self.redirect("/config/general/")
 
 
-@route('/config/backuprestore/(.*)(/?)')
+@route('/config/backuprestore(/?.*)')
 class ConfigBackupRestore(Config):
-    def index(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
+        super(ConfigBackupRestore, self).__init__(*args, **kwargs)
+
+    def index(self):
         t = PageTemplate(rh=self, file="config_backuprestore.tmpl")
         t.submenu = self.ConfigMenu()
         return t
@@ -3556,10 +3561,12 @@ class ConfigBackupRestore(Config):
         return finalResult
 
 
-@route('/config/search/(.*)(/?)')
+@route('/config/search(/?.*)')
 class ConfigSearch(Config):
-    def index(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
+        super(ConfigSearch, self).__init__(*args, **kwargs)
 
+    def index(self):
         t = PageTemplate(rh=self, file="config_search.tmpl")
         t.submenu = self.ConfigMenu()
         return t
@@ -3646,13 +3653,15 @@ class ConfigSearch(Config):
         else:
             ui.notifications.message('Configuration Saved', ek.ek(os.path.join, sickbeard.CONFIG_FILE))
 
-        self.redirect("/config/search/")
+        return self.redirect("/config/search/")
 
 
-@route('/config/postProcessing/(.*)(/?)')
+@route('/config/postProcessing(/?.*)')
 class ConfigPostProcessing(Config):
-    def index(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
+        super(ConfigPostProcessing, self).__init__(*args, **kwargs)
 
+    def index(self):
         t = PageTemplate(rh=self, file="config_postProcessing.tmpl")
         t.submenu = self.ConfigMenu()
         return t
@@ -3779,7 +3788,7 @@ class ConfigPostProcessing(Config):
         else:
             ui.notifications.message('Configuration Saved', ek.ek(os.path.join, sickbeard.CONFIG_FILE))
 
-        self.redirect("/config/postProcessing/")
+        return self.redirect("/config/postProcessing/")
 
     def testNaming(self, pattern=None, multi=None, abd=False, sports=False, anime_type=None):
 
@@ -3831,7 +3840,7 @@ class ConfigPostProcessing(Config):
             return "invalid"
 
 
-    def isRarSupported(self, *args, **kwargs):
+    def isRarSupported(self):
         """
         Test Packing Support:
             - Simulating in memory rar extraction on test.rar file
@@ -3849,9 +3858,12 @@ class ConfigPostProcessing(Config):
             return 'not supported'
 
 
-@route('/config/providers/(.*)(/?)')
+@route('/config/providers(/?.*)')
 class ConfigProviders(Config):
-    def index(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
+        super(ConfigProviders, self).__init__(*args, **kwargs)
+
+    def index(self):
         t = PageTemplate(rh=self, file="config_providers.tmpl")
         t.submenu = self.ConfigMenu()
         return t
@@ -4285,12 +4297,15 @@ class ConfigProviders(Config):
         else:
             ui.notifications.message('Configuration Saved', ek.ek(os.path.join, sickbeard.CONFIG_FILE))
 
-        self.redirect("/config/providers/")
+        return self.redirect("/config/providers/")
 
 
-@route('/config/notifications/(.*)(/?)')
+@route('/config/notifications(/?.*)')
 class ConfigNotifications(Config):
-    def index(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
+        super(ConfigNotifications, self).__init__(*args, **kwargs)
+
+    def index(self):
         t = PageTemplate(rh=self, file="config_notifications.tmpl")
         t.submenu = self.ConfigMenu()
         return t
@@ -4495,12 +4510,15 @@ class ConfigNotifications(Config):
         else:
             ui.notifications.message('Configuration Saved', ek.ek(os.path.join, sickbeard.CONFIG_FILE))
 
-        self.redirect("/config/notifications/")
+        return self.redirect("/config/notifications/")
 
 
-@route('/config/subtitles/(.*)(/?)')
+@route('/config/subtitles(/?.*)')
 class ConfigSubtitles(Config):
-    def index(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
+        super(ConfigSubtitles, self).__init__(*args, **kwargs)
+
+    def index(self):
         t = PageTemplate(rh=self, file="config_subtitles.tmpl")
         t.submenu = self.ConfigMenu()
         return t
@@ -4559,12 +4577,15 @@ class ConfigSubtitles(Config):
         else:
             ui.notifications.message('Configuration Saved', ek.ek(os.path.join, sickbeard.CONFIG_FILE))
 
-        self.redirect("/config/subtitles/")
+        return self.redirect("/config/subtitles/")
 
 
-@route('/config/anime/(.*)(/?)')
+@route('/config/anime(/?.*)')
 class ConfigAnime(Config):
-    def index(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
+        super(ConfigAnime, self).__init__(*args, **kwargs)
+
+    def index(self):
 
         t = PageTemplate(rh=self, file="config_anime.tmpl")
         t.submenu = self.ConfigMenu()
@@ -4592,11 +4613,14 @@ class ConfigAnime(Config):
         else:
             ui.notifications.message('Configuration Saved', ek.ek(os.path.join, sickbeard.CONFIG_FILE))
 
-        self.redirect("/config/anime/")
+        return self.redirect("/config/anime/")
 
 
-@route('/errorlogs/(.*)(/?)')
+@route('/errorlogs(/?.*)')
 class ErrorLogs(WebRoot):
+    def __init__(self, *args, **kwargs):
+        super(ErrorLogs, self).__init__(*args, **kwargs)
+
     def ErrorLogsMenu(self):
         menu = [
             {'title': 'Clear Errors', 'path': 'errorlogs/clearerrors/'},
@@ -4605,7 +4629,7 @@ class ErrorLogs(WebRoot):
 
         return menu
 
-    def index(self, *args, **kwargs):
+    def index(self):
 
         t = PageTemplate(rh=self, file="errorlogs.tmpl")
         t.submenu = self.ErrorLogsMenu()
@@ -4613,9 +4637,9 @@ class ErrorLogs(WebRoot):
         return t
 
 
-    def clearerrors(self, *args, **kwargs):
+    def clearerrors(self):
         classes.ErrorViewer.clear()
-        self.redirect("/errorlogs/")
+        return self.redirect("/errorlogs/")
 
 
     def viewlog(self, minLevel=logger.MESSAGE, maxLines=500):

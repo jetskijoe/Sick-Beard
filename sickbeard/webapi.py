@@ -36,8 +36,8 @@ from sickbeard import classes
 from sickbeard import processTV
 from sickbeard import network_timezones, sbdatetime
 from sickbeard.exceptions import ex
-from sickbeard.common import SNATCHED, SNATCHED_PROPER, DOWNLOADED, SKIPPED, UNAIRED, IGNORED, ARCHIVED, WANTED, UNKNOWN
-from common import Quality, Overview, qualityPresetStrings, statusStrings
+from sickbeard.common import Quality, Overview, qualityPresetStrings, statusStrings, SNATCHED, SNATCHED_PROPER, DOWNLOADED, SKIPPED, UNAIRED, IGNORED, ARCHIVED, WANTED, UNKNOWN
+from sickbeard.webserve import WebRoot
 
 try:
     import json
@@ -71,7 +71,7 @@ result_type_map = {RESULT_SUCCESS: "success",
 
 class ApiHandler(RequestHandler):
     """ api class that returns json results """
-    version = 4  # use an int since float-point is unpredictible
+    version = 5  # use an int since float-point is unpredictible
     intent = 4
 
     def __init__(self, *args, **kwargs):
@@ -79,12 +79,21 @@ class ApiHandler(RequestHandler):
 
     def get(self, *args, **kwargs):
         kwargs = self.request.arguments
+        args = args[1:]
 
         # set the output callback
         # default json
         outputCallbackDict = {'default': self._out_as_json,
                               'image': lambda x: x['image'],
         }
+
+        if sickbeard.USE_API is not True:
+            accessMsg = u"API :: " + self.request.remote_ip + " - SB API Disabled. ACCESS DENIED"
+            logger.log(accessMsg, logger.WARNING)
+            return self.finish(outputCallbackDict['default'](_responds(RESULT_DENIED, msg=accessMsg)))
+        else:
+            accessMsg = u"API :: " + self.request.remote_ip + " - gave correct API KEY. ACCESS GRANTED"
+            logger.log(accessMsg, logger.DEBUG)
 
         # set the original call_dispatcher as the local _call_dispatcher
         _call_dispatcher = self.call_dispatcher
@@ -115,7 +124,7 @@ class ApiHandler(RequestHandler):
         else:
             outputCallback = outputCallbackDict['default']
 
-        return self.write(outputCallback(outDict))
+        return self.finish(outputCallback(outDict))
 
     def _out_as_json(self, dict):
         self.set_header("Content-Type", "application/json;charset=UTF-8'")
@@ -139,7 +148,6 @@ class ApiHandler(RequestHandler):
         """
         logger.log(u"API :: all args: '" + str(args) + "'", logger.DEBUG)
         logger.log(u"API :: all kwargs: '" + str(kwargs) + "'", logger.DEBUG)
-        # logger.log(u"API :: dateFormat: '" + str(dateFormat) + "'", logger.DEBUG)
 
         cmds = None
         if args:
@@ -322,12 +330,12 @@ class ApiCall(ApiHandler):
         if required:
             try:
                 self._missing
-                self._requiredParams.append(key)
+                self._requiredParams += [key]
             except AttributeError:
                 self._missing = []
-                self._requiredParams = {}
-                self._requiredParams[key] = {"allowedValues": allowedValues,
-                                             "defaultValue": orgDefault}
+                self._requiredParams = {key: {"allowedValues": allowedValues,
+                                              "defaultValue": orgDefault}}
+
             if missing and key not in self._missing:
                 self._missing.append(key)
         else:
@@ -1367,7 +1375,7 @@ class CMD_SickBeard(ApiCall):
 
     def run(self):
         """ display misc sickrage related information """
-        data = {"sb_version": sickbeard.BRANCH, "api_version": self.version,
+        data = {"sr_version": sickbeard.BRANCH, "api_version": self.version,
                 "api_commands": sorted(_functionMaper.keys())}
         return _responds(RESULT_SUCCESS, data)
 
@@ -2291,7 +2299,7 @@ class CMD_ShowGetPoster(ApiCall):
 
     def run(self):
         """ get the poster for a show in sickrage """
-        return {'outputType': 'image', 'image': self.showPoster(self.indexerid, 'poster')}
+        return {'outputType': 'image', 'image': WebRoot().showPoster(self.indexerid, 'poster')}
 
 
 class CMD_ShowGetBanner(ApiCall):
@@ -2314,7 +2322,7 @@ class CMD_ShowGetBanner(ApiCall):
 
     def run(self):
         """ get the banner for a show in sickrage """
-        return {'outputType': 'image', 'image': self.handler.showPoster(self.indexerid, 'banner')}
+        return {'outputType': 'image', 'image': WebRoot().showPoster(self.indexerid, 'banner')}
 
 
 class CMD_ShowPause(ApiCall):
@@ -2785,7 +2793,7 @@ class CMD_ShowsStats(ApiCall):
         today = str(datetime.date.today().toordinal())
         stats["shows_total"] = len(sickbeard.showList)
         stats["shows_active"] = len(
-            [show for show in sickbeard.showList if show.paused == 0 and show.status != "Ended"])
+            [show for show in sickbeard.showList if show.paused == 0 and "Unknown" not in show.status and "Ended" not in show.status])
         stats["ep_downloaded"] = myDB.select("SELECT COUNT(*) FROM tv_episodes WHERE status IN (" + ",".join(
             [str(show) for show in
              Quality.DOWNLOADED + [ARCHIVED]]) + ") AND season != 0 and episode != 0 AND airdate <= " + today + "")[0][

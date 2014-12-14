@@ -36,6 +36,7 @@ class MainSanityCheck(db.DBSanityCheck):
         self.fix_duplicate_episodes()
         self.fix_orphan_episodes()
         self.fix_unaired_episodes()
+        self.fix_tvrage_show_statues()
 
     def fix_duplicate_shows(self, column='indexer_id'):
 
@@ -142,6 +143,25 @@ class MainSanityCheck(db.DBSanityCheck):
         else:
             logger.log(u"No UNAIRED episodes, check passed")
 
+    def fix_tvrage_show_statues(self):
+        status_map = {
+            'returning series': 'Continuing',
+            'canceled/ended': 'Ended',
+            'tbd/on the bubble': 'Continuing',
+            'in development': 'Continuing',
+            'new series': 'Continuing',
+            'never aired': 'Ended',
+            'final season': 'Continuing',
+            'on hiatus': 'Continuing',
+            'pilot ordered': 'Continuing',
+            'pilot rejected': 'Ended',
+            'canceled': 'Ended',
+            'ended': 'Ended',
+            '': 'Unknown',
+        }
+
+        for old_status, new_status in status_map.items():
+            self.connection.action("UPDATE tv_shows SET status = ? WHERE LOWER(status) = ?", [new_status, old_status])
 
 def backupDatabase(version):
     logger.log(u"Backing up database before upgrade")
@@ -889,29 +909,41 @@ class AddSceneToTvShows(AddXemRefresh):
 class AddIndexerMapping(AddSceneToTvShows):
     def test(self):
         return self.checkDBVersion() >= 39
+
     def execute(self):
         backupDatabase(39)
+
         if self.hasTable("indexer_mapping"):
             self.connection.action("DROP TABLE indexer_mapping")
+
         logger.log(u"Adding table indexer_mapping")
         self.connection.action(
             "CREATE TABLE indexer_mapping (indexer_id INTEGER, indexer NUMERIC, mindexer_id INTEGER, mindexer NUMERIC, PRIMARY KEY (indexer_id, indexer))")
+
         self.incDBVersion()
+
 class AddVersionToTvEpisodes(AddIndexerMapping):
     def test(self):
         return self.checkDBVersion() >= 40
+
     def execute(self):
         backupDatabase(40)
+
         logger.log(u"Adding column version to tv_episodes and history")
         self.addColumn("tv_episodes", "version", "NUMERIC", "-1")
         self.addColumn("tv_episodes", "release_group", "TEXT", "")
         self.addColumn("history", "version", "NUMERIC", "-1")
+
         self.incDBVersion()
+
 class AddDefaultEpStatusToTvShows(AddVersionToTvEpisodes):
     def test(self):
         return self.checkDBVersion() >= 41
+
     def execute(self):
         backupDatabase(41)
+
         logger.log(u"Adding column default_ep_status to tv_shows")
         self.addColumn("tv_shows", "default_ep_status", "TEXT", "")
+
         self.incDBVersion()
