@@ -28,13 +28,13 @@ import sickbeard
 from sickbeard import db
 from sickbeard import logger
 from sickbeard.common import Quality
-from sickbeard import helpers, show_name_helpers
-from sickbeard.exceptions import MultipleShowObjectsException, ex
+from sickbeard import helpers
+from sickbeard.exceptions import ex
 from sickbeard.exceptions import AuthException
 from sickbeard.rssfeeds import RSSFeeds
-from sickbeard import clients
 from name_parser.parser import NameParser, InvalidNameException, InvalidShowException
 from sickbeard import encodingKludge as ek
+
 
 class CacheDBConnection(db.DBConnection):
     def __init__(self, providerName):
@@ -46,8 +46,7 @@ class CacheDBConnection(db.DBConnection):
                 self.action(
                     "CREATE TABLE [" + providerName + "] (name TEXT, season NUMERIC, episodes TEXT, indexerid NUMERIC, url TEXT, time NUMERIC, quality TEXT, release_group TEXT)")
             else:
-                sqlResults = self.select(
-                    "SELECT url, COUNT(url) as count FROM [" + providerName + "] GROUP BY url HAVING count > 1")
+                sqlResults = self.select("SELECT url, COUNT(url) AS count FROM [" + providerName + "] GROUP BY url HAVING count > 1")
 
                 for cur_dupe in sqlResults:
                     self.action("DELETE FROM [" + providerName + "] WHERE url = ?", [cur_dupe["url"]])
@@ -75,9 +74,9 @@ class CacheDBConnection(db.DBConnection):
             if str(e) != "table lastUpdate already exists":
                 raise
 
+
 class TVCache():
     def __init__(self, provider):
-
         self.provider = provider
         self.providerID = self.provider.getID()
         self.providerDB = None
@@ -137,8 +136,10 @@ class TVCache():
             logger.log(u"Error while searching " + self.provider.name + ", skipping: " + ex(e), logger.ERROR)
             logger.log(traceback.format_exc(), logger.DEBUG)
 
-    def getRSSFeed(self, url, post_data=None, request_headers=None, items=[]):
-        return RSSFeeds(self.providerID).getFeed(url, post_data, request_headers, items)
+    def getRSSFeed(self, url, post_data=None, items=[]):
+        if self.provider.proxy.isEnabled():
+            self.provider.headers.update({'Referer': self.provider.proxy.getProxyURL()})
+        return RSSFeeds(self.providerID).getFeed(self.provider.proxy._buildURL(url), post_data, self.provider.headers, items)
 
     def _translateTitle(self, title):
         return u'' + title.replace(' ', '.')
@@ -233,7 +234,7 @@ class TVCache():
         if not parse_result:
 
             # create showObj from indexer_id if available
-            showObj=None
+            showObj = None
             if indexer_id:
                 showObj = helpers.findCertainShow(sickbeard.showList, indexer_id)
 
@@ -305,8 +306,8 @@ class TVCache():
         else:
             for epObj in episode:
                 cl.append([
-                    "SELECT * FROM [" + self.providerID + "] WHERE indexerid = ? AND season = ? AND episodes LIKE ? "
-                    "AND quality IN (" + ",".join([str(x) for x in epObj.wantedQuality]) + ")",
+                    "SELECT * FROM [" + self.providerID + "] WHERE indexerid = ? AND season = ? AND episodes LIKE ? AND quality IN (" + ",".join(
+                        [str(x) for x in epObj.wantedQuality]) + ")",
                     [epObj.show.indexerid, epObj.season, "%|" + str(epObj.episode) + "|%"]])
 
             sqlResults = myDB.mass_action(cl, fetchall=True)
@@ -314,11 +315,6 @@ class TVCache():
 
         # for each cache entry
         for curResult in sqlResults:
-
-            # skip non-tv crap
-            if not show_name_helpers.filterBadReleases(curResult["name"], parse=False):
-                continue
-
             # get the show object, or if it's not one of our shows then ignore it
             showObj = helpers.findCertainShow(sickbeard.showList, int(curResult["indexerid"]))
             if not showObj:

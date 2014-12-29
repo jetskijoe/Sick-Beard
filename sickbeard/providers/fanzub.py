@@ -44,7 +44,9 @@ class Fanzub(generic.NZBProvider):
 
         self.cache = FanzubCache(self)
 
-        self.url = 'https://fanzub.com/'
+        self.urls = {'base_url': 'https://fanzub.com/'}
+
+        self.url = self.urls['base_url']
 
     def isEnabled(self):
         return self.enabled
@@ -129,6 +131,6 @@ class FanzubCache(tvcache.TVCache):
 
         logger.log(self.provider.name + u" cache update URL: " + rss_url, logger.DEBUG)
 
-        return self.getRSSFeed(rss_url, items=['entries', 'feed'])
+        return self.getRSSFeed(rss_url)
 
 provider = Fanzub()

@@ -16,6 +16,8 @@
 # You should have received a copy of the GNU General Public License
 # along with SickRage.  If not, see <http://www.gnu.org/licenses/>.
 import re
+import sys
+import traceback
 
 import sickbeard
 
@@ -105,6 +107,8 @@ class SearchResult:
         # version
         self.version = -1
 
+        self.hash = None
+        self.content = None
     def __str__(self):
 
         if self.provider is None:
@@ -148,8 +152,6 @@ class TorrentSearchResult(SearchResult):
     resultType = "torrent"
 
     # torrent hash
-    content = None
-    hash = None
 
 
 class AllShowsListUI:
@@ -261,6 +263,9 @@ class ErrorViewer():
     def clear():
         ErrorViewer.errors = []
 
+    @staticmethod
+    def get():
+        return ErrorViewer.errors
 
 class UIError():
     """
@@ -268,5 +273,6 @@ class UIError():
     """
 
     def __init__(self, message):
+        self.title = sys.exc_info()[-2]
         self.message = message
         self.time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')

@@ -619,7 +619,7 @@ class Tvdb:
                 raise tvdb_error("Bad zip file received from thetvdb.com, could not read it")
         else:
             try:
-                return xmltodict.parse(resp.text.rstrip("\r"), postprocessor=process)
+                return xmltodict.parse(resp.content.decode('utf-8'), postprocessor=process)
             except:
                 return dict([(u'data', None)])
 
@@ -736,7 +736,7 @@ class Tvdb:
             return
 
         banners = {}
-        for cur_banner in bannersEt['banner']:
+        for cur_banner in bannersEt['banner'] if isinstance(bannersEt['banner'], list) else [bannersEt['banner']]:
             bid = cur_banner['id']
             btype = cur_banner['bannertype']
             btype2 = cur_banner['bannertype2']
@@ -797,7 +797,7 @@ class Tvdb:
             return
 
         cur_actors = Actors()
-        for cur_actor in actorsEt['actor']:
+        for cur_actor in actorsEt['actor'] if isinstance(actorsEt['actor'], list) else [actorsEt['actor']]:
             curActor = Actor()
             for k, v in cur_actor.items():
                 if k is None or v is None:

@@ -39,6 +39,7 @@ class tvdb_showincomplete(tvdb_exception):
     """Show found but incomplete on thetvdb.com (incomplete show)
     """
     pass
+
 class tvdb_seasonnotfound(tvdb_exception):
     """Season cannot be found on thetvdb.com
     """

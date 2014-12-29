@@ -45,7 +45,6 @@ def dbFilename(filename="sickbeard.db", suffix=None):
         filename = "%s.%s" % (filename, suffix)
     return ek.ek(os.path.join, sickbeard.DATA_DIR, filename)
 
-
 class DBConnection(object):
     def __init__(self, filename="sickbeard.db", suffix=None, row_type=None):
 
@@ -56,12 +55,15 @@ class DBConnection(object):
         try:
             if self.filename not in db_cons:
                 db_locks[self.filename] = threading.Lock()
+
                 self.connection = sqlite3.connect(dbFilename(self.filename, self.suffix), 20, check_same_thread=False)
                 self.connection.text_factory = self._unicode_text_factory
                 self.connection.isolation_level = None
+
                 db_cons[self.filename] = self.connection
             else:
                 self.connection = db_cons[self.filename]
+
             if self.row_type == "dict":
                 self.connection.row_factory = self._dict_factory
             else:
@@ -71,26 +73,14 @@ class DBConnection(object):
             raise
 
     def _execute(self, query, args):
-        def convert(x):
-            if isinstance(x, basestring):
-                try:
-                    x = unicode(x).decode(sickbeard.SYS_ENCODING)
-                except:
-                    pass
-            return x
-
         try:
-
             if not args:
-
                 return self.connection.cursor().execute(query)
-            # args = map(convert, args)
             return self.connection.cursor().execute(query, args)
         except Exception as e:
             raise e
 
     def execute(self, query, args=None, fetchall=False, fetchone=False):
-
         try:
             if fetchall:
                 return self._execute(query, args).fetchall()
@@ -98,7 +88,6 @@ class DBConnection(object):
                 return self._execute(query, args).fetchone()
             else:
                 return self._execute(query, args)
-
         except Exception as e:
             raise e
 
@@ -118,8 +107,7 @@ class DBConnection(object):
             return 0
 
     def mass_action(self, querylist=[], logTransaction=False, fetchall=False):
-
-            # remove None types
+        # remove None types
         querylist = [i for i in querylist if i is not None]
 
         sqlResult = []
@@ -165,8 +153,6 @@ class DBConnection(object):
             return sqlResult
 
     def action(self, query, args=None, fetchall=False, fetchone=False):
-
-
         if query == None:
             return
 
@@ -236,8 +222,6 @@ class DBConnection(object):
             self.action(query, valueDict.values() + keyDict.values())
 
     def tableInfo(self, tableName):
-
-        # FIXME ? binding is not supported here, but I cannot find a way to escape a string manually
         sqlResult = self.select("PRAGMA table_info(%s)" % tableName)
         columns = {}
         for column in sqlResult:
@@ -245,7 +229,11 @@ class DBConnection(object):
         return columns
 
     def _unicode_text_factory(self, x):
-        return unicode(x, 'utf-8')
+        try:
+            return unicode(x, 'utf-8')
+        except:
+            return unicode(x, sickbeard.SYS_ENCODING)
+
     def _dict_factory(self, cursor, row):
         d = {}
         for idx, col in enumerate(cursor.description):
@@ -262,10 +250,8 @@ class DBConnection(object):
         self.action("ALTER TABLE %s ADD %s %s" % (table, column, type))
         self.action("UPDATE %s SET %s = ?" % (table, column), (default,))
 
-
 def sanityCheckDatabase(connection, sanity_check):
     sanity_check(connection).check()
-
 
 class DBSanityCheck(object):
     def __init__(self, connection):
@@ -280,7 +266,7 @@ class DBSanityCheck(object):
 # ===============
 
 def upgradeDatabase(connection, schema):
-    logger.log(u"Checking database structure...", logger.MESSAGE)
+    logger.log(u"Checking database structure...", logger.INFO)
     _processUpgrade(connection, schema)
 
 
@@ -301,7 +287,7 @@ def _processUpgrade(connection, upgradeClass):
     instance = upgradeClass(connection)
     logger.log(u"Checking " + prettyName(upgradeClass.__name__) + " database upgrade", logger.DEBUG)
     if not instance.test():
-        logger.log(u"Database upgrade required: " + prettyName(upgradeClass.__name__), logger.MESSAGE)
+        logger.log(u"Database upgrade required: " + prettyName(upgradeClass.__name__), logger.INFO)
         try:
             instance.execute()
         except sqlite3.DatabaseError, e:

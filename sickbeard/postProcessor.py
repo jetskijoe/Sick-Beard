@@ -95,7 +95,7 @@ class PostProcessor(object):
         
         self.version = None
 
-    def _log(self, message, level=logger.MESSAGE):
+    def _log(self, message, level=logger.INFO):
         """
         A wrapper for the internal logger which also keeps track of messages and saves them to a string for later.
 
@@ -624,6 +624,8 @@ class PostProcessor(object):
             # now that we've figured out which episode this file is just load it manually
             try:
                 curEp = show.getEpisode(season, cur_episode)
+                if not curEp:
+                    raise exceptions.EpisodeNotFoundException()
             except exceptions.EpisodeNotFoundException, e:
                 self._log(u"Unable to create episode: " + ex(e), logger.DEBUG)
                 raise exceptions.PostProcessingFailed()

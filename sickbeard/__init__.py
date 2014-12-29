@@ -23,10 +23,10 @@ import datetime
 import socket
 import os
 import re
-import sys
 import os.path
 
 from threading import Lock
+import sys
 
 from github import Github
 
@@ -58,7 +58,7 @@ CFG = None
 CONFIG_FILE = None
 
 # This is the version of the config we EXPECT to find
-CONFIG_VERSION = 5
+CONFIG_VERSION = 6
 
 # Default encryption version (0 for None)
 ENCRYPTION_VERSION = 0
@@ -115,7 +115,10 @@ GIT_REMOTE_URL = ''
 CUR_COMMIT_BRANCH = ''
 GIT_ORG = 'SiCKRAGETV'
 GIT_REPO = 'SickRage'
+GIT_USERNAME = None
+GIT_PASSWORD = None
 GIT_PATH = None
+GIT_AUTOISSUES = False
 
 INIT_LOCK = Lock()
 started = False
@@ -145,7 +148,6 @@ CPU_PRESET = None
 
 ANON_REDIRECT = None
 
-USE_API = False
 API_KEY = None
 API_ROOT = None
 
@@ -469,6 +471,7 @@ CALENDAR_UNPROTECTED = False
 
 TMDB_API_KEY = 'edc5f123313769de83a71e157758030b'
 TRAKT_API_KEY = 'abd806c54516240c76e4ebc9c5ccf394'
+FANART_API_KEY = '9b3afaf26f6241bdb57d6cc6bd798da7'
 
 __INITIALIZED__ = False
 
@@ -481,7 +484,7 @@ def get_backlog_cycle_time():
 def initialize(consoleLogging=True):
     with INIT_LOCK:
 
-        global BRANCH, GIT_RESET, GIT_REMOTE, GIT_REMOTE_URL, CUR_COMMIT_HASH, CUR_COMMIT_BRANCH, ACTUAL_LOG_DIR, LOG_DIR, WEB_PORT, WEB_LOG, ENCRYPTION_VERSION, WEB_ROOT, WEB_USERNAME, WEB_PASSWORD, WEB_HOST, WEB_IPV6, USE_API, API_KEY, API_ROOT, ENABLE_HTTPS, HTTPS_CERT, HTTPS_KEY, \
+        global BRANCH, GIT_RESET, GIT_REMOTE, GIT_REMOTE_URL, CUR_COMMIT_HASH, CUR_COMMIT_BRANCH, ACTUAL_LOG_DIR, LOG_DIR, WEB_PORT, WEB_LOG, ENCRYPTION_VERSION, WEB_ROOT, WEB_USERNAME, WEB_PASSWORD, WEB_HOST, WEB_IPV6, API_KEY, API_ROOT, ENABLE_HTTPS, HTTPS_CERT, HTTPS_KEY, \
             HANDLE_REVERSE_PROXY, USE_NZBS, USE_TORRENTS, NZB_METHOD, NZB_DIR, DOWNLOAD_PROPERS, RANDOMIZE_PROVIDERS, CHECK_PROPERS_INTERVAL, ALLOW_HIGH_PRIORITY, TORRENT_METHOD, \
             SAB_USERNAME, SAB_PASSWORD, SAB_APIKEY, SAB_CATEGORY, SAB_CATEGORY_ANIME, SAB_HOST, \
             NZBGET_USERNAME, NZBGET_PASSWORD, NZBGET_CATEGORY, NZBGET_CATEGORY_ANIME, NZBGET_PRIORITY, NZBGET_HOST, NZBGET_USE_HTTPS, backlogSearchScheduler, \
@@ -522,7 +525,8 @@ def initialize(consoleLogging=True):
             USE_FAILED_DOWNLOADS, DELETE_FAILED, ANON_REDIRECT, LOCALHOST_IP, TMDB_API_KEY, DEBUG, PROXY_SETTING, PROXY_INDEXERS, \
             AUTOPOSTPROCESSER_FREQUENCY, DEFAULT_AUTOPOSTPROCESSER_FREQUENCY, MIN_AUTOPOSTPROCESSER_FREQUENCY, \
             ANIME_DEFAULT, NAMING_ANIME, ANIMESUPPORT, USE_ANIDB, ANIDB_USERNAME, ANIDB_PASSWORD, ANIDB_USE_MYLIST, \
-            ANIME_SPLIT_HOME, SCENE_DEFAULT, PLAY_VIDEOS, BACKLOG_DAYS, GIT_ORG, GIT_REPO, gh
+            ANIME_SPLIT_HOME, SCENE_DEFAULT, PLAY_VIDEOS, BACKLOG_DAYS, GIT_ORG, GIT_REPO, GIT_USERNAME, GIT_PASSWORD, \
+            GIT_AUTOISSUES, gh
 
         if __INITIALIZED__:
             return False
@@ -549,11 +553,29 @@ def initialize(consoleLogging=True):
         CheckSection(CFG, 'Pushbullet')
         CheckSection(CFG, 'Subtitles')
 
+        GIT_AUTOISSUES = bool(check_setting_int(CFG, 'General', 'git_autoissues', 0))
+
+        # git login info
+        GIT_USERNAME = check_setting_str(CFG, 'General', 'git_username', '')
+        GIT_PASSWORD = check_setting_str(CFG, 'General', 'git_password', '', censor_log=True)
+
         # github api
-        try:
-            gh = Github().get_organization(GIT_ORG).get_repo(GIT_REPO)
-        except:
-            gh = None
+        try:gh = Github(user_agent="SiCKRAGE").get_organization(GIT_ORG).get_repo(GIT_REPO)
+        except:gh = None
+
+        # debugging
+        DEBUG = bool(check_setting_int(CFG, 'General', 'debug', 0))
+
+        ACTUAL_LOG_DIR = check_setting_str(CFG, 'General', 'log_dir', 'Logs')
+        LOG_DIR = os.path.normpath(os.path.join(DATA_DIR, ACTUAL_LOG_DIR))
+
+        fileLogging = True
+        if not helpers.makeDir(LOG_DIR):
+            sys.stderr.write("!!! No log folder, logging to screen only!\n")
+            fileLogging = False
+
+        # init logging
+        logger.initLogging(consoleLogging=consoleLogging, fileLogging=fileLogging, debugLogging=DEBUG)
 
         # git reset on update
         GIT_RESET = bool(check_setting_int(CFG, 'General', 'git_reset', 0))
@@ -596,13 +618,6 @@ def initialize(consoleLogging=True):
 
         THEME_NAME = check_setting_str(CFG, 'GUI', 'theme_name', 'dark')
 
-        ACTUAL_LOG_DIR = check_setting_str(CFG, 'General', 'log_dir', 'Logs')
-        # put the log dir inside the data dir, unless an absolute path
-        LOG_DIR = os.path.normpath(os.path.join(DATA_DIR, ACTUAL_LOG_DIR))
-
-        if not helpers.makeDir(LOG_DIR):
-            logger.log(u"!!! No log folder, logging to screen only!", logger.ERROR)
-
         SOCKET_TIMEOUT = check_setting_int(CFG, 'General', 'socket_timeout', 30)
         socket.setdefaulttimeout(SOCKET_TIMEOUT)
 
@@ -643,10 +658,7 @@ def initialize(consoleLogging=True):
 
         SORT_ARTICLE = bool(check_setting_int(CFG, 'General', 'sort_article', 0))
 
-        USE_API = bool(check_setting_int(CFG, 'General', 'use_api', 0))
         API_KEY = check_setting_str(CFG, 'General', 'api_key', '', censor_log=True)
-
-        DEBUG = bool(check_setting_int(CFG, 'General', 'debug', 0))
 
         ENABLE_HTTPS = bool(check_setting_int(CFG, 'General', 'enable_https', 0))
 
@@ -1099,9 +1111,6 @@ def initialize(consoleLogging=True):
             logger.log(u"Unable to find '" + CONFIG_FILE + "', all settings will be default!", logger.DEBUG)
             save_config()
 
-        # start up all the threads
-        logger.sb_log_instance.initLogging(consoleLogging=consoleLogging)
-
         # initialize the main SB database
         myDB = db.DBConnection()
         db.upgradeDatabase(myDB, mainDB.InitialSchema)
@@ -1131,7 +1140,7 @@ def initialize(consoleLogging=True):
                                    (METADATA_WDTV, metadata.wdtv),
                                    (METADATA_TIVO, metadata.tivo),
                                    (METADATA_MEDE8ER, metadata.mede8er),
-                                   ]:
+        ]:
             (cur_metadata_config, cur_metadata_class) = cur_metadata_tuple
             tmp_provider = cur_metadata_class.metadata_class()
             tmp_provider.set_config(cur_metadata_config)
@@ -1401,6 +1410,9 @@ def save_config():
 
     # For passwords you must include the word `password` in the item_name and add `helpers.encrypt(ITEM_NAME, ENCRYPTION_VERSION)` in save_config()
     new_config['General'] = {}
+    new_config['General']['git_autoissues'] = int(GIT_AUTOISSUES)
+    new_config['General']['git_username'] = GIT_USERNAME
+    new_config['General']['git_password'] = GIT_PASSWORD
     new_config['General']['git_reset'] = int(GIT_RESET)
     new_config['General']['branch'] = BRANCH
     new_config['General']['git_remote'] = GIT_REMOTE
@@ -1422,7 +1434,6 @@ def save_config():
     new_config['General']['localhost_ip'] = LOCALHOST_IP
     new_config['General']['cpu_preset'] = CPU_PRESET
     new_config['General']['anon_redirect'] = ANON_REDIRECT
-    new_config['General']['use_api'] = int(USE_API)
     new_config['General']['api_key'] = API_KEY
     new_config['General']['debug'] = int(DEBUG)
     new_config['General']['enable_https'] = int(ENABLE_HTTPS)

@@ -67,7 +67,8 @@ try:
 except ImportError:
     import xml.etree.ElementTree as etree
 
-from Cheetah.Template import Template
+from Cheetah.Template import Template as CheetahTemplate
+from Cheetah.Filters import Filter as CheetahFilter
 
 from tornado.routes import route
 from tornado.web import RequestHandler, HTTPError, authenticated, asynchronous
@@ -79,9 +80,24 @@ from concurrent.futures import ThreadPoolExecutor
 route_locks = {}
 
 
-class PageTemplate(Template):
+class html_entities(CheetahFilter):
+    def filter(self, val, **dummy_kw):
+        if isinstance(val, unicode):
+            filtered = val.encode('ascii', 'xmlcharrefreplace')
+        elif val is None:
+            filtered = ''
+        elif isinstance(val, str):
+            filtered = val.decode(sickbeard.SYS_ENCODING).encode('ascii', 'xmlcharrefreplace')
+        else:
+            filtered = self.filter(str(val))
+
+        return filtered
+
+
+class PageTemplate(CheetahTemplate):
     def __init__(self, rh, *args, **kwargs):
         kwargs['file'] = os.path.join(sickbeard.PROG_DIR, "gui/" + sickbeard.GUI_NAME + "/interfaces/default/", kwargs['file'])
+        kwargs['filter'] = html_entities
         super(PageTemplate, self).__init__(*args, **kwargs)
 
         self.sbRoot = sickbeard.WEB_ROOT
@@ -139,11 +155,11 @@ class BaseHandler(RequestHandler):
         # handle 404 http errors
         if status_code == 404:
             url = self.request.uri
-            if self.request.uri.startswith(sickbeard.WEB_ROOT):
+            if sickbeard.WEB_ROOT and self.request.uri.startswith(sickbeard.WEB_ROOT):
                 url = url[len(sickbeard.WEB_ROOT) + 1:]
 
             if url[:3] != 'api':
-                return self.redirect(url)
+                return self.redirect('/')
             else:
                 self.finish('Wrong API key used')
 
@@ -164,9 +180,9 @@ class BaseHandler(RequestHandler):
                                     <p>%s</p>
                                     <h2>Request Info</h2>
                                     <p>%s</p>
+                                    <button onclick="window.location='%s/errorlogs/';">View Log(Errors)</button>
                                  </body>
-                               </html>""" % (error, error,
-                                             trace_info, request_info))
+                               </html>""" % (error, error, trace_info, request_info, sickbeard.WEB_ROOT))
 
     def redirect(self, url, permanent=False, status=None):
         if not url.startswith(sickbeard.WEB_ROOT):
@@ -184,8 +200,8 @@ class BaseHandler(RequestHandler):
 class WebHandler(BaseHandler):
     def __init__(self, *args, **kwargs):
         super(WebHandler, self).__init__(*args, **kwargs)
+        self.io_loop = IOLoop.current()
 
-    io_loop = IOLoop.current()
     executor = ThreadPoolExecutor(50)
 
     @coroutine
@@ -200,7 +216,7 @@ class WebHandler(BaseHandler):
             # process request async
             self.async_call(method, callback=self.async_done)
         except:
-            logger.log('Failed doing webui request "%s": %s' % (route, traceback.format_exc()), logger.ERROR)
+            logger.log('Failed doing webui request "%s": %s' % (route, traceback.format_exc()), logger.DEBUG)
             raise HTTPError(404)
 
     @run_on_executor
@@ -222,26 +238,23 @@ class WebHandler(BaseHandler):
     def async_done(self, results):
         try:
             if results:
-                results = ek.ss(results)
-
                 self.finish(results)
         except:
             logger.log('Failed sending webui reponse: %s' % (traceback.format_exc()), logger.DEBUG)
             raise
 
+
     # post uses get method
     post = get
 
-class LoginHandler(BaseHandler):
-    def __init__(self, *args, **kwargs):
-        super(LoginHandler, self).__init__(*args, **kwargs)
 
+class LoginHandler(BaseHandler):
     def get(self, *args, **kwargs):
         if self.get_current_user():
             self.redirect('/home/')
         else:
             t = PageTemplate(rh=self, file="login.tmpl")
-            self.finish(ek.ss(t))
+            self.finish(t.respond())
 
     def post(self, *args, **kwargs):
 
@@ -250,8 +263,8 @@ class LoginHandler(BaseHandler):
         username = sickbeard.WEB_USERNAME
         password = sickbeard.WEB_PASSWORD
 
-        if (self.get_argument('username') == username or not username) and (
-                        self.get_argument('password') == password or not password):
+        if (self.get_argument('username') == username or not username) \
+                and (self.get_argument('password') == password or not password):
             api_key = sickbeard.API_KEY
 
         if api_key:
@@ -262,15 +275,11 @@ class LoginHandler(BaseHandler):
 
 
 class LogoutHandler(BaseHandler):
-    def __init__(self, *args, **kwargs):
-        super(LogoutHandler, self).__init__(*args, **kwargs)
-
     def get(self, *args, **kwargs):
         self.clear_cookie("user")
         self.redirect('/login/')
 
-
-class KeyHandler(BaseHandler):
+class KeyHandler(RequestHandler):
     def __init__(self, *args, **kwargs):
         super(KeyHandler, self).__init__(*args, **kwargs)
 
@@ -281,14 +290,11 @@ class KeyHandler(BaseHandler):
             username = sickbeard.WEB_USERNAME
             password = sickbeard.WEB_PASSWORD
 
-            if (self.get_argument('u', None) == username or not username) \
-                    and (self.get_argument('p', None) == password or not password):
+            if (self.get_argument('u', None) == username or not username) and \
+                    (self.get_argument('p', None) == password or not password):
                 api_key = sickbeard.API_KEY
 
-            self.finish({
-                'success': api_key is not None,
-                'api_key': api_key
-            })
+            self.finish({'success': api_key is not None, 'api_key': api_key})
         except:
             logger.log('Failed doing key request: %s' % (traceback.format_exc()), logger.ERROR)
             self.finish({'success': False, 'error': 'Failed returning results'})
@@ -337,7 +343,7 @@ class WebRoot(WebHandler):
         else:
             t.apikey = "api key not generated"
 
-        return t
+        return t.respond()
 
     def showPoster(self, show=None, which=None):
         # Redirect initial poster/banner thumb to default images
@@ -446,14 +452,14 @@ class WebRoot(WebHandler):
 
         myDB = db.DBConnection()
         sql_results = myDB.select(
-            "SELECT *, tv_shows.status as show_status FROM tv_episodes, tv_shows WHERE season != 0 AND airdate >= ? AND airdate < ? AND tv_shows.indexer_id = tv_episodes.showid AND tv_episodes.status NOT IN (" + ','.join(
+            "SELECT *, tv_shows.status AS show_status FROM tv_episodes, tv_shows WHERE season != 0 AND airdate >= ? AND airdate < ? AND tv_shows.indexer_id = tv_episodes.showid AND tv_episodes.status NOT IN (" + ','.join(
                 ['?'] * len(qualList)) + ")", [today, next_week] + qualList)
 
         for cur_result in sql_results:
             done_show_list.append(int(cur_result["showid"]))
 
         more_sql_results = myDB.select(
-            "SELECT *, tv_shows.status as show_status FROM tv_episodes outer_eps, tv_shows WHERE season != 0 AND showid NOT IN (" + ','.join(
+            "SELECT *, tv_shows.status AS show_status FROM tv_episodes outer_eps, tv_shows WHERE season != 0 AND showid NOT IN (" + ','.join(
                 ['?'] * len(
                     done_show_list)) + ") AND tv_shows.indexer_id = outer_eps.showid AND airdate = (SELECT airdate FROM tv_episodes inner_eps WHERE inner_eps.season != 0 AND inner_eps.showid = outer_eps.showid AND inner_eps.airdate >= ? ORDER BY inner_eps.airdate ASC LIMIT 1) AND outer_eps.status NOT IN (" + ','.join(
                 ['?'] * len(Quality.DOWNLOADED + Quality.SNATCHED)) + ")",
@@ -461,7 +467,7 @@ class WebRoot(WebHandler):
         sql_results += more_sql_results
 
         more_sql_results = myDB.select(
-            "SELECT *, tv_shows.status as show_status FROM tv_episodes, tv_shows WHERE season != 0 AND tv_shows.indexer_id = tv_episodes.showid AND airdate < ? AND airdate >= ? AND tv_episodes.status = ? AND tv_episodes.status NOT IN (" + ','.join(
+            "SELECT *, tv_shows.status AS show_status FROM tv_episodes, tv_shows WHERE season != 0 AND tv_shows.indexer_id = tv_episodes.showid AND airdate < ? AND airdate >= ? AND tv_episodes.status = ? AND tv_episodes.status NOT IN (" + ','.join(
                 ['?'] * len(qualList)) + ")", [today, recently, WANTED] + qualList)
         sql_results += more_sql_results
 
@@ -513,7 +519,7 @@ class WebRoot(WebHandler):
         else:
             t.layout = sickbeard.COMING_EPS_LAYOUT
 
-        return t
+        return t.respond()
 
     # Raw iCalendar implementation by Pedro Jose Pereira Vieito (@pvieito).
     #
@@ -581,6 +587,7 @@ class WebRoot(WebHandler):
 
         return ical
 
+
 @route('/ui(/?.*)')
 class UI(WebRoot):
     def __init__(self, *args, **kwargs):
@@ -642,7 +649,7 @@ class Home(WebRoot):
         t.submenu = self.HomeMenu()
         t.subject = subject
         t.message = message
-        return t
+        return t.respond()
 
     def _getEpisode(self, show, season=None, episode=None, absolute=None):
         if show is None:
@@ -682,7 +689,7 @@ class Home(WebRoot):
 
         t.submenu = self.HomeMenu()
 
-        return t
+        return t.respond()
 
     def is_alive(self, *args, **kwargs):
         if 'callback' in kwargs and '_' in kwargs:
@@ -1004,7 +1011,7 @@ class Home(WebRoot):
         # restart
         sickbeard.events.put(sickbeard.events.SystemEvent.RESTART)
 
-        return t
+        return t.respond()
 
     def updateCheck(self, pid=None):
         if str(pid) != str(sickbeard.PID):
@@ -1023,7 +1030,7 @@ class Home(WebRoot):
             sickbeard.events.put(sickbeard.events.SystemEvent.RESTART)
 
             t = PageTemplate(rh=self, file="restart_bare.tmpl")
-            return t
+            return t.respond()
         else:
             return self._genericMessage("Update Failed",
                                         "Update wasn't successful, not restarting. Check your log for more information.")
@@ -1045,7 +1052,7 @@ class Home(WebRoot):
 
         myDB = db.DBConnection()
         seasonResults = myDB.select(
-            "SELECT DISTINCT season FROM tv_episodes WHERE showid = ? ORDER BY season desc",
+            "SELECT DISTINCT season FROM tv_episodes WHERE showid = ? ORDER BY season DESC",
             [showObj.indexerid]
         )
 
@@ -1155,7 +1162,7 @@ class Home(WebRoot):
         t.scene_absolute_numbering = get_scene_absolute_numbering_for_show(indexerid, indexer)
         t.xem_absolute_numbering = get_xem_absolute_numbering_for_show(indexerid, indexer)
 
-        return t
+        return t.respond()
 
 
     def plotDetails(self, show, season, episode):
@@ -1235,7 +1242,7 @@ class Home(WebRoot):
                 t.show = showObj
                 t.scene_exceptions = get_scene_exceptions(showObj.indexerid)
 
-            return t
+            return t.respond()
 
         flatten_folders = config.checkbox_to_value(flatten_folders)
         dvdorder = config.checkbox_to_value(dvdorder)
@@ -1691,7 +1698,7 @@ class Home(WebRoot):
         t.ep_obj_list = ep_obj_rename_list
         t.show = showObj
 
-        return t
+        return t.respond()
 
 
     def doRename(self, show=None, eps=None):
@@ -1765,9 +1772,6 @@ class Home(WebRoot):
     # Possible status: Downloaded, Snatched, etc...
     # Returns {'show': 279530, 'episodes' : ['episode' : 6, 'season' : 1, 'searchstatus' : 'queued', 'status' : 'running', 'quality': '4013']
     def getManualSearchStatus(self, show=None, season=None):
-
-        episodes = []
-
         def getEpisodes(searchThread, searchstatus):
             results = []
 
@@ -1789,33 +1793,36 @@ class Home(WebRoot):
 
             return results
 
+        episodes = []
+
         # Queued Searches
+        searchstatus = 'queued'
         for searchThread in sickbeard.searchQueueScheduler.action.get_all_ep_from_queue(show):
-            episodes += getEpisodes(searchThread, 'queued')
+            episodes += getEpisodes(searchThread, searchstatus)
 
         # Running Searches
+        searchstatus = 'searching'
         if (sickbeard.searchQueueScheduler.action.is_manualsearch_in_progress()):
             searchThread = sickbeard.searchQueueScheduler.action.currentItem
+
             if searchThread.success:
                 searchstatus = 'finished'
-            else:
-                searchstatus = 'searching'
+
             episodes += getEpisodes(searchThread, searchstatus)
 
         # Finished Searches
+        searchstatus = 'finished'
         for searchThread in sickbeard.search_queue.MANUAL_SEARCH_HISTORY:
+            if not str(searchThread.show.indexerid) == show:
+                continue
+
             if isinstance(searchThread, sickbeard.search_queue.ManualSearchQueueItem):
-                if str(searchThread.show.indexerid) == show and not [x for x in episodes if x[
-                    'episodeindexid'] == searchThread.segment.indexerid]:
-                    searchstatus = 'finished'
+                if not [x for x in episodes if x['episodeindexid'] == searchThread.segment.indexerid]:
                     episodes += getEpisodes(searchThread, searchstatus)
             else:
                 ### These are only Failed Downloads/Retry SearchThreadItems.. lets loop through the segement/episodes
-                if str(searchThread.show.indexerid) == show:
-                    for epObj in searchThread.segment:
-                        if not [x for x in episodes if x['episodeindexid'] == epObj.indexerid]:
-                            searchstatus = 'finished'
-                            episodes += getEpisodes(searchThread, searchstatus)
+                if not [i for i, j in zip(searchThread.segment, episodes) if i.indexerid == j['episodeindexid']]:
+                    episodes += getEpisodes(searchThread, searchstatus)
 
         return json.dumps({'show': show, 'episodes': episodes})
 
@@ -1960,7 +1967,7 @@ class HomePostProcess(Home):
     def index(self):
         t = PageTemplate(rh=self, file="home_postprocess.tmpl")
         t.submenu = self.HomeMenu()
-        return t
+        return t.respond()
 
     def processEpisode(self, dir=None, nzbName=None, jobName=None, quiet=None, process_method=None, force=None,
                        is_priority=None, failed="0", type="auto", *args, **kwargs):
@@ -2000,7 +2007,7 @@ class HomeAddShows(Home):
     def index(self):
         t = PageTemplate(rh=self, file="home_addShows.tmpl")
         t.submenu = self.HomeMenu()
-        return t
+        return t.respond()
 
     def getIndexerLanguages(self):
         result = sickbeard.indexerApi().config['valid_languages']
@@ -2132,7 +2139,7 @@ class HomeAddShows(Home):
 
         t.dirList = dir_list
 
-        return t
+        return t.respond()
 
 
     def newShow(self, show_to_add=None, other_shows=None):
@@ -2177,7 +2184,7 @@ class HomeAddShows(Home):
         t.provided_indexer = int(indexer or sickbeard.INDEXER_DEFAULT)
         t.indexers = sickbeard.indexerApi().indexers
 
-        return t
+        return t.respond()
 
     def recommendedShows(self):
         """
@@ -2187,17 +2194,17 @@ class HomeAddShows(Home):
         t = PageTemplate(rh=self, file="home_recommendedShows.tmpl")
         t.submenu = self.HomeMenu()
 
-        return t
+        return t.respond()
 
     def getRecommendedShows(self):
         final_results = []
 
         logger.log(u"Getting recommended shows from Trakt.tv", logger.DEBUG)
 
-        trakt_api = TraktAPI(sickbeard.TRAKT_API, sickbeard.TRAKT_USERNAME, sickbeard.TRAKT_PASSWORD)
+        trakt_api = TraktAPI(sickbeard.TRAKT_API_KEY, sickbeard.TRAKT_USERNAME, sickbeard.TRAKT_PASSWORD)
 
         try:
-            recommendedlist = trakt_api.traktRequest("recommendations/shows.json/%APIKEY%")
+            recommendedlist = trakt_api.traktRequest("recommendations/shows.json/%APIKEY%", method='POST')
 
             if recommendedlist:
                 indexers = ['tvdb_id', 'tvrage_id']
@@ -2237,7 +2244,7 @@ class HomeAddShows(Home):
         t = PageTemplate(rh=self, file="home_trendingShows.tmpl")
         t.submenu = self.HomeMenu()
 
-        return t
+        return t.respond()
 
     def getTrendingShows(self):
         """
@@ -2249,7 +2256,7 @@ class HomeAddShows(Home):
 
         t.trending_shows = []
 
-        trakt_api = TraktAPI(sickbeard.TRAKT_API, sickbeard.TRAKT_USERNAME, sickbeard.TRAKT_PASSWORD)
+        trakt_api = TraktAPI(sickbeard.TRAKT_API_KEY, sickbeard.TRAKT_USERNAME, sickbeard.TRAKT_PASSWORD)
 
         try:
             shows = trakt_api.traktRequest("shows/trending.json/%APIKEY%") or []
@@ -2263,7 +2270,7 @@ class HomeAddShows(Home):
         except (traktException, traktAuthException, traktServerBusy) as e:
             logger.log(u"Could not connect to Trakt service: %s" % ex(e), logger.WARNING)
 
-        return t
+        return t.respond()
 
     def existingShows(self):
         """
@@ -2272,7 +2279,7 @@ class HomeAddShows(Home):
         t = PageTemplate(rh=self, file="home_addExistingShow.tmpl")
         t.submenu = self.HomeMenu()
 
-        return t
+        return t.respond()
 
     def addTraktShow(self, indexer_id, showName):
         if helpers.findCertainShow(sickbeard.showList, int(indexer_id)):
@@ -2524,7 +2531,7 @@ class Manage(Home, WebRoot):
     def index(self):
         t = PageTemplate(rh=self, file="manage.tmpl")
         t.submenu = self.ManageMenu()
-        return t
+        return t.respond()
 
 
     def showEpisodeStatuses(self, indexer_id, whichStatus):
@@ -2565,11 +2572,11 @@ class Manage(Home, WebRoot):
 
         # if we have no status then this is as far as we need to go
         if not status_list:
-            return t
+            return t.respond()
 
         myDB = db.DBConnection()
         status_results = myDB.select(
-            "SELECT show_name, tv_shows.indexer_id as indexer_id FROM tv_episodes, tv_shows WHERE tv_episodes.status IN (" + ','.join(
+            "SELECT show_name, tv_shows.indexer_id AS indexer_id FROM tv_episodes, tv_shows WHERE tv_episodes.status IN (" + ','.join(
                 ['?'] * len(
                     status_list)) + ") AND season != 0 AND tv_episodes.showid = tv_shows.indexer_id ORDER BY show_name",
             status_list)
@@ -2591,7 +2598,7 @@ class Manage(Home, WebRoot):
         t.show_names = show_names
         t.ep_counts = ep_counts
         t.sorted_show_ids = sorted_show_ids
-        return t
+        return t.respond()
 
 
     def changeEpisodeStatuses(self, oldStatus, newStatus, *args, **kwargs):
@@ -2672,7 +2679,7 @@ class Manage(Home, WebRoot):
         t.whichSubs = whichSubs
 
         if not whichSubs:
-            return t
+            return t.respond()
 
         myDB = db.DBConnection()
         status_results = myDB.select(
@@ -2702,7 +2709,7 @@ class Manage(Home, WebRoot):
         t.show_names = show_names
         t.ep_counts = ep_counts
         t.sorted_show_ids = sorted_show_ids
-        return t
+        return t.respond()
 
 
     def downloadSubtitleMissed(self, *args, **kwargs):
@@ -2789,7 +2796,7 @@ class Manage(Home, WebRoot):
         t.showCats = showCats
         t.showSQLResults = showSQLResults
 
-        return t
+        return t.respond()
 
 
     def massEdit(self, toEdit=None):
@@ -2913,7 +2920,7 @@ class Manage(Home, WebRoot):
         t.air_by_date_value = last_air_by_date if air_by_date_all_same else None
         t.root_dir_list = root_dir_list
 
-        return t
+        return t.respond()
 
 
     def massEditSubmit(self, archive_firstmatch=None, paused=None, anime=None, sports=None, scene=None,
@@ -3165,7 +3172,7 @@ class Manage(Home, WebRoot):
             else:
                 t.info_download_station = '<p>To have a better experience please set the Download Station alias as <code>download</code>, you can check this setting in the Synology DSM <b>Control Panel</b> > <b>Application Portal</b>. Make sure you allow DSM to be embedded with iFrames too in <b>Control Panel</b> > <b>DSM Settings</b> > <b>Security</b>.</p><br/><p>There is more information about this available <a href="https://github.com/midgetspy/Sick-Beard/pull/338">here</a>.</p><br/>'
 
-        return t
+        return t.respond()
 
 
     def failedDownloads(self, limit=100, toRemove=None):
@@ -3180,7 +3187,7 @@ class Manage(Home, WebRoot):
         toRemove = toRemove.split("|") if toRemove is not None else []
 
         for release in toRemove:
-            myDB.action("DELETE FROM failed WHERE release = ?", [release])
+            myDB.action("DELETE FROM failed WHERE failed.release = ?", [release])
 
         if toRemove:
             return self.redirect('/manage/failedDownloads/')
@@ -3190,7 +3197,7 @@ class Manage(Home, WebRoot):
         t.limit = limit
         t.submenu = self.ManageMenu()
 
-        return t
+        return t.respond()
 
 
 @route('/manage/manageSearches(/?.*)')
@@ -3209,7 +3216,7 @@ class ManageSearches(Manage):
 
         t.submenu = self.ManageMenu()
 
-        return t
+        return t.respond()
 
     def forceBacklog(self):
         # force it to run the next time it looks
@@ -3324,7 +3331,7 @@ class History(WebRoot):
             {'title': 'Trim History', 'path': 'history/trimHistory'},
         ]
 
-        return t
+        return t.respond()
 
 
     def clearHistory(self):
@@ -3369,7 +3376,7 @@ class Config(WebRoot):
         t = PageTemplate(rh=self, file="config.tmpl")
         t.submenu = self.ConfigMenu()
 
-        return t
+        return t.respond()
 
 
 @route('/config/general(/?.*)')
@@ -3380,7 +3387,7 @@ class ConfigGeneral(Config):
     def index(self):
         t = PageTemplate(rh=self, file="config_general.tmpl")
         t.submenu = self.ConfigMenu()
-        return t
+        return t.respond()
 
 
     def generateApiKey(self):
@@ -3418,13 +3425,14 @@ class ConfigGeneral(Config):
     def saveGeneral(self, log_dir=None, web_port=None, web_log=None, encryption_version=None, web_ipv6=None,
                     update_shows_on_start=None, trash_remove_show=None, trash_rotate_logs=None, update_frequency=None,
                     launch_browser=None, web_username=None,
-                    use_api=None, api_key=None, indexer_default=None, timezone_display=None, cpu_preset=None,
+                    api_key=None, indexer_default=None, timezone_display=None, cpu_preset=None,
                     web_password=None, version_notify=None, enable_https=None, https_cert=None, https_key=None,
                     handle_reverse_proxy=None, sort_article=None, auto_update=None, notify_on_update=None,
                     proxy_setting=None, proxy_indexers=None, anon_redirect=None, git_path=None, git_remote=None,
                     calendar_unprotected=None,
                     fuzzy_dating=None, trim_zero=None, date_preset=None, date_preset_na=None, time_preset=None,
-                    indexer_timeout=None, play_videos=None, rootDir=None, theme_name=None):
+                    indexer_timeout=None, play_videos=None, rootDir=None, theme_name=None,
+                    git_reset=None, git_username=None, git_password=None, git_autoissues=None):
 
         results = []
 
@@ -3446,6 +3454,10 @@ class ConfigGeneral(Config):
         sickbeard.ANON_REDIRECT = anon_redirect
         sickbeard.PROXY_SETTING = proxy_setting
         sickbeard.PROXY_INDEXERS = config.checkbox_to_value(proxy_indexers)
+        sickbeard.GIT_USERNAME = git_username
+        sickbeard.GIT_PASSWORD = git_password
+        sickbeard.GIT_RESET = config.checkbox_to_value(git_reset)
+        sickbeard.GIT_AUTOISSUES = config.checkbox_to_value(git_autoissues)
         sickbeard.GIT_PATH = git_path
         sickbeard.GIT_REMOTE = git_remote
         sickbeard.CALENDAR_UNPROTECTED = config.checkbox_to_value(calendar_unprotected)
@@ -3480,7 +3492,6 @@ class ConfigGeneral(Config):
         if not config.change_LOG_DIR(log_dir, web_log):
             results += ["Unable to create directory " + os.path.normpath(log_dir) + ", log directory not changed."]
 
-        sickbeard.USE_API = config.checkbox_to_value(use_api)
         sickbeard.API_KEY = api_key
 
         sickbeard.ENABLE_HTTPS = config.checkbox_to_value(enable_https)
@@ -3518,7 +3529,7 @@ class ConfigBackupRestore(Config):
     def index(self):
         t = PageTemplate(rh=self, file="config_backuprestore.tmpl")
         t.submenu = self.ConfigMenu()
-        return t
+        return t.respond()
 
     def backup(self, backupDir=None):
 
@@ -3569,7 +3580,7 @@ class ConfigSearch(Config):
     def index(self):
         t = PageTemplate(rh=self, file="config_search.tmpl")
         t.submenu = self.ConfigMenu()
-        return t
+        return t.respond()
 
 
     def saveSearch(self, use_nzbs=None, use_torrents=None, nzb_dir=None, sab_username=None, sab_password=None,
@@ -3664,7 +3675,7 @@ class ConfigPostProcessing(Config):
     def index(self):
         t = PageTemplate(rh=self, file="config_postProcessing.tmpl")
         t.submenu = self.ConfigMenu()
-        return t
+        return t.respond()
 
 
     def savePostProcessing(self, naming_pattern=None, naming_multi_ep=None,
@@ -3866,7 +3877,7 @@ class ConfigProviders(Config):
     def index(self):
         t = PageTemplate(rh=self, file="config_providers.tmpl")
         t.submenu = self.ConfigMenu()
-        return t
+        return t.respond()
 
 
     def canAddNewznabProvider(self, name):
@@ -4308,7 +4319,7 @@ class ConfigNotifications(Config):
     def index(self):
         t = PageTemplate(rh=self, file="config_notifications.tmpl")
         t.submenu = self.ConfigMenu()
-        return t
+        return t.respond()
 
 
     def saveNotifications(self, use_kodi=None, kodi_always_on=None, kodi_notify_onsnatch=None,
@@ -4521,7 +4532,7 @@ class ConfigSubtitles(Config):
     def index(self):
         t = PageTemplate(rh=self, file="config_subtitles.tmpl")
         t.submenu = self.ConfigMenu()
-        return t
+        return t.respond()
 
 
     def saveSubtitles(self, use_subtitles=None, subtitles_plugins=None, subtitles_languages=None, subtitles_dir=None,
@@ -4589,7 +4600,7 @@ class ConfigAnime(Config):
 
         t = PageTemplate(rh=self, file="config_anime.tmpl")
         t.submenu = self.ConfigMenu()
-        return t
+        return t.respond()
 
 
     def saveAnime(self, use_anidb=None, anidb_username=None, anidb_password=None, anidb_use_mylist=None,
@@ -4624,7 +4635,7 @@ class ErrorLogs(WebRoot):
     def ErrorLogsMenu(self):
         menu = [
             {'title': 'Clear Errors', 'path': 'errorlogs/clearerrors/'},
-            # { 'title': 'View Log',  'path': 'errorlogs/viewlog'  },
+            {'title': 'Submit Errors', 'path': 'errorlogs/submit_errors/', 'requires': self.haveErrors},
         ]
 
         return menu
@@ -4634,15 +4645,17 @@ class ErrorLogs(WebRoot):
         t = PageTemplate(rh=self, file="errorlogs.tmpl")
         t.submenu = self.ErrorLogsMenu()
 
-        return t
+        return t.respond()
 
+    def haveErrors(self):
+        if len(classes.ErrorViewer.errors) > 0:
+            return True
 
     def clearerrors(self):
         classes.ErrorViewer.clear()
         return self.redirect("/errorlogs/")
 
-
-    def viewlog(self, minLevel=logger.MESSAGE, maxLines=500):
+    def viewlog(self, minLevel=logger.INFO, maxLines=500):
 
         t = PageTemplate(rh=self, file="viewlogs.tmpl")
         t.submenu = self.ErrorLogsMenu()
@@ -4650,8 +4663,8 @@ class ErrorLogs(WebRoot):
         minLevel = int(minLevel)
 
         data = []
-        if os.path.isfile(logger.sb_log_instance.log_file_path):
-            with ek.ek(open, logger.sb_log_instance.log_file_path) as f:
+        if os.path.isfile(logger.logFile):
+            with ek.ek(open, logger.logFile) as f:
                 data = f.readlines()
 
         regex = "^(\d\d\d\d)\-(\d\d)\-(\d\d)\s*(\d\d)\:(\d\d):(\d\d)\s*([A-Z]+)\s*(.+?)\s*\:\:\s*(.*)$"
@@ -4693,4 +4706,14 @@ class ErrorLogs(WebRoot):
         t.logLines = result
         t.minLevel = minLevel
 
-        return t
+        return t.respond()
+
+    def submit_errors(self):
+        if not (sickbeard.GIT_USERNAME and sickbeard.GIT_PASSWORD):
+            logger.log(u'Please set your GitHub username and password in the config, unable to submit issue ticket to GitHub!')
+        else:
+            issue = logger.submit_errors()
+            if issue:
+                ui.notifications.message('Your issue ticket #%s was submitted successfully!' % issue.number)
+
+        return self.redirect("/errorlogs/")

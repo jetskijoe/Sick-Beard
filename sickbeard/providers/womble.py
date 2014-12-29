@@ -30,7 +30,8 @@ class WombleProvider(generic.NZBProvider):
         generic.NZBProvider.__init__(self, "Womble's Index")
         self.enabled = False
         self.cache = WombleCache(self)
-        self.url = 'https://newshost.co.za/'
+        self.urls = {'base_url': 'https://newshost.co.za/'}
+        self.url = self.urls['base_url']
 
     def isEnabled(self):
         return self.enabled
@@ -57,7 +58,7 @@ class WombleCache(tvcache.TVCache):
         for url in [self.provider.url + 'rss/?sec=tv-sd&fr=false', self.provider.url + 'rss/?sec=tv-hd&fr=false']:
             logger.log(u"Womble's Index cache update URL: " + url, logger.DEBUG)
 
-            for item in self.getRSSFeed(url, items=['entries', 'feed'])['entries'] or []:
+            for item in self.getRSSFeed(url)['entries'] or []:
                 ci = self._parseItem(item)
                 if ci is not None:
                     cl.append(ci)

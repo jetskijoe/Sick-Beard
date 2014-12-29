@@ -320,7 +320,7 @@ class QueueItemAdd(ShowQueueItem):
             return
 
         except exceptions.MultipleShowObjectsException:
-            logger.log(u"The show in " + self.showDir + " is already in your show list, skipping", logger.ERROR)
+            logger.log(u"The show in " + self.showDir + " is already in your show list, skipping", logger.WARNING)
             ui.notifications.error('Show skipped', "The show in " + self.showDir + " is already in your show list")
             self._finishEarly()
             return
@@ -335,7 +335,6 @@ class QueueItemAdd(ShowQueueItem):
         try:
             self.show.loadIMDbInfo()
         except imdb_exceptions.IMDbError, e:
-            #todo Insert UI notification
             logger.log(u" Something wrong on IMDb api: " + ex(e), logger.WARNING)
         except Exception, e:
             logger.log(u"Error loading IMDb info: " + ex(e), logger.ERROR)
@@ -556,7 +555,7 @@ class QueueItemUpdate(ShowQueueItem):
             for curSeason in DBEpList:
                 for curEpisode in DBEpList[curSeason]:
                     logger.log(u"Permanently deleting episode " + str(curSeason) + "x" + str(
-                        curEpisode) + " from the database", logger.MESSAGE)
+                        curEpisode) + " from the database", logger.INFO)
                     curEp = self.show.getEpisode(curSeason, curEpisode)
                     try:
                         curEp.deleteEpisode()

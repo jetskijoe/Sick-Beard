@@ -106,7 +106,7 @@
 (this will set a default status to be applied to any newly added episodes)<br />
 <select name="defaultEpStatus" id="defaultEpStatusSelect" class="form-control form-control-inline input-sm">
     #for $curStatus in [$WANTED, $SKIPPED, $ARCHIVED, $IGNORED]:
-    <option value="$curStatus">$statusStrings[$curStatus]</option>
+    <option value="$curStatus" #if $curStatus == $show.default_ep_status then 'selected="selected"' else ''#>$statusStrings[$curStatus]</option>
     #end for
 </select><br />
 <br />
@@ -133,7 +133,7 @@
 
 <b>Sports: </b>
 <input type="checkbox" name="sports" #if $show.sports == 1 then "checked=\"checked\"" else ""# /><br />
-(check this if the show is a sporting or MMA event)<br />
+(check this if the show is a sporting or MMA event and released as Show.03.02.2010 rather than Show.S02E03)<br />
 <br />
 
 <b>Anime: </b>

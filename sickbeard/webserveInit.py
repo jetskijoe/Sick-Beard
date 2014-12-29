@@ -7,7 +7,7 @@ from sickbeard.webserve import LoginHandler, LogoutHandler, KeyHandler
 from sickbeard.webapi import ApiHandler
 from sickbeard import logger
 from sickbeard.helpers import create_https_certificates, generateApiKey
-from tornado.web import Application, StaticFileHandler, HTTPError, RedirectHandler
+from tornado.web import Application, StaticFileHandler, RedirectHandler
 from tornado.httpserver import HTTPServer
 from tornado.ioloop import IOLoop
 from tornado.routes import route
@@ -26,7 +26,7 @@ class SRWebServer(threading.Thread):
         self.options.setdefault('log_dir', None)
         self.options.setdefault('username', '')
         self.options.setdefault('password', '')
-        self.options.setdefault('web_root', None)
+        self.options.setdefault('web_root', '/')
         assert isinstance(self.options['port'], int)
         assert 'data_root' in self.options
 
@@ -72,7 +72,7 @@ class SRWebServer(threading.Thread):
                                  gzip=True,
                                  xheaders=sickbeard.HANDLE_REVERSE_PROXY,
                                  cookie_secret='61oETzKXQAGaYdkL5gEmGeJJFuYh7EQnp2XdTP1o/Vo=',
-                                 login_url='/login/',
+                                 login_url='%s/login/' % self.options['web_root'],
         )
 
         # Main Handlers
@@ -87,11 +87,8 @@ class SRWebServer(threading.Thread):
             (r'%s/api/builder' % self.options['web_root'], RedirectHandler, {"url": self.options['web_root'] + '/apibuilder/'}),
 
             # webui login/logout handlers
-            (r'%s/login(/?.*)' % self.options['web_root'], LoginHandler),
-            (r'%s/logout(/?.*)' % self.options['web_root'], LogoutHandler),
-
-            # webui redirect
-            (r'/', RedirectHandler, {"url": self.options['web_root'] + '/home/'}),
+            (r'%s/login(/?)' % self.options['web_root'], LoginHandler),
+            (r'%s/logout(/?)' % self.options['web_root'], LogoutHandler),
 
             # webui handlers
         ] + route.get_routes(self.options['web_root']))

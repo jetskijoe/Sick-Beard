@@ -45,7 +45,8 @@ class TvTorrentsProvider(generic.TorrentProvider):
 
         self.cache = TvTorrentsCache(self)
 
-        self.url = 'https://www.tvtorrents.com/'
+        self.urls = {'base_url': 'https://www.tvtorrents.com/'}
+        self.url = self.urls['base_url']
 
     def isEnabled(self):
         return self.enabled
@@ -94,7 +95,7 @@ class TvTorrentsCache(tvcache.TVCache):
         rss_url = self.provider.url + 'RssServlet?digest=' + provider.digest + '&hash=' + provider.hash + '&fname=true&exclude=(' + ignore_regex + ')'
         logger.log(self.provider.name + u" cache update URL: " + rss_url, logger.DEBUG)
 
-        return self.getRSSFeed(rss_url, items=['entries', 'feed'])
+        return self.getRSSFeed(rss_url)
 
     def _checkAuth(self, data):
         return self.provider._checkAuthFromData(data)

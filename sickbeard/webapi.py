@@ -77,8 +77,15 @@ class ApiHandler(RequestHandler):
     def __init__(self, *args, **kwargs):
         super(ApiHandler, self).__init__(*args, **kwargs)
 
+    def set_default_headers(self):
+        self.set_header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+
     def get(self, *args, **kwargs):
         kwargs = self.request.arguments
+        for arg, value in kwargs.items():
+            if len(value) == 1:
+                kwargs[arg] = value[0]
+
         args = args[1:]
 
         # set the output callback
@@ -87,13 +94,8 @@ class ApiHandler(RequestHandler):
                               'image': lambda x: x['image'],
         }
 
-        if sickbeard.USE_API is not True:
-            accessMsg = u"API :: " + self.request.remote_ip + " - SB API Disabled. ACCESS DENIED"
-            logger.log(accessMsg, logger.WARNING)
-            return self.finish(outputCallbackDict['default'](_responds(RESULT_DENIED, msg=accessMsg)))
-        else:
-            accessMsg = u"API :: " + self.request.remote_ip + " - gave correct API KEY. ACCESS GRANTED"
-            logger.log(accessMsg, logger.DEBUG)
+        accessMsg = u"API :: " + self.request.remote_ip + " - gave correct API KEY. ACCESS GRANTED"
+        logger.log(accessMsg, logger.DEBUG)
 
         # set the original call_dispatcher as the local _call_dispatcher
         _call_dispatcher = self.call_dispatcher
@@ -124,7 +126,8 @@ class ApiHandler(RequestHandler):
         else:
             outputCallback = outputCallbackDict['default']
 
-        return self.finish(outputCallback(outDict))
+        try:self.finish(outputCallback(outDict))
+        except:pass
 
     def _out_as_json(self, dict):
         self.set_header("Content-Type", "application/json;charset=UTF-8'")
@@ -159,7 +162,8 @@ class ApiHandler(RequestHandler):
             del kwargs["cmd"]
 
         outDict = {}
-        if cmds != None:
+        if cmds is not None:
+            cmds = cmds.split("|")
             multiCmds = bool(len(cmds) > 1)
             for cmd in cmds:
                 curArgs, curKwargs = self.filter_params(cmd, args, kwargs)
@@ -171,7 +175,14 @@ class ApiHandler(RequestHandler):
                 if not (multiCmds and cmd in ('show.getposter', 'show.getbanner')):  # skip these cmd while chaining
                     try:
                         if cmd in _functionMaper:
-                            curOutDict = _functionMaper.get(cmd)(curArgs, curKwargs).run()
+                            # map function
+                            func = _functionMaper.get(cmd)
+
+                            # add request handler to function
+                            func.rh = self
+
+                            # call function and get response back
+                            curOutDict = func(curArgs, curKwargs).run()
                         elif _is_int(cmd):
                             curOutDict = TVDBShorthandWrapper(curArgs, curKwargs, cmd).run()
                         else:
@@ -235,6 +246,34 @@ class ApiHandler(RequestHandler):
                 curKwargs[kwarg] = kwargs[kwarg]
         return curArgs, curKwargs
 
+
+    def showPoster(self, show=None, which=None):
+        # Redirect initial poster/banner thumb to default images
+        if which[0:6] == 'poster':
+            default_image_name = 'poster.png'
+        else:
+            default_image_name = 'banner.png'
+
+        # image_path = ek.ek(os.path.join, sickbeard.PROG_DIR, 'gui', 'slick', 'images', default_image_name)
+        static_image_path = os.path.join('/images', default_image_name)
+        if show and sickbeard.helpers.findCertainShow(sickbeard.showList, int(show)):
+            cache_obj = image_cache.ImageCache()
+
+            image_file_name = None
+            if which == 'poster':
+                image_file_name = cache_obj.poster_path(show)
+            if which == 'poster_thumb' or which == 'small':
+                image_file_name = cache_obj.poster_thumb_path(show)
+            if which == 'banner':
+                image_file_name = cache_obj.banner_path(show)
+            if which == 'banner_thumb':
+                image_file_name = cache_obj.banner_thumb_path(show)
+
+            if ek.ek(os.path.isfile, image_file_name):
+                static_image_path = os.path.normpath(image_file_name.replace(sickbeard.CACHE_DIR, '/cache'))
+
+        static_image_path = sickbeard.WEB_ROOT + static_image_path.replace('\\', '/')
+        return self.redirect(static_image_path)
 
 class ApiCall(ApiHandler):
     _help = {"desc": "No help message available. Please tell the devs that a help msg is missing for this cmd"}
@@ -330,7 +369,7 @@ class ApiCall(ApiHandler):
         if required:
             try:
                 self._missing
-                self._requiredParams += [key]
+                self._requiredParams.append(key)
             except AttributeError:
                 self._missing = []
                 self._requiredParams = {key: {"allowedValues": allowedValues,
@@ -1278,8 +1317,8 @@ class CMD_Logs(ApiCall):
         minLevel = logger.reverseNames[str(self.min_level).upper()]
 
         data = []
-        if os.path.isfile(logger.sb_log_instance.log_file_path):
-            with ek.ek(open, logger.sb_log_instance.log_file_path) as f:
+        if os.path.isfile(logger.logFile):
+            with ek.ek(open, logger.logFile) as f:
                 data = f.readlines()
 
         regex = "^(\d\d\d\d)\-(\d\d)\-(\d\d)\s*(\d\d)\:(\d\d):(\d\d)\s*([A-Z]+)\s*(.+?)\s*\:\:\s*(.*)$"
@@ -1594,7 +1633,6 @@ class CMD_SickBeardPing(ApiCall):
 
     def run(self):
         """ check to see if sickrage is running """
-        self.set_header('Cache-Control', "max-age=0,no-cache,no-store")
         if sickbeard.started:
             return _responds(RESULT_SUCCESS, {"pid": sickbeard.PID}, "Pong")
         else:
@@ -2299,7 +2337,7 @@ class CMD_ShowGetPoster(ApiCall):
 
     def run(self):
         """ get the poster for a show in sickrage """
-        return {'outputType': 'image', 'image': WebRoot().showPoster(self.indexerid, 'poster')}
+        return {'outputType': 'image', 'image': self.rh.showPoster(self.indexerid, 'poster')}
 
 
 class CMD_ShowGetBanner(ApiCall):
@@ -2322,7 +2360,7 @@ class CMD_ShowGetBanner(ApiCall):
 
     def run(self):
         """ get the banner for a show in sickrage """
-        return {'outputType': 'image', 'image': WebRoot().showPoster(self.indexerid, 'banner')}
+        return {'outputType': 'image', 'image': self.rh.showPoster(self.indexerid, 'banner')}
 
 
 class CMD_ShowPause(ApiCall):
