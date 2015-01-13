@@ -336,21 +336,28 @@ class NameParser(object):
             if not second:
                 return None
             else:
-                return getattr(second, attr)
+                b = getattr(second, attr)
+                if b != None or (type(b) == list and len(b)):
+                    return getattr(second, attr)
 
         # if the second doesn't exist then return the first
         if not second:
-            return getattr(first, attr)
-
-        a = getattr(first, attr)
-        b = getattr(second, attr)
+            a = getattr(first, attr)
+            if a != None or (type(a) == list and len(a)):
+                return getattr(first, attr)
+        if first:
+            a = getattr(first, attr)
+        if second:
+            b = getattr(second, attr)
 
         # if a is good use it
-        if a != None or (type(a) == list and len(a)):
+        if first and (a != None or (type(a) == list and len(a))):
             return a
         # if not use b (if b isn't set it'll just be default)
-        else:
+        elif second and (b != None or (type(b) == list and len(b))):
             return b
+        else:
+           return None
 
     def _unicodify(self, obj, encoding="utf-8"):
         if isinstance(obj, basestring):
@@ -453,7 +460,7 @@ class NameParser(object):
 
         if not final_result.show:
             raise InvalidShowException(
-                "Unable to parse " + name.encode(sickbeard.SYS_ENCODING, 'xmlcharrefreplace'))
+                "1 Unable to parse " + name.encode(sickbeard.SYS_ENCODING, 'xmlcharrefreplace'))
 
         # if there's no useful info in it then raise an exception
         if final_result.season_number == None and not final_result.episode_numbers and final_result.air_date == None and not final_result.ab_episode_numbers and not final_result.series_name:
