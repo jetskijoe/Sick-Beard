@@ -615,13 +615,13 @@ class TVShow(object):
         logger.log(str(self.indexerid) + u": Creating episode object from " + file, logger.DEBUG)
 
         try:
-            myParser = NameParser(showObj=self, tryIndexers=True)
+            myParser = NameParser(showObj=self, tryIndexers=True, convert=True)
             parse_result = myParser.parse(file)
         except InvalidNameException:
-            logger.log(u"Unable to parse the filename " + file + " into a valid episode", logger.DEBUG)
+            logger.log(u"tv Unable to parse the filename " + file + " into a valid episode", logger.DEBUG)
             return None
         except InvalidShowException:
-            logger.log(u"Unable to parse the filename " + file + " into a valid show", logger.DEBUG)
+            logger.log(u"tv Unable to parse the filename " + file + " into a valid show", logger.DEBUG)
             return None
 
         if not len(parse_result.episode_numbers):
@@ -1269,7 +1269,7 @@ class TVShow(object):
 
             if epStatus == FAILED:
                 return Overview.WANTED
-            elif epStatus in (SNATCHED, SNATCHED_PROPER, SNATCHED_BEST):
+            elif epStatus in (SNATCHED_BEST, SNATCHED, SNATCHED_PROPER ) and curQuality == maxBestQuality:
                 return Overview.SNATCHED
             # if they don't want re-downloads then we call it good if they have anything
             elif maxBestQuality == None:

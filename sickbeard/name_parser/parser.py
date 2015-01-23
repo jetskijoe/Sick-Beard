@@ -461,10 +461,10 @@ class NameParser(object):
         if not final_result.show:
             raise InvalidShowException(
                 "1 Unable to parse " + name.encode(sickbeard.SYS_ENCODING, 'xmlcharrefreplace'))
-
+        logger.log(u"Trying to parse: " + name " into " + str(final_result).decode('utf-8', 'xmlcharrefreplace'), logger.INFO)
         # if there's no useful info in it then raise an exception
         if final_result.season_number == None and not final_result.episode_numbers and final_result.air_date == None and not final_result.ab_episode_numbers and not final_result.series_name:
-            raise InvalidNameException("Unable to parse " + name.encode(sickbeard.SYS_ENCODING, 'xmlcharrefreplace'))
+            raise InvalidNameException("2 Unable to parse " + name.encode(sickbeard.SYS_ENCODING, 'xmlcharrefreplace'))
 
         if cache_result:
             name_parser_cache.add(name, final_result)
