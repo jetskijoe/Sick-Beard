@@ -296,16 +296,11 @@ $(document).ready(function(){
     });
 	
     $('#testTrakt').click(function () {
-        var trakt_api = $.trim($('#trakt_api').val());
         var trakt_username = $.trim($('#trakt_username').val());
         var trakt_password = $.trim($('#trakt_password').val());
-        if (!trakt_api || !trakt_username || !trakt_password) {
+        var trakt_disable_ssl_verify = $('#trakt_disable_ssl_verify').is(':checked');
+        if (!trakt_username || !trakt_password) {
             $('#testTrakt-result').html('Please fill out the necessary fields above.');
-			if (!trakt_api) {
-				$('#trakt_api').addClass('warning');
-			} else {
-				$('#trakt_api').removeClass('warning');
-			}
 			if (!trakt_username) {
 				$('#trakt_username').addClass('warning');
 			} else {
@@ -318,10 +313,10 @@ $(document).ready(function(){
 			}
             return;
         }
-		$('#trakt_api,#trakt_username,#trakt_password').removeClass('warning');
+		$('#trakt_username,#trakt_password').removeClass('warning');
         $(this).prop('disabled', true);
         $('#testTrakt-result').html(loading);
-        $.get(sbRoot + '/home/testTrakt', {'api': trakt_api, 'username': trakt_username, 'password': trakt_password})
+        $.get(sbRoot + '/home/testTrakt', {'username': trakt_username, 'password': trakt_password, 'disable_ssl': trakt_disable_ssl_verify})
             .done(function (data) {
                 $('#testTrakt-result').html(data);
                 $('#testTrakt').prop('disabled', false);

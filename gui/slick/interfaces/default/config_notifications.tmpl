@@ -1389,13 +1389,12 @@
                                 </label>
                             </div>
                             <div class="field-pair">
-                                <label for="trakt_api">
-                                    <span class="component-title">Trakt API key:</span>
-                                    <input type="text" name="trakt_api" id="trakt_api" value="$sickbeard.TRAKT_API" class="form-control input-sm input250" />
-                                </label>
-                                <label>
-                                    <span class="component-title">&nbsp;</span>
-                                    <span class="component-desc">get your key at: <a href="<%= anon_url('http://trakt.tv/settings/api') %>" rel="noreferrer" onclick="window.open(this.href, '_blank'); return false;"><b>http://trakt.tv/settings/api</b></a></span>
+                                <label for="trakt_disable_ssl_verify">
+                                    <span class="component-title">Disable SSL Verification:</span>
+                                    <span class="component-desc">
+                                        <input type="checkbox" class="enabler" name="trakt_disable_ssl_verify" id="trakt_disable_ssl_verify" #if $sickbeard.TRAKT_DISABLE_SSL_VERIFY then "checked=\"checked\"" else ""# />
+                                        <p>Disable SSL certificate verification on systems with broken SSL implementations, like the QNAP NAS.</p>
+                                    </span>
                                 </label>
                             </div>
                             <div class="field-pair">

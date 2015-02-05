@@ -323,7 +323,7 @@ class GenericProvider:
                 logger.log(u"Unable to parse the filename " + title + " into a valid episode", logger.DEBUG)
                 continue
             except InvalidShowException:
-                logger.log(u"4 Unable to parse the filename " + title + " into a valid show", logger.DEBUG)
+                logger.log(u"Unable to parse the filename " + title + " into a valid show", logger.DEBUG)
                 continue
 
             showObj = parse_result.show
