@@ -379,7 +379,7 @@
 			#if ($sickbeard.DISPLAY_FILESIZE == True):
 			style="min-width: 190px"
 			#end if
-			>>Name</th>
+			>Name</th>
 			#if ($sickbeard.DISPLAY_FILESIZE == True):
 				<th class="col-ep">Filesize</th>
 			#end if
@@ -500,16 +500,18 @@
 			#set $filename = $sickbeard.DOWNLOAD_URL + $urllib.quote($filename.encode('utf8'))
 			<center><a href="$filename">Download</a></center>
 		</td>
-		#elif len($sickbeard.DOWNLOAD_URL) > 0
+		#elif $sickbeard.DOWNLOAD_URL
 			<td></td>
 		#end if
 		
 		#if $sickbeard.USE_SUBTITLES and $show.subtitles:
 			<td class="col-subtitles" align="center">
 		#if $epResult["subtitles"]:
-		#for $sub_lang in subliminal.language.language_list([x.strip() for x in $epResult["subtitles"].split(',')]):
+            #for $sub_lang in subliminal.language.language_list([x.strip() for x in $epResult["subtitles"].split(',') if x != ""]):
         #if sub_lang.alpha2 != ""
            	<img src="$sbRoot/images/flags/${sub_lang.alpha2}.png" width="16" height="11" alt="${sub_lang}" />
+                #else
+                    <img src="$sbRoot/images/flags/unknown.png" width="16" height="11" alt="Unknown" />
 		#end if
 		#end for
 		#end if

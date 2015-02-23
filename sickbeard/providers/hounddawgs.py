@@ -56,9 +56,9 @@ class HoundDawgsProvider(generic.TorrentProvider):
 
         self.cache = HoundDawgsCache(self)
 		
-        self.urls = {'base_url': 'http://192.99.10.104/',
-		        'search': 'http://192.99.10.104/torrents.php?type=&userid=&searchstr=%s&searchimdb=&searchtags=&order_by=s3&order_way=desc&%s',
-                'login': 'http://192.99.10.104/login.php',
+        self.urls = {'base_url': 'https://hounddawgs.org/',
+		        'search': 'https://hounddawgs.org/torrents.php?type=&userid=&searchstr=%s&searchimdb=&searchtags=&order_by=s3&order_way=desc&%s',
+                'login': 'https://hounddawgs.org/login.php',
         }
 
         self.url = self.urls['base_url']
@@ -154,7 +154,7 @@ class HoundDawgsProvider(generic.TorrentProvider):
         items = {'Season': [], 'Episode': [], 'RSS': []}
 
         if not self._doLogin():
-            return []
+            return results
 
         for mode in search_params.keys():
             for search_string in search_params[mode]:
@@ -214,20 +214,16 @@ class HoundDawgsProvider(generic.TorrentProvider):
                                 
                                 download_url = self.urls['base_url']+allAs[0].attrs['href']
                                 id = link.replace(self.urls['base_url']+'torrents.php?id=','')
-                                seeders = int(torrent[7].string)
-                                leechers = int(torrent[8].string)
                                 
                             except (AttributeError, TypeError):
                                 continue
 
                             #Filter unseeded torrent
-                            if mode != 'RSS' and (seeders < self.minseed or leechers < self.minleech):
-                                continue
 
                             if not title or not download_url:
                                 continue
 
-                            item = title, download_url, id, seeders, leechers
+                            item = title, download_url
                             logger.log(u"Found result: " + title + "(" + download_url + ")", logger.DEBUG)
 
                             items[mode].append(item)
@@ -236,7 +232,6 @@ class HoundDawgsProvider(generic.TorrentProvider):
                     logger.log(u"Failed parsing " + self.name + " Traceback: " + traceback.format_exc(), logger.ERROR)
 
             #For each search mode sort all the items by seeders
-            items[mode].sort(key=lambda tup: tup[3], reverse=True)
 
             results += items[mode]
 
@@ -244,7 +239,7 @@ class HoundDawgsProvider(generic.TorrentProvider):
 
     def _get_title_and_url(self, item):
 
-        title, url, id, seeders, leechers = item
+        title, url = item
 
         if title:
             title = u'' + title
