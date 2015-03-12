@@ -427,8 +427,18 @@ anime_regexes = [
      (?:(?:(?:[\[\(])(?P<extra_info>\d{3,4}[xp]?\d{0,4}[\.\w\s-]*)(?:[\]\)]))|(?:\d{3,4}[xp]))
      (?:[ ._]?\[(?P<crc>\w+)\])?
      .*?
-     """
-    ),
+     """),
+    ('anime_Kaerizaki-Fansub',
+     '''
+     ^\[(?P<release_group>Kaerizaki-Fansub?)\][ ._-]*                         # Release Group and separator
+     (?P<series_name>.+?)[ ._-]+                                              # Show_Name and separator
+     (?P<ep_ab_num>((?!\[VOSTFR|VOSTFR))\d{1,3})                              # Episode number
+     (-(?P<extra_ab_ep_num>((?!\[VOSTFR|VOSTFR))\d{1,3}))?                    # Extra episode number
+     ([ ._](\[VOSTFR\]|VOSTFR))?
+     (\[|[ ._])?(?P<extra_info>([SH]D_\d{3,4}x\d{3,4}|((SD|HD|PS\sVITA)[ ._]\(\d{3,4}x\d{3,4}\))))(\])?         # Extra info
+     ([ ._][vV](?P<version>[0-9]))?                                           # Version
+     .*?                                                                      # Separator and EOL
+     '''),
     ('anime_standard',
      # [Group Name] Show Name.13-14
      # [Group Name] Show Name - 13-14

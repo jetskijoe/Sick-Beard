@@ -35,12 +35,13 @@ class NameParser(object):
     NORMAL_REGEX = 1
     ANIME_REGEX = 2
 
-    def __init__(self, file_name=True, showObj=None, tryIndexers=False, convert=False,
+    def __init__(self, file_name=True, showObj=None, tryIndexers=False, trySceneExceptions=False, convert=False,
                  naming_pattern=False):
 
         self.file_name = file_name
         self.showObj = showObj
         self.tryIndexers = tryIndexers
+        self.trySceneExceptions = trySceneExceptions
         self.convert = convert
         self.naming_pattern = naming_pattern
 
@@ -191,7 +192,7 @@ class NameParser(object):
             show = None
             if not self.naming_pattern:
                 # try and create a show object for this result
-                show = helpers.get_show(bestResult.series_name, self.tryIndexers)
+                show = helpers.get_show(bestResult.series_name, self.tryIndexers, self.trySceneExceptions)
 
             # confirm passed in show object indexer id matches result show object indexer id
             if show:
@@ -336,28 +337,21 @@ class NameParser(object):
             if not second:
                 return None
             else:
-                b = getattr(second, attr)
-                if b != None or (type(b) == list and len(b)):
-                    return getattr(second, attr)
+                return getattr(second, attr)
 
         # if the second doesn't exist then return the first
         if not second:
-            a = getattr(first, attr)
-            if a != None or (type(a) == list and len(a)):
-                return getattr(first, attr)
-        if first:
-            a = getattr(first, attr)
-        if second:
-            b = getattr(second, attr)
+            return getattr(first, attr)
+
+        a = getattr(first, attr)
+        b = getattr(second, attr)
 
         # if a is good use it
-        if first and (a != None or (type(a) == list and len(a))):
+        if a != None or (type(a) == list and len(a)):
             return a
         # if not use b (if b isn't set it'll just be default)
-        elif second and (b != None or (type(b) == list and len(b))):
-            return b
         else:
-           return None
+            return b
 
     def _unicodify(self, obj, encoding="utf-8"):
         if isinstance(obj, basestring):
@@ -460,11 +454,11 @@ class NameParser(object):
 
         if not final_result.show:
             raise InvalidShowException(
-                "1 Unable to parse " + name.encode(sickbeard.SYS_ENCODING, 'xmlcharrefreplace'))
-        logger.log(u"Trying to parse: " + name + " into " + str(final_result).decode('utf-8', 'xmlcharrefreplace'), logger.INFO)
+                "Unable to parse " + name.encode(sickbeard.SYS_ENCODING, 'xmlcharrefreplace'))
+
         # if there's no useful info in it then raise an exception
         if final_result.season_number == None and not final_result.episode_numbers and final_result.air_date == None and not final_result.ab_episode_numbers and not final_result.series_name:
-            raise InvalidNameException("2 Unable to parse " + name.encode(sickbeard.SYS_ENCODING, 'xmlcharrefreplace'))
+            raise InvalidNameException("Unable to parse " + name.encode(sickbeard.SYS_ENCODING, 'xmlcharrefreplace'))
 
         if cache_result:
             name_parser_cache.add(name, final_result)

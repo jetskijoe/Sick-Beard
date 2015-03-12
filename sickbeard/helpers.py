@@ -22,7 +22,6 @@ import os
 import ctypes
 import random
 import re
-import shutil
 import socket
 import stat
 import tempfile
@@ -56,6 +55,9 @@ from sickbeard import clients
 
 from cachecontrol import CacheControl, caches
 from itertools import izip, cycle
+import shutil
+import lib.shutil_custom
+shutil.copyfile = lib.shutil_custom.copyfile_custom
 
 urllib._urlopener = classes.SickBeardURLopener()
 
@@ -130,7 +132,9 @@ def replaceExtension(filename, newExt):
 
 def isSyncFile(filename):
     extension = filename.rpartition(".")[2].lower()
-    if extension == '!sync' or extension == 'lftp-pget-status' or extension == 'part' or extension == 'bts':
+    #if extension == '!sync' or extension == 'lftp-pget-status' or extension == 'part' or extension == 'bts':
+    syncfiles = sickbeard.SYNC_FILES
+    if extension in syncfiles.split(","):
         return True
     else:
         return False
@@ -285,21 +289,21 @@ def searchIndexerForShowID(regShowName, indexer=None, indexer_id=None, ui=None):
                 continue
 
             try:
-                seriesname = search.seriesname
+                seriesname = search[0]['seriesname']
             except:
                 seriesname = None
 
             try:
-                series_id = search.id
+                series_id = search[0]['id']
             except:
                 series_id = None
 
             if not (seriesname and series_id):
                 continue
-
-            if str(name).lower() == str(seriesname).lower and not indexer_id:
+            ShowObj = findCertainShow(sickbeard.showList, int(series_id))
+            if (indexer_id is None) and (ShowObj is not None) and (ShowObj.indexerid == int(series_id)):
                 return (seriesname, i, int(series_id))
-            elif int(indexer_id) == int(series_id):
+            elif (indexer_id is not None) and (int(indexer_id) == int(series_id)):
                 return (seriesname, i, int(indexer_id))
 
         if indexer:
@@ -346,10 +350,7 @@ def listMediaFiles(path):
 
 
 def copyFile(srcFile, destFile):
-    if isPosix():
-        subprocess.call(['cp', srcFile, destFile])
-    else:
-        ek.ek(shutil.copyfile, srcFile, destFile)
+    ek.ek(shutil.copyfile, srcFile, destFile)
     try:
         ek.ek(shutil.copymode, srcFile, destFile)
     except OSError:
@@ -372,11 +373,6 @@ def link(src, dst):
         if ctypes.windll.kernel32.CreateHardLinkW(unicode(dst), unicode(src), 0) == 0: raise ctypes.WinError()
     else:
         os.link(src, dst)
-def isPosix(): 
-    if os.name.startswith('posix'):
-        return True
-    else:
-        return False
 
 
 def hardlinkFile(srcFile, destFile):
@@ -916,13 +912,15 @@ def _check_against_names(nameInQuestion, show, season=-1):
     return False
 
 
-def get_show(name, tryIndexers=False):
+def get_show(name, tryIndexers=False, trySceneExceptions=False):
     if not sickbeard.showList:
         return
 
     showObj = None
     fromCache = False
 
+    if not name:
+        return showObj
     try:
         # check cache for show
         cache = sickbeard.name_cache.retrieveNameFromCache(name)
@@ -934,6 +932,10 @@ def get_show(name, tryIndexers=False):
             showObj = findCertainShow(sickbeard.showList,
                                       searchIndexerForShowID(full_sanitizeSceneName(name), ui=classes.ShowListUI)[2])
 
+        if not showObj and trySceneExceptions:
+            ShowID = sickbeard.scene_exceptions.get_scene_exception_by_name(name)[0]
+            if ShowID:
+                showObj = findCertainShow(sickbeard.showList, int(ShowID))
         # add show to cache
         if showObj and not fromCache:
             sickbeard.name_cache.addNameToCache(name, showObj.indexerid)

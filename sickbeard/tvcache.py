@@ -22,6 +22,7 @@ import time
 import datetime
 import itertools
 import traceback
+import urllib2
 
 import sickbeard
 
@@ -137,9 +138,26 @@ class TVCache():
             logger.log(traceback.format_exc(), logger.DEBUG)
 
     def getRSSFeed(self, url, post_data=None, items=[]):
+        handlers = []
+
         if self.provider.proxy.isEnabled():
             self.provider.headers.update({'Referer': self.provider.proxy.getProxyURL()})
-        return RSSFeeds(self.providerID).getFeed(self.provider.proxy._buildURL(url), post_data, self.provider.headers, items)
+        elif sickbeard.PROXY_SETTING:
+            logger.log("Using proxy for url: " + url, logger.DEBUG)
+            scheme, address = urllib2.splittype(sickbeard.PROXY_SETTING)
+            if not scheme:
+                scheme = 'http'
+                address = 'http://' + sickbeard.PROXY_SETTING
+            else:
+                address = sickbeard.PROXY_SETTING
+            handlers = [urllib2.ProxyHandler({scheme: address})]
+
+        return RSSFeeds(self.providerID).getFeed(
+            self.provider.proxy._buildURL(url),
+            post_data,
+            self.provider.headers,
+            items,
+            handlers=handlers)
 
     def _translateTitle(self, title):
         return u'' + title.replace(' ', '.')
@@ -239,13 +257,13 @@ class TVCache():
                 showObj = helpers.findCertainShow(sickbeard.showList, indexer_id)
 
             try:
-                myParser = NameParser(False, showObj=showObj, convert=True)
+                myParser = NameParser(showObj=showObj, convert=True)
                 parse_result = myParser.parse(name)
             except InvalidNameException:
-                logger.log(u"tvcache Unable to parse the filename " + name + " into a valid episode", logger.DEBUG)
+                logger.log(u"Unable to parse the filename " + name + " into a valid episode", logger.DEBUG)
                 return None
             except InvalidShowException:
-                logger.log(u"tvcache Unable to parse the filename " + name + " into a valid show", logger.DEBUG)
+                logger.log(u"Unable to parse the filename " + name + " into a valid show", logger.DEBUG)
                 return None
 
             if not parse_result or not parse_result.series_name:

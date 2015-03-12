@@ -132,11 +132,11 @@
     });
 
 	if (\$("#showListTableShows").find("tbody").find("tr").size() > 0)
-	\$.tablesorter.filter.bindSearch( "#showListTableShows", \$('.search') );
+		\$.tablesorter.filter.bindSearch( "#showListTableShows", \$('.search') );
 	
 	#if $sickbeard.ANIME_SPLIT_HOME:
 		if (\$("#showListTableAnime").find("tbody").find("tr").size() > 0)
-	\$.tablesorter.filter.bindSearch( "#showListTableAnime", \$('.search') );
+			\$.tablesorter.filter.bindSearch( "#showListTableAnime", \$('.search') );
 	#end if
 	
     #set $fuzzydate = 'airdate'
@@ -371,7 +371,7 @@ $myShowList.sort(lambda x, y: cmp(x.name, y.name))
 					}
 					if (classvalue==100) {
 						classtoadd = "progress-100"
-					}		
+					}
 					\$("\#progressbar$curShow.indexerid > .ui-progressbar-value").addClass(classtoadd);
 				});
 			//-->
@@ -384,7 +384,13 @@ $myShowList.sort(lambda x, y: cmp(x.name, y.name))
 		<div class="show-date">
 #if $cur_airs_next
     #set $ldatetime = $sbdatetime.sbdatetime.convert_to_setting($network_timezones.parse_date_time($cur_airs_next,$curShow.airs,$curShow.network))
-			<span class="${fuzzydate}">$sbdatetime.sbdatetime.sbfdate($ldatetime)</span>
+			<span class="${fuzzydate}">
+                #try
+                    $sbdatetime.sbdatetime.sbfdate($ldatetime)
+                #except ValueError
+                    Invalid date
+                #end try
+            </span>
 #else
     #set $output_html = '?'
     #if None is not $display_status
@@ -536,7 +542,13 @@ $myShowList.sort(lambda x, y: cmp(x.name, y.name))
 	
 	#if $cur_airs_next
     #set $ldatetime = $sbdatetime.sbdatetime.convert_to_setting($network_timezones.parse_date_time($cur_airs_next,$curShow.airs,$curShow.network))
-		<td align="center" class="nowrap"><div class="${fuzzydate}">$sbdatetime.sbdatetime.sbfdate($ldatetime)</div><span class="sort_data">$calendar.timegm($ldatetime.timetuple())</span></td>
+		<td align="center" class="nowrap"><div class="${fuzzydate}">
+		#try
+		  $sbdatetime.sbdatetime.sbfdate($ldatetime)
+		#except ValueError
+		  Invalid date
+		#end try
+		</div><span class="sort_data">$calendar.timegm($ldatetime.timetuple())</span></td>
     #else:
     	<td align="center" class="nowrap"></td>
     #end if

@@ -25,7 +25,6 @@ import re
 import glob
 import stat
 import traceback
-import shutil
 
 import sickbeard
 
@@ -50,6 +49,9 @@ from sickbeard import notifiers
 from sickbeard import postProcessor
 from sickbeard import subtitles
 from sickbeard import history
+from sickbeard import sbdatetime
+from sickbeard import network_timezones
+from dateutil.tz import *
 
 from sickbeard import encodingKludge as ek
 
@@ -58,6 +60,11 @@ from common import DOWNLOADED, SNATCHED, SNATCHED_PROPER, SNATCHED_BEST, ARCHIVE
     UNKNOWN, FAILED
 from common import NAMING_DUPLICATE, NAMING_EXTEND, NAMING_LIMITED_EXTEND, NAMING_SEPARATED_REPEAT, \
     NAMING_LIMITED_EXTEND_E_PREFIXED
+
+import shutil
+import lib.shutil_custom
+
+shutil.copyfile = lib.shutil_custom.copyfile_custom
 
 
 def dirty_setter(attr_name):
@@ -615,13 +622,13 @@ class TVShow(object):
         logger.log(str(self.indexerid) + u": Creating episode object from " + file, logger.DEBUG)
 
         try:
-            myParser = NameParser(showObj=self, tryIndexers=True, convert=True)
+            myParser = NameParser(showObj=self, tryIndexers=True)
             parse_result = myParser.parse(file)
         except InvalidNameException:
-            logger.log(u"tv Unable to parse the filename " + file + " into a valid episode", logger.DEBUG)
+            logger.log(u"Unable to parse the filename " + file + " into a valid episode", logger.DEBUG)
             return None
         except InvalidShowException:
-            logger.log(u"tv Unable to parse the filename " + file + " into a valid show", logger.DEBUG)
+            logger.log(u"Unable to parse the filename " + file + " into a valid show", logger.DEBUG)
             return None
 
         if not len(parse_result.episode_numbers):
@@ -1028,6 +1035,10 @@ class TVShow(object):
             except OSError, e:
                 logger.log(u'Unable to %s %s: %s / %s' % (action, self._location, repr(e), str(e)), logger.WARNING)
 
+        if sickbeard.USE_TRAKT and sickbeard.TRAKT_SYNC_WATCHLIST:
+            logger.log(u"Removing show: indexerid " + str(self.indexerid) + ", Title " + str(self.name) + " from Watchlist", logger.DEBUG)
+            notifiers.trakt_notifier.update_watchlist(self, update="remove")
+
     def populateCache(self):
         cache_inst = image_cache.ImageCache()
 
@@ -1253,7 +1264,7 @@ class TVShow(object):
 
     def getOverview(self, epStatus):
 
-        if epStatus == WANTED:
+        if epStatus == WANTED and not self.paused:
             return Overview.WANTED
         elif epStatus in (UNAIRED, UNKNOWN):
             return Overview.UNAIRED
@@ -1266,8 +1277,10 @@ class TVShow(object):
             anyQualities, bestQualities = Quality.splitQuality(self.quality)  # @UnusedVariable
             if bestQualities:
                 maxBestQuality = max(bestQualities)
+                minBestQuality = min(bestQualities)
             else:
                 maxBestQuality = None
+                minBestQuality = None
 
             epStatus, curQuality = Quality.splitCompositeStatus(epStatus)
 
@@ -1279,8 +1292,13 @@ class TVShow(object):
                 if curQuality < maxBestQuality:
                     return Overview.QUAL
                 return Overview.SNATCHED
-            # if they don't want re-downloads then we call it good if they have anything
             elif maxBestQuality == None:
+                return Overview.GOOD
+            # if the want only first match and already have one call it good
+            elif self.archive_firstmatch and curQuality in bestQualities:
+                return Overview.GOOD
+            # if they want only first match and current quality is higher than minimal best quality call it good
+            elif self.archive_firstmatch and minBestQuality != None and curQuality > minBestQuality:
                 return Overview.GOOD
             # if they have one but it's not the best they want then mark it as qual
             elif curQuality < maxBestQuality:
@@ -1428,6 +1446,7 @@ class TVEpisode(object):
             self.refreshSubtitles()
         else:
             self.subtitles = added_subtitles
+
         self.subtitles_searchcount = self.subtitles_searchcount + 1 if self.subtitles_searchcount else 1  # added the if because sometime it raise an error
         self.subtitles_lastsearch = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.saveToDB()
@@ -1948,6 +1967,7 @@ class TVEpisode(object):
 
         if epID:
             # use a custom update method to get the data into the DB for existing records.
+            # Multi or added subtitle or removed subtitles
             if sickbeard.SUBTITLES_MULTI or not rows[0]['subtitles'] or not self.subtitles:
                 return [
                     "UPDATE tv_episodes SET indexerid = ?, indexer = ?, name = ?, description = ?, subtitles = ?, "
@@ -1960,6 +1980,7 @@ class TVEpisode(object):
                      self.status, self.location, self.file_size, self.release_name, self.is_proper, self.show.indexerid,
                      self.season, self.episode, self.absolute_number, self.version, self.release_group, epID]]
             else:
+                # Don't update the subtitle language when the srt file doesn't contain the alpha2 code, keep value from subliminal
                 return [
                     "UPDATE tv_episodes SET indexerid = ?, indexer = ?, name = ?, description = ?, "
                     "subtitles_searchcount = ?, subtitles_lastsearch = ?, airdate = ?, hasnfo = ?, hastbn = ?, status = ?, "
@@ -2152,7 +2173,8 @@ class TVEpisode(object):
             show_name = re.sub("\(\d+\)$", "", self.show.name).rstrip()
         else:
             show_name = self.show.name
-
+        
+        #try to get the release group
         rel_grp = {};
         rel_grp["SiCKRAGE"] = 'SiCKRAGE';
         if hasattr(self, 'location'): #from the location name 
@@ -2164,10 +2186,14 @@ class TVEpisode(object):
         if hasattr(self, 'release_name'): #from the release name field in db
             rel_grp['release_name'] = release_group(self.show, self.release_name);
             if (rel_grp['release_name'] == ''): del rel_grp['release_name']
+        
+        # use release_group, release_name, location in that order 
         if ('database' in rel_grp): relgrp = 'database'
         elif ('release_name' in rel_grp): relgrp = 'release_name'
         elif ('location' in rel_grp): relgrp = 'location'
         else: relgrp = 'SiCKRAGE' 
+            
+        
         return {
             '%SN': show_name,
             '%S.N': dot(show_name),
@@ -2237,25 +2263,30 @@ class TVEpisode(object):
         replace_map = self._replace_map()
 
         result_name = pattern
+        
+        # if there's no release group in the db, let the user know we replaced it
         if (not hasattr(self, '_release_group') and (not replace_map['%RG'] == 'SiCKRAGE')):        
             logger.log(u"Episode has no release group, replacing it with '" + replace_map['%RG'] + "'", logger.DEBUG);
             self._release_group = replace_map['%RG'] #if release_group is not in the db, put it there
         elif ((self._release_group == '') and (not replace_map['%RG'] == 'SiCKRAGE')):
             logger.log(u"Episode has no release group, replacing it with '" + replace_map['%RG'] + "'", logger.DEBUG);
             self._release_group = replace_map['%RG'] #if release_group is not in the db, put it there
-
-        # if there's no release group then replace it with a reasonable facsimile
+    
+        # if there's no release name then replace it with a reasonable facsimile
         if not replace_map['%RN']:
+
             if self.show.air_by_date or self.show.sports:
                 result_name = result_name.replace('%RN', '%S.N.%A.D.%E.N-' + replace_map['%RG'])
                 result_name = result_name.replace('%rn', '%s.n.%A.D.%e.n-' + replace_map['%RG'].lower())
+                    
             elif anime_type != 3:
                 result_name = result_name.replace('%RN', '%S.N.%AB.%E.N-' + replace_map['%RG'])
                 result_name = result_name.replace('%rn', '%s.n.%ab.%e.n-' + replace_map['%RG'].lower())
+                                
             else:
                 result_name = result_name.replace('%RN', '%S.N.S%0SE%0E.%E.N-' + replace_map['%RG'])
                 result_name = result_name.replace('%rn', '%s.n.s%0se%0e.%e.n-' + replace_map['%RG'].lower())
-
+            
             logger.log(u"Episode has no release name, replacing it with a generic one: " + result_name, logger.DEBUG)
 
         if not replace_map['%RT']:
@@ -2476,11 +2507,11 @@ class TVEpisode(object):
             return
 
         related_files = postProcessor.PostProcessor(self.location).list_associated_files(
-            self.location, base_name_only=True)
+            self.location, base_name_only=True, subfolders=True)
 
         if self.show.subtitles and sickbeard.SUBTITLES_DIR != '':
             related_subs = postProcessor.PostProcessor(self.location).list_associated_files(sickbeard.SUBTITLES_DIR,
-                                                                                            subtitles_only=True)
+                                                                                            subtitles_only=True, subfolders=True)
             absolute_proper_subs_path = ek.ek(os.path.join, sickbeard.SUBTITLES_DIR, self.formatted_filename())
 
         logger.log(u"Files associated to " + self.location + ": " + str(related_files), logger.DEBUG)
@@ -2490,10 +2521,15 @@ class TVEpisode(object):
 
         # move related files
         for cur_related_file in related_files:
+            #We need to fix something here because related files can be in subfolders and the original code doesn't handle this (at all)
             cur_related_dir = ek.ek(os.path.dirname, ek.ek(os.path.abspath, cur_related_file))
             subfolder = cur_related_dir.replace(ek.ek(os.path.dirname, ek.ek(os.path.abspath, self.location)), '')
+            #We now have a subfolder. We need to add that to the absolute_proper_path.
+            #First get the absolute proper-path dir
             proper_related_dir = ek.ek(os.path.dirname, ek.ek(os.path.abspath, absolute_proper_path + file_ext))
             proper_related_path = absolute_proper_path.replace(proper_related_dir, proper_related_dir + subfolder)
+            
+            
             cur_result = helpers.rename_ep_file(cur_related_file, proper_related_path,
                                                 absolute_current_path_no_ext_length + len(subfolder))
             if not cur_result:
@@ -2542,9 +2578,12 @@ class TVEpisode(object):
             min = int((airs.group(2), min)[None is airs.group(2)])
         airtime = datetime.time(hr, min)
 
-        airdatetime = datetime.datetime.combine(self.airdate, airtime)
+        if sickbeard.TIMEZONE_DISPLAY == 'local':
+            airdatetime = sbdatetime.sbdatetime.convert_to_setting( network_timezones.parse_date_time(datetime.date.toordinal(self.airdate), self.show.airs, self.show.network))
+        else:
+            airdatetime = datetime.datetime.combine(self.airdate, airtime).replace(tzinfo=tzlocal())
 
-        filemtime = datetime.datetime.fromtimestamp(os.path.getmtime(self.location))
+        filemtime = datetime.datetime.fromtimestamp(os.path.getmtime(self.location)).replace(tzinfo=tzlocal())
 
         if filemtime != airdatetime:
             import time
