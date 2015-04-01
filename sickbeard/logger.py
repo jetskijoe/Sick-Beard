@@ -61,6 +61,7 @@ class CensoredFormatter(logging.Formatter, object):
         for k, v in censoredItems.items():
             if v and len(v) > 0 and v in msg:
                 msg = msg.replace(v, len(v) * '*')
+        # Needed because Newznab apikey isn't stored as key=value in a section.
         msg = re.sub('apikey\=[^\&]*\&','apikey\=**********\&', msg)
         return msg
 
@@ -120,9 +121,11 @@ class Logger(object):
 
             for logger in self.loggers:
                 logger.addHandler(rfh)
+                
     def shutdown(self):
-
+        
         logging.shutdown()
+        
     def log(self, msg, level=INFO, *args, **kwargs):
         meThread = threading.currentThread().getName()
         message = meThread + u" :: " + msg
@@ -158,19 +161,27 @@ class Logger(object):
         try:
             # read log file
             log_data = None
+
             if os.path.isfile(self.logFile):
                 with ek.ek(codecs.open, *[self.logFile, 'r', 'utf-8']) as f:
                     log_data = f.readlines()
+                    
             for i in range (1 , int(sickbeard.LOG_NR)):
                 if os.path.isfile(self.logFile + "." + str(i)) and (len(log_data) <= 500):
                     with ek.ek(codecs.open, *[self.logFile + "." + str(i), 'r', 'utf-8']) as f:
                             log_data += f.readlines()
+
             log_data = [line for line in reversed(log_data)]
 
             # parse and submit errors to issue tracker
             for curError in sorted(classes.ErrorViewer.errors, key=lambda error: error.time, reverse=True)[:500]:
-                if not curError.title:
-                    continue
+                try:
+                    if len(curError.title) > 1024:
+                        title_Error = str(curError.title[0:1024])
+                    else:
+                        title_Error = str(curError.title)
+                except Exception as e:
+                    title_Error = u"Unable to extract title from error"
 
                 gist = None
                 regex = "^(%s)\s*([A-Z]+)\s*(.+?)\s*\:\:\s*(.*)$" % curError.time
@@ -188,7 +199,7 @@ class Logger(object):
                         gist = 'No ERROR found'
 
                 message = u"### INFO\n"
-                message += u"Python Version: **" + sys.version[:120] + "**\n"
+                message += u"Python Version: **" + sys.version[:120].replace('\n','') + "**\n"
                 message += u"Operating System: **" + platform.platform() + "**\n"
                 if not 'Windows' in platform.platform():
                     try:
@@ -208,7 +219,7 @@ class Logger(object):
                 message += u"---\n"
                 message += u"_STAFF NOTIFIED_: @SiCKRAGETV/owners @SiCKRAGETV/moderators"
 
-                issue = gh.get_organization(gh_org).get_repo(gh_repo).create_issue("[APP SUBMITTED]: " + str(curError.title), message)
+                issue = gh.get_organization(gh_org).get_repo(gh_repo).create_issue("[APP SUBMITTED]: " + title_Error, message)
                 if issue:
                     self.log('Your issue ticket #%s was submitted successfully!' % issue.number)
 

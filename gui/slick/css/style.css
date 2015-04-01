@@ -566,6 +566,7 @@ home.tmpl
 	-webkit-border-radius: 3px;
 	border-radius: 3px;
 }
+
 .progress-80 {
 	background-image: -moz-linear-gradient(#a6cf41, #5b990d) !important;
 	background-image: linear-gradient(#a6cf41, #5b990d) !important;
@@ -791,6 +792,17 @@ td.tvShow a {
 td.tvShow a:hover {
 	cursor: pointer;
 	color: #428BCA;
+}
+
+#popover-target label {
+  margin: 0 5px;
+  display: block;
+}
+#popover-target input {
+  margin-left: 5px;
+}
+.popover {
+  margin-left: -50px;
 }
 
 /* =======================================================================

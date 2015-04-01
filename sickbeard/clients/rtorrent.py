@@ -17,8 +17,10 @@
 # along with SickRage.  If not, see <http://www.gnu.org/licenses/>.
 
 from base64 import b64encode
+import traceback
 
 import sickbeard
+from sickbeard import logger
 from sickbeard.clients.generic import GenericClient
 from lib.rtorrent import RTorrent
 from lib.rtorrent.err import MethodError
@@ -40,8 +42,10 @@ class rTorrentAPI(GenericClient):
         tp_kwargs = {}
         if sickbeard.TORRENT_AUTH_TYPE is not 'none':
             tp_kwargs['authtype'] = sickbeard.TORRENT_AUTH_TYPE
+
         if not sickbeard.TORRENT_VERIFY_CERT:
             tp_kwargs['check_ssl_cert'] = False
+
         if self.username and self.password:
             self.auth = RTorrent(self.host, self.username, self.password, True, tp_kwargs=tp_kwargs)
         else:
@@ -80,7 +84,8 @@ class rTorrentAPI(GenericClient):
 
             return True
 
-        except:
+        except Exception as e:
+            logger.log(traceback.format_exc(), logger.DEBUG)
             return False
 
     def _add_torrent_file(self, result):
@@ -122,7 +127,8 @@ class rTorrentAPI(GenericClient):
 
             return True
 
-        except:
+        except Exception as e:
+            logger.log(traceback.format_exc(), logger.DEBUG)
             return False
 
     def _set_torrent_ratio(self, name):

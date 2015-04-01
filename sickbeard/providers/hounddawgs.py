@@ -22,6 +22,7 @@ import datetime
 import urlparse
 import sickbeard
 import generic
+import urllib
 from sickbeard.common import Quality, cpu_presets
 from sickbeard import logger
 from sickbeard import tvcache
@@ -87,6 +88,7 @@ class HoundDawgsProvider(generic.TorrentProvider):
         self.session = requests.Session()
 
         try:
+            self.session.get(self.urls['base_url'], timeout=30, verify=False)
             response = self.session.post(self.urls['login'], data=login_params, timeout=30, verify=False)
         except (requests.exceptions.ConnectionError, requests.exceptions.HTTPError), e:
             logger.log(u'Unable to connect to ' + self.name + ' provider: ' + ex(e), logger.ERROR)
@@ -94,6 +96,7 @@ class HoundDawgsProvider(generic.TorrentProvider):
 
         if re.search('Dit brugernavn eller kodeord er forkert.', response.text) \
                 or re.search('<title>Login :: HoundDawgs</title>', response.text) \
+                or re.search('Dine cookies er ikke aktiveret.', response.text) \
                 or response.status_code == 401:
             logger.log(u'Invalid username or password for ' + self.name + ' Check your settings', logger.ERROR)
             return False
@@ -157,6 +160,7 @@ class HoundDawgsProvider(generic.TorrentProvider):
             return results
 
         for mode in search_params.keys():
+		
             for search_string in search_params[mode]:
 
                 if isinstance(search_string, unicode):
@@ -165,7 +169,7 @@ class HoundDawgsProvider(generic.TorrentProvider):
                 #if mode == 'RSS':
                     #searchURL = self.urls['index'] % self.categories
                 #else:
-                searchURL = self.urls['search'] % (search_string, self.categories)
+                searchURL = self.urls['search'] % (urllib.quote(search_string), self.categories)
 
                 logger.log(u"Search string: " + searchURL, logger.DEBUG)
 
@@ -218,20 +222,16 @@ class HoundDawgsProvider(generic.TorrentProvider):
                             except (AttributeError, TypeError):
                                 continue
 
-                            #Filter unseeded torrent
-
                             if not title or not download_url:
                                 continue
 
                             item = title, download_url
-                            logger.log(u"Found result: " + title + "(" + download_url + ")", logger.DEBUG)
+                            logger.log(u"Found result: " + title.replace(' ','.') + " (" + download_url + ")", logger.DEBUG)
 
                             items[mode].append(item)
 
                 except Exception, e:
                     logger.log(u"Failed parsing " + self.name + " Traceback: " + traceback.format_exc(), logger.ERROR)
-
-            #For each search mode sort all the items by seeders
 
             results += items[mode]
 

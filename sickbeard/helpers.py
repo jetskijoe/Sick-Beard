@@ -36,6 +36,8 @@ import base64
 import zipfile
 import datetime
 import errno
+import ast
+import operator
 
 import sickbeard
 import subliminal
@@ -43,6 +45,7 @@ import adba
 import requests
 import requests.exceptions
 import xmltodict
+
 import subprocess
 
 from sickbeard.exceptions import MultipleShowObjectsException, ex
@@ -55,8 +58,10 @@ from sickbeard import clients
 
 from cachecontrol import CacheControl, caches
 from itertools import izip, cycle
+
 import shutil
 import lib.shutil_custom
+
 shutil.copyfile = lib.shutil_custom.copyfile_custom
 
 urllib._urlopener = classes.SickBeardURLopener()
@@ -301,6 +306,7 @@ def searchIndexerForShowID(regShowName, indexer=None, indexer_id=None, ui=None):
             if not (seriesname and series_id):
                 continue
             ShowObj = findCertainShow(sickbeard.showList, int(series_id))
+            #Check if we can find the show in our list (if not, it's not the right show)
             if (indexer_id is None) and (ShowObj is not None) and (ShowObj.indexerid == int(series_id)):
                 return (seriesname, i, int(series_id))
             elif (indexer_id is not None) and (int(indexer_id) == int(series_id)):
@@ -676,6 +682,7 @@ def sanitizeSceneName(name, ezrss=False, anime=False):
     """
 
     if name:
+        # anime: removed ' for Kuroko's Basketball
         if anime:
             bad_chars = u",:()!?\u2019"
         # ezrss leaves : and ! in their show names as far as I can tell
@@ -699,6 +706,38 @@ def sanitizeSceneName(name, ezrss=False, anime=False):
     else:
         return ''
 
+
+_binOps = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.div,
+    ast.Mod: operator.mod
+}
+
+
+def arithmeticEval(s):
+    """
+    A safe eval supporting basic arithmetic operations.
+
+    :param s: expression to evaluate
+    :return: value
+    """
+    node = ast.parse(s, mode='eval')
+
+    def _eval(node):
+        if isinstance(node, ast.Expression):
+            return _eval(node.body)
+        elif isinstance(node, ast.Str):
+            return node.s
+        elif isinstance(node, ast.Num):
+            return node.n
+        elif isinstance(node, ast.BinOp):
+            return _binOps[type(node.op)](_eval(node.left), _eval(node.right))
+        else:
+            raise Exception('Unsupported type {}'.format(node))
+
+    return _eval(node.body)
 
 def create_https_certificates(ssl_cert, ssl_key):
     """
@@ -884,6 +923,13 @@ def encrypt(data, encryption_version=0, decrypt=False):
         else:
             return base64.encodestring(
                 ''.join(chr(ord(x) ^ ord(y)) for (x, y) in izip(data, cycle(unique_key1)))).strip()
+    # Version 2: Simple XOR encryption (this is not very secure, but works)
+    elif encryption_version == 2:
+        if decrypt:
+            return ''.join(chr(ord(x) ^ ord(y)) for (x, y) in izip(base64.decodestring(data), cycle(sickbeard.ENCRYPTION_SECRET)))
+        else:
+            return base64.encodestring(
+                ''.join(chr(ord(x) ^ ord(y)) for (x, y) in izip(data, cycle(sickbeard.ENCRYPTION_SECRET)))).strip()
     # Version 0: Plain text
     else:
         return data
@@ -921,21 +967,25 @@ def get_show(name, tryIndexers=False, trySceneExceptions=False):
 
     if not name:
         return showObj
+
     try:
         # check cache for show
         cache = sickbeard.name_cache.retrieveNameFromCache(name)
         if cache:
             fromCache = True
             showObj = findCertainShow(sickbeard.showList, int(cache))
-
+        
+        #try indexers    
         if not showObj and tryIndexers:
             showObj = findCertainShow(sickbeard.showList,
                                       searchIndexerForShowID(full_sanitizeSceneName(name), ui=classes.ShowListUI)[2])
-
+        
+        #try scene exceptions
         if not showObj and trySceneExceptions:
             ShowID = sickbeard.scene_exceptions.get_scene_exception_by_name(name)[0]
             if ShowID:
                 showObj = findCertainShow(sickbeard.showList, int(ShowID))
+                
         # add show to cache
         if showObj and not fromCache:
             sickbeard.name_cache.addNameToCache(name, showObj.indexerid)
@@ -954,6 +1004,7 @@ def is_hidden_folder(folder):
     def is_hidden(filepath):
         name = os.path.basename(os.path.abspath(filepath))
         return name.startswith('.') or has_hidden_attribute(filepath)
+
     def has_hidden_attribute(filepath):
         try:
             attrs = ctypes.windll.kernel32.GetFileAttributesW(unicode(filepath))
@@ -962,6 +1013,7 @@ def is_hidden_folder(folder):
         except (AttributeError, AssertionError):
             result = False
         return result
+    
     if ek.ek(os.path.isdir, folder):
         if is_hidden(folder):
             return True
@@ -982,7 +1034,7 @@ def validateShow(show, season=None, episode=None):
     try:
         lINDEXER_API_PARMS = sickbeard.indexerApi(show.indexer).api_params.copy()
 
-        if indexer_lang and not indexer_lang == 'en':
+        if indexer_lang and not indexer_lang == sickbeard.INDEXER_DEFAULT_LANGUAGE:
             lINDEXER_API_PARMS['language'] = indexer_lang
 
         t = sickbeard.indexerApi(show.indexer).indexer(**lINDEXER_API_PARMS)
@@ -1005,12 +1057,12 @@ def set_up_anidb_connection():
 
     if not sickbeard.ADBA_CONNECTION:
         anidb_logger = lambda x: logger.log("ANIDB: " + str(x), logger.DEBUG)
-
         try:
             sickbeard.ADBA_CONNECTION = adba.Connection(keepAlive=True, log=anidb_logger)
         except Exception as e:
             logger.log(u"anidb exception msg: " + str(e))
             return False
+
     try:
         if not sickbeard.ADBA_CONNECTION.authed():
             sickbeard.ADBA_CONNECTION.auth(sickbeard.ANIDB_USERNAME, sickbeard.ANIDB_PASSWORD)
@@ -1066,6 +1118,8 @@ def extractZip(archive, targetDir):
     except Exception as e:
         logger.log(u"Zip extraction error: " + str(e), logger.ERROR)
         return False
+
+
 def backupConfigZip(fileList, archive, arcname = None):
     try:
         a = zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED)
@@ -1076,6 +1130,8 @@ def backupConfigZip(fileList, archive, arcname = None):
     except Exception as e:
         logger.log(u"Zip creation error: " + str(e), logger.ERROR)
         return False
+
+
 def restoreConfigZip(archive, targetDir):
     import ntpath
     try:
@@ -1087,6 +1143,7 @@ def restoreConfigZip(archive, targetDir):
                 return tail or ntpath.basename(head)
             bakFilename = '{0}-{1}'.format(path_leaf(targetDir), datetime.datetime.strftime(datetime.datetime.now(), '%Y%m%d_%H%M%S'))
             shutil.move(targetDir, os.path.join(ntpath.dirname(targetDir), bakFilename))
+
         zip_file = zipfile.ZipFile(archive, 'r')
         for member in zip_file.namelist():
             zip_file.extract(member, targetDir)
@@ -1190,7 +1247,7 @@ def _getTempDir():
 
     return os.path.join(tempfile.gettempdir(), "sickrage-%s" % (uid))
 
-def getURL(url, post_data=None, params=None, headers={}, timeout=30, session=None, json=False):
+def getURL(url, post_data=None, params=None, headers={}, timeout=30, session=None, json=False, proxyGlypeProxySSLwarning=None):
     """
     Returns a byte-string retrieved from the url provider.
     """
@@ -1228,6 +1285,15 @@ def getURL(url, post_data=None, params=None, headers={}, timeout=30, session=Non
             logger.log(u"Requested url " + url + " returned status code is " + str(
                 resp.status_code) + ': ' + clients.http_error_code[resp.status_code], logger.DEBUG)
             return
+
+        if proxyGlypeProxySSLwarning is not None:
+            if re.search('The site you are attempting to browse is on a secure connection', resp.text):
+                resp = session.get(proxyGlypeProxySSLwarning)
+
+                if not resp.ok:
+                    logger.log(u"GlypeProxySSLwarning: Requested url " + url + " returned status code is " + str(
+                        resp.status_code) + ': ' + clients.http_error_code[resp.status_code], logger.DEBUG)
+                    return
 
     except requests.exceptions.HTTPError, e:
         logger.log(u"HTTP error " + str(e.errno) + " while loading URL " + url, logger.WARNING)
@@ -1394,5 +1460,65 @@ if __name__ == '__main__':
 
 def remove_article(text=''):
     return re.sub(r'(?i)^(?:(?:A(?!\s+to)n?)|The)\s(\w)', r'\1', text)
+
 def generateCookieSecret():
+
     return base64.b64encode(uuid.uuid4().bytes + uuid.uuid4().bytes)
+
+def verify_freespace(src, dest, oldfile=None):
+    """ Checks if the target system has enough free space to copy or move a file,
+    Returns true if there is, False if there isn't.
+    Also returns True if the OS doesn't support this option
+    """
+    if not isinstance(oldfile, list):
+        oldfile = [oldfile]
+
+    logger.log("Trying to determine free space on destination drive", logger.DEBUG)
+    
+    if hasattr(os, 'statvfs'):  # POSIX
+        def disk_usage(path):
+            st = os.statvfs(path)
+            free = st.f_bavail * st.f_frsize
+            return free
+    
+    elif os.name == 'nt':       # Windows
+        import sys
+    
+        def disk_usage(path):
+            _, total, free = ctypes.c_ulonglong(), ctypes.c_ulonglong(), \
+                               ctypes.c_ulonglong()
+            if sys.version_info >= (3,) or isinstance(path, unicode):
+                fun = ctypes.windll.kernel32.GetDiskFreeSpaceExW
+            else:
+                fun = ctypes.windll.kernel32.GetDiskFreeSpaceExA
+            ret = fun(path, ctypes.byref(_), ctypes.byref(total), ctypes.byref(free))
+            if ret == 0:
+                logger.log("Unable to determine free space, something went wrong", logger.WARNING)
+                raise ctypes.WinError()
+            return free.value
+    else:
+        logger.log("Unable to determine free space on your OS")
+        return True
+
+    if not ek.ek(os.path.isfile, src):
+        logger.log("A path to a file is required for the source. " + src + " is not a file.", logger.WARNING)
+        return False
+    
+    try:
+        diskfree = disk_usage(dest)
+    except:
+        logger.log("Unable to determine free space, so I will assume there is enough.", logger.WARNING)
+        return True
+    
+    neededspace = ek.ek(os.path.getsize, src)
+    
+    if oldfile:
+        for file in oldfile:
+            if os.path.isfile(file.location):
+                diskfree += ek.ek(os.path.getsize, file.location)
+        
+    if diskfree > neededspace:
+        return True
+    else:
+        logger.log("Not enough free space: Needed: " + str(neededspace) + " bytes (" + pretty_filesize(neededspace) + "), found: " + str(diskfree) + " bytes (" + pretty_filesize(diskfree) + ")", logger.WARNING)
+        return False  
