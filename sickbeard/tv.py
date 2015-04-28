@@ -49,9 +49,11 @@ from sickbeard import notifiers
 from sickbeard import postProcessor
 from sickbeard import subtitles
 from sickbeard import history
+from sickbeard.blackandwhitelist import BlackAndWhiteList
 from sickbeard import sbdatetime
 from sickbeard import network_timezones
 from dateutil.tz import *
+from lib.subliminal.exceptions import ServiceError
 
 from sickbeard import encodingKludge as ek
 
@@ -112,7 +114,8 @@ class TVShow(object):
         self.isDirGood = False
         self.episodes = {}
         self.nextaired = ""
-
+        self.release_groups = None
+        
         otherShow = helpers.findCertainShow(sickbeard.showList, self.indexerid)
         if otherShow != None:
             raise exceptions.MultipleShowObjectsException("Can't create a show if it already exists")
@@ -820,6 +823,9 @@ class TVShow(object):
             if not self.imdbid:
                 self.imdbid = sqlResults[0]["imdb_id"]
 
+            if self.is_anime:
+                self.release_groups = BlackAndWhiteList(self.indexerid)  
+                
         # Get IMDb_info from database
         myDB = db.DBConnection()
         sqlResults = myDB.select("SELECT * FROM imdb_info WHERE indexer_id = ?", [self.indexerid])
@@ -1265,7 +1271,7 @@ class TVShow(object):
 
     def getOverview(self, epStatus):
 
-        if epStatus == WANTED and not self.paused:
+        if epStatus == WANTED:
             return Overview.WANTED
         elif epStatus in (UNAIRED, UNKNOWN):
             return Overview.UNAIRED
@@ -1437,7 +1443,9 @@ class TVEpisode(object):
                     for subtitle in subtitles.get(video):
                         added_subtitles.append(subtitle.language.alpha2)
                         helpers.chmodAsParent(subtitle.path)
-
+        except ServiceError as e:
+            logger.log("Service is unavailable: {0}".format(str(e)), logger.INFO)
+            return
         except Exception as e:
             logger.log("Error occurred when downloading subtitles: " + str(e), logger.ERROR)
             return
@@ -1737,7 +1745,7 @@ class TVEpisode(object):
         if not ek.ek(os.path.isdir,
                      self.show._location) and not sickbeard.CREATE_MISSING_SHOW_DIRS and not sickbeard.ADD_SHOWS_WO_DIR:
             logger.log(
-                u"The show dir is missing, not bothering to change the episode statuses since it'd probably be invalid")
+                u"The show dir " + str(self.show._location) + " is missing, not bothering to change the episode statuses since it'd probably be invalid")
             return
 
         if self.location:

@@ -122,6 +122,7 @@ class ThePirateBayProvider(generic.TorrentProvider):
         filesList = re.findall('<td.+>(.*?)</td>', data)
 
         if not filesList:
+            # disabled errormsg for now
             # logger.log(u"Unable to get the torrent file list for " + title, logger.ERROR)
             return None
 
@@ -217,7 +218,7 @@ class ThePirateBayProvider(generic.TorrentProvider):
 
         return [search_string]
 
-    def _doSearch(self, search_params, search_mode='eponly', epcount=0, age=0):
+    def _doSearch(self, search_params, search_mode='eponly', epcount=0, age=0, epObj=None):
 
         results = []
         items = {'Season': [], 'Episode': [], 'RSS': []}
@@ -240,16 +241,13 @@ class ThePirateBayProvider(generic.TorrentProvider):
 
                 re_title_url = self.proxy._buildRE(self.re_title_url)
                 matches = re.compile(re_title_url, re.DOTALL).finditer(urllib.unquote(data))
-
                 for torrent in matches:
-
                     title = torrent.group('title').replace('_',
                                                            '.')  #Do not know why but SickBeard skip release with '_' in name
                     url = torrent.group('url')
                     id = int(torrent.group('id'))
                     seeders = int(torrent.group('seeders'))
                     leechers = int(torrent.group('leechers'))
-
                     #Filter unseeded torrent
                     if mode != 'RSS' and (seeders < self.minseed or leechers < self.minleech):
                         continue
@@ -285,6 +283,7 @@ class ThePirateBayProvider(generic.TorrentProvider):
 
         if title:
             title = u'' + title.replace(' ', '.')
+            title = self._clean_title_from_provider(title)
 
         if url:
             url = url.replace('&amp;', '&')

@@ -182,7 +182,7 @@ class Quality:
         checkName = lambda list, func: func([re.search(x, name, re.I) for x in list])
         if anime:
             dvdOptions = checkName(["dvd", "dvdrip"], any)
-            blueRayOptions = checkName(["bluray", "blu-ray", "BD"], any)
+            blueRayOptions = checkName(["blue?-?ray", "bluray", "blu-ray", "BD"], any)
             sdOptions = checkName(["360p", "480p", "848x480", "XviD"], any)
             hdOptions = checkName(["720p", "1280x720", "960x720"], any)
             fullHD = checkName(["1080p", "1920x1080"], any)

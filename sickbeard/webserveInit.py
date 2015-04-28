@@ -69,7 +69,7 @@ class SRWebServer(threading.Thread):
         self.app = Application([],
                                  debug=True,
                                  autoreload=False,
-                                 gzip=True,
+                                 gzip=sickbeard.WEB_USE_GZIP,
                                  xheaders=sickbeard.HANDLE_REVERSE_PROXY,
                                  cookie_secret=sickbeard.WEB_COOKIE_SECRET,
                                  login_url='%s/login/' % self.options['web_root'],
@@ -93,9 +93,11 @@ class SRWebServer(threading.Thread):
             # webui handlers
         ] + route.get_routes(self.options['web_root']))
 
+        # Web calendar handler (Needed because option Unprotected calendar)
         self.app.add_handlers('.*$', [
             (r'%s/calendar' % self.options['web_root'], CalendarHandler),
         ])
+
         # Static File Handlers
         self.app.add_handlers(".*$", [
             # favicon

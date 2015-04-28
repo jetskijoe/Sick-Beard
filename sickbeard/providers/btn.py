@@ -82,7 +82,7 @@ class BTNProvider(generic.TorrentProvider):
 
         return True
 
-    def _doSearch(self, search_params, search_mode='eponly', epcount=0, age=0):
+    def _doSearch(self, search_params, search_mode='eponly', epcount=0, age=0, epObj=None):
 
         self._checkAuth()
 
@@ -146,7 +146,10 @@ class BTNProvider(generic.TorrentProvider):
             parsedJSON = server.getTorrents(apikey, params, int(results_per_page), int(offset))
 
         except jsonrpclib.jsonrpc.ProtocolError, error:
-            logger.log(u"JSON-RPC protocol error while accessing " + self.name + ": " + ex(error), logger.ERROR)
+            if error.message == 'Call Limit Exceeded':
+                logger.log(u"You have exceeded the limit of 150 calls per hour, per API key which is unique to your user account.", logger.WARNING)                
+            else:
+                logger.log(u"JSON-RPC protocol error while accessing " + self.name + ": " + ex(error), logger.ERROR)
             parsedJSON = {'api-error': ex(error)}
             return parsedJSON
 

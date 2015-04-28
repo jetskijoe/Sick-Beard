@@ -174,7 +174,7 @@ class HDTorrentsProvider(generic.TorrentProvider):
 
         return [search_string]
 
-    def _doSearch(self, search_params, search_mode='eponly', epcount=0, age=0):
+    def _doSearch(self, search_params, search_mode='eponly', epcount=0, age=0, epObj=None):
 
         results = []
         items = {'Season': [], 'Episode': [], 'RSS': []}
@@ -294,6 +294,7 @@ class HDTorrentsProvider(generic.TorrentProvider):
         if title:
             title = u'' + title
             title = title.replace(' ', '.')
+            title = self._clean_title_from_provider(title)
 
         if url:
             url = str(url).replace('&amp;', '&')
@@ -326,7 +327,9 @@ class HDTorrentsProvider(generic.TorrentProvider):
             for item in self._doSearch(proper_searchString[0]):
                 title, url = self._get_title_and_url(item)
                 results.append(classes.Proper(title, url, datetime.datetime.today(), self.show))
+                
             repack_searchString = self._get_episode_search_strings(curEp, add_string='REPACK')
+
             for item in self._doSearch(repack_searchString[0]):
                 title, url = self._get_title_and_url(item)
                 results.append(classes.Proper(title, url, datetime.datetime.today(), self.show))
